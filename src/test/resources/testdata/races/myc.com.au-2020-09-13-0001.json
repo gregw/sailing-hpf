@@ -1,0 +1,45 @@
+{
+  "id" : "myc.com.au-2020-09-13-0001",
+  "clubId" : "myc.com.au",
+  "seriesIds" : [ "myc.com.au/2020-21/club-championship" ],
+  "date" : "2020-09-13",
+  "number" : 1,
+  "name" : null,
+  "handicapSystem" : "PHS",
+  "offsetPursuit" : false,
+  "divisions" : [ {
+    "name" : "Division 1",
+    "finishers" : [ {
+      "boatId" : "myc100-shear-0001",
+      "elapsedTime" : "PT1H9M42S",
+      "nonSpinnaker" : false
+    }, {
+      "boatId" : "myc7-tensixty-0002",
+      "elapsedTime" : "PT1H7M37S",
+      "nonSpinnaker" : false
+    }, {
+      "boatId" : "myc12-san-0003",
+      "elapsedTime" : "PT1H7M22S",
+      "nonSpinnaker" : true
+    }, {
+      "boatId" : "5656-mondo-0004",
+      "elapsedTime" : "PT1H7M19S",
+      "nonSpinnaker" : false
+    } ]
+  }, {
+    "name" : "Division 2",
+    "finishers" : [ {
+      "boatId" : "1152-bokarra-0005",
+      "elapsedTime" : "PT1H20M26S",
+      "nonSpinnaker" : false
+    }, {
+      "boatId" : "1255-melody-0006",
+      "elapsedTime" : "PT1H17M32S",
+      "nonSpinnaker" : false
+    }, {
+      "boatId" : "6295-ratty-0007",
+      "elapsedTime" : "PT1H17M59S",
+      "nonSpinnaker" : false
+    } ]
+  } ]
+}

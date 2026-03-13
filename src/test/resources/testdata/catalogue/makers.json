@@ -1,0 +1,13 @@
+[ {
+  "id" : "adams",
+  "canonicalName" : "Adams",
+  "aliases" : [ ]
+}, {
+  "id" : "radford",
+  "canonicalName" : "Radford",
+  "aliases" : [ ]
+}, {
+  "id" : "sbsc",
+  "canonicalName" : "SBSC",
+  "aliases" : [ "Sydney Boat Sales & Charter" ]
+} ]

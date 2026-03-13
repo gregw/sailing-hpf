@@ -1,0 +1,7 @@
+[ {
+  "id" : "myc.com.au/2020-21/club-championship",
+  "clubId" : "myc.com.au",
+  "seasonId" : "2020-21",
+  "name" : "Club Championship",
+  "isCatchAll" : false
+} ]
