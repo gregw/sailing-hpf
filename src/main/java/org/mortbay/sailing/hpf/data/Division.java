@@ -7,6 +7,6 @@ import java.util.List;
  * Uniquely identified by name within its containing Race.
  */
 public record Division(
-        String name,               // e.g. "Division 1", "Open"
-        List<Finisher> finishers
+    String name,               // e.g. "Division 1", "Open"
+    List<Finisher> finishers
 ) {}

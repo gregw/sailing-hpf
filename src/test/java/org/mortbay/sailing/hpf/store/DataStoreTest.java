@@ -3,18 +3,17 @@ package org.mortbay.sailing.hpf.store;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mortbay.sailing.hpf.data.Boat;
+import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Club;
 import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.HandicapSystem;
-import org.mortbay.sailing.hpf.data.MeasurementCertificate;
 import org.mortbay.sailing.hpf.data.Race;
 import org.mortbay.sailing.hpf.data.Season;
 import org.mortbay.sailing.hpf.data.Series;
 import org.mortbay.sailing.hpf.store.DataStore;
 
-import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -30,13 +29,11 @@ class DataStoreTest {
     @Test
     void loadAllRacesFromTestData() throws URISyntaxException {
         DataStore store = testDataStore();
+        store.start();
 
-        List<Race> races = store.loadAllRaces();
-
-        assertEquals(2, races.size());
-        Race race = races.stream()
-                .filter(r -> r.id().equals("myc.com.au-2020-09-13-0001"))
-                .findFirst().orElseThrow();
+        assertEquals(2, store.races().size());
+        Race race = store.races().get("myc.com.au-2020-09-13-0001");
+        assertNotNull(race);
 
         assertEquals("myc.com.au", race.clubId());
         assertEquals(LocalDate.of(2020, 9, 13), race.date());
@@ -48,50 +45,50 @@ class DataStoreTest {
         assertEquals(4, div1.finishers().size());
 
         Finisher shearMagic = div1.finishers().getFirst();
-        assertEquals("myc100-shear-0001", shearMagic.boatId());
+        assertEquals("MYC100-shear_magic-adams10", shearMagic.boatId());
         assertEquals(Duration.ofMinutes(69).plusSeconds(42), shearMagic.elapsedTime());
         assertFalse(shearMagic.nonSpinnaker());
 
         Finisher sanToy = div1.finishers().get(2);
-        assertEquals("myc12-san-0003", sanToy.boatId());
+        assertEquals("MYC12-san_toy", sanToy.boatId());
         assertTrue(sanToy.nonSpinnaker());
     }
 
     @Test
     void loadCatalogueFromTestData() throws URISyntaxException {
         DataStore store = testDataStore();
+        store.start();
 
-        List<Boat> boats = store.loadBoats();
-        assertEquals(7, boats.size());
-        Boat tensixty = boats.stream()
-                .filter(b -> b.id().equals("myc7-tensixty-0002"))
-                .findFirst().orElseThrow();
+        assertEquals(7, store.boats().size());
+        Boat tensixty = store.boats().get("MYC7-tensixty-radford1060");
+        assertNotNull(tensixty);
         assertEquals("Tensixty", tensixty.name());
-        assertEquals("radford106", tensixty.designId());
+        assertEquals("radford1060", tensixty.designId());
         assertEquals(List.of("TenSixty", "1060"), tensixty.aliases());
 
-        List<Club> clubs = store.loadClubs();
-        assertEquals(1, clubs.size());
-        assertEquals("MYC", clubs.getFirst().shortName());
+        assertEquals(1, store.clubs().size());
+        Club club = store.clubs().values().iterator().next();
+        assertEquals("MYC", club.shortName());
 
-        List<Season> seasons = store.loadSeasons();
-        assertEquals(1, seasons.size());
-        assertEquals("2020-21", seasons.getFirst().id());
+        assertEquals(1, club.seasons().size());
+        Season season = club.seasons().getFirst();
+        assertEquals("2020-21", season.id());
 
-        List<Series> seriesList = store.loadSeries();
-        assertEquals(1, seriesList.size());
-        assertFalse(seriesList.getFirst().isCatchAll());
+        assertEquals(1, season.series().size());
+        Series series = season.series().getFirst();
+        assertEquals("myc.com.au/2020-21/club-championship", series.id());
+        assertFalse(series.isCatchAll());
+        assertEquals(List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"), series.raceIds());
 
-        List<Design> designs = store.loadDesigns();
-        assertEquals(4, designs.size());
-        Design radford = designs.stream()
-                .filter(d -> d.id().equals("radford106"))
-                .findFirst().orElseThrow();
+        assertEquals(4, store.designs().size());
+        Design radford = store.designs().get("radford1060");
+        assertNotNull(radford);
         assertEquals(List.of("1060"), radford.aliases());
 
-        List<MeasurementCertificate> certs = store.loadCertificates();
-        assertEquals(1, certs.size());
-        MeasurementCertificate cert = certs.getFirst();
+        Boat mondo = store.boats().get("5656-mondo-sydney38");
+        assertNotNull(mondo);
+        assertEquals(1, mondo.certificates().size());
+        Certificate cert = mondo.certificates().getFirst();
         assertEquals(HandicapSystem.ORC, cert.system());
         assertEquals(588.4, cert.value());
         assertEquals(LocalDate.of(2021, 6, 30), cert.expiryDate());
@@ -100,83 +97,240 @@ class DataStoreTest {
     // --- Round-trip save/load ---
 
     @Test
-    void roundTripRace(@TempDir Path tempDir) throws IOException {
-        DataStore store = new DataStore(tempDir);
+    void roundTripRace(@TempDir Path tempDir) {
         Race race = buildRace();
 
-        store.saveRace(race);
-        Race loaded = store.loadRace(race.id());
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race);
+        store.stop();
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        Race loaded = store2.races().get(race.id());
 
         assertEquals(race, loaded);
     }
 
     @Test
     void roundTripCatalogue(@TempDir Path tempDir) {
-        DataStore store = new DataStore(tempDir);
-
         List<Boat> boats = List.of(
-                new Boat("myc100-shear-0001", "myc100", "Shear Magic", "adams10", "myc.com.au", List.of()),
-                new Boat("myc7-tensixty-0002", "myc7", "Tensixty", "radford106", "myc.com.au", List.of("TenSixty", "1060"))
+                new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), null),
+                new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), null)
         );
-        boats.forEach(store::saveBoat);
-        assertEquals(boats, store.loadBoats().stream().sorted(java.util.Comparator.comparing(Boat::id)).toList());
 
-        List<Club> clubs = List.of(new Club("myc.com.au", "MYC", "Manly Yacht Club", List.of()));
-        store.saveClubs(clubs);
-        assertEquals(clubs, store.loadClubs());
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        boats.forEach(store::putBoat);
+        store.save();
 
-        List<Season> seasons = List.of(new Season("2020-21"));
-        store.saveSeasons(seasons);
-        assertEquals(seasons, store.loadSeasons());
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(boats, store2.boats().values().stream()
+                .sorted(java.util.Comparator.comparing(Boat::id)).toList());
 
-        List<Series> series = List.of(
-                new Series("myc.com.au/2020-21/club-championship", "myc.com.au", "2020-21", "Club Championship", false)
-        );
-        store.saveSeries(series);
-        assertEquals(series, store.loadSeries());
+        Series series = new Series("myc.com.au/2020-21/club-championship", "Club Championship", false,
+                List.of("myc.com.au-2020-09-13-0001"));
+        Season season = new Season("2020-21", List.of(series));
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", List.of(), List.of(season), null);
+        store2.putClub(club);
+        store2.stop();
+
+        DataStore store3 = new DataStore(tempDir);
+        store3.start();
+        assertEquals(List.of(club), List.copyOf(store3.clubs().values()));
     }
 
     @Test
     void emptyListWhenFileAbsent(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
-        assertEquals(List.of(), store.loadBoats());
-        assertEquals(List.of(), store.loadAllRaces());
-        assertEquals(List.of(), store.loadCertificates());
+        store.start();
+        assertTrue(store.boats().isEmpty());
+        assertTrue(store.races().isEmpty());
     }
 
     @Test
-    void eachRaceInOwnFile(@TempDir Path tempDir) throws IOException {
-        DataStore store = new DataStore(tempDir);
+    void eachRaceInOwnFile(@TempDir Path tempDir) {
         Race race1 = buildRace();
         Race race2 = new Race("myc.com.au-2020-09-20-0002", "myc.com.au",
                 List.of("myc.com.au/2020-21/club-championship"),
                 LocalDate.of(2020, 9, 20), 2, null, HandicapSystem.PHS, false,
                 List.of(new Division("Division 1", List.of(
-                        new Finisher("myc7-tensixty-0002", Duration.ofMinutes(72).plusSeconds(5), false)
-                ))));
+                        new Finisher("MYC7-tensixty-radford1060", Duration.ofMinutes(72).plusSeconds(5), false)
+                ))), null);
 
-        store.saveRace(race1);
-        store.saveRace(race2);
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putRace(race1);
+        store.putRace(race2);
+        store.stop();
 
-        assertEquals(race1, store.loadRace(race1.id()));
-        assertEquals(race2, store.loadRace(race2.id()));
-        assertEquals(2, store.loadAllRaces().size());
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(race1, store2.races().get(race1.id()));
+        assertEquals(race2, store2.races().get(race2.id()));
+        assertEquals(2, store2.races().size());
     }
 
     @Test
     void eachBoatInOwnFile(@TempDir Path tempDir) {
+        Boat boat1 = new Boat("MYC100-shear_magic-adams10", "MYC100", "Shear Magic", "adams10", "myc.com.au", List.of(), List.of(), null);
+        Boat boat2 = new Boat("MYC7-tensixty-radford1060", "MYC7", "Tensixty", "radford1060", "myc.com.au", List.of("TenSixty", "1060"), List.of(), null);
+
         DataStore store = new DataStore(tempDir);
-        Boat boat1 = new Boat("myc100-shear-0001", "myc100", "Shear Magic", "adams10", "myc.com.au", List.of());
-        Boat boat2 = new Boat("myc7-tensixty-0002", "myc7", "Tensixty", "radford106", "myc.com.au", List.of("TenSixty", "1060"));
+        store.start();
+        store.putBoat(boat1);
+        store.putBoat(boat2);
+        store.stop();
 
-        store.saveBoat(boat1);
-        store.saveBoat(boat2);
+        assertTrue(tempDir.resolve("boats/MYC100-shear_magic-adams10.json").toFile().exists());
+        assertTrue(tempDir.resolve("boats/MYC7-tensixty-radford1060.json").toFile().exists());
 
-        assertTrue(tempDir.resolve("boats/myc100-shear-0001.json").toFile().exists());
-        assertTrue(tempDir.resolve("boats/myc7-tensixty-0002.json").toFile().exists());
-        List<Boat> loaded = store.loadBoats().stream()
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        List<Boat> loaded = store2.boats().values().stream()
                 .sorted(java.util.Comparator.comparing(Boat::id)).toList();
         assertEquals(List.of(boat1, boat2), loaded);
+    }
+
+    @Test
+    void boatWithCertificatesRoundTrip(@TempDir Path tempDir) {
+        Certificate cert = new Certificate(
+                "5656-mondo-sydney38-orc-2020", "5656-mondo-sydney38",
+                HandicapSystem.ORC, 2020, 588.4, false, "AUS-2020-1234",
+                LocalDate.of(2021, 6, 30));
+        Boat boat = new Boat("5656-mondo-sydney38", "5656", "Mondo", "sydney38", "myc.com.au",
+                List.of(), List.of(cert), null);
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putBoat(boat);
+        store.stop();
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(1, store2.boats().size());
+        Boat loaded = store2.boats().get(boat.id());
+        assertEquals(boat, loaded);
+        assertEquals(1, loaded.certificates().size());
+        assertEquals(cert, loaded.certificates().getFirst());
+    }
+
+    @Test
+    void clubWithSeasonsSeriesRoundTrip(@TempDir Path tempDir) {
+        Series series = new Series("myc.com.au/2020-21/club-championship", "Club Championship", false,
+                List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"));
+        Season season = new Season("2020-21", List.of(series));
+        Club club = new Club("myc.com.au", "MYC", "Manly Yacht Club", List.of(), List.of(season), null);
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        store.putClub(club);
+        store.stop();
+
+        DataStore store2 = new DataStore(tempDir);
+        store2.start();
+        assertEquals(1, store2.clubs().size());
+        Club loadedClub = store2.clubs().get(club.id());
+        assertEquals(club, loadedClub);
+        assertEquals(1, loadedClub.seasons().size());
+        Season loadedSeason = loadedClub.seasons().getFirst();
+        assertEquals("2020-21", loadedSeason.id());
+        assertEquals(1, loadedSeason.series().size());
+        Series loadedSeries = loadedSeason.series().getFirst();
+        assertEquals("myc.com.au/2020-21/club-championship", loadedSeries.id());
+        assertFalse(loadedSeries.isCatchAll());
+        assertEquals(List.of("myc.com.au-2020-09-13-0001", "myc.com.au-2020-09-20-0002"), loadedSeries.raceIds());
+    }
+
+    // --- findOrCreateBoat / findOrCreateDesign ---
+
+    @Test
+    void findOrCreateBoatCreatesNewBoat(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null);
+        store.putDesign(design);
+
+        Boat boat = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+
+        assertEquals("AUS1234-raging_bull-j24", boat.id());
+        assertEquals("AUS1234", boat.sailNumber());
+        assertEquals("Raging Bull", boat.name());
+        assertEquals("j24", boat.designId());
+        assertEquals(1, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateBoatReturnsSameBoatOnExactId(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null);
+        store.putDesign(design);
+
+        Boat boat1 = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+        Boat boat2 = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+
+        assertSame(boat1, boat2);
+        assertEquals(1, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateBoatFuzzyMatchesByAlias(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat existing = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, null,
+                List.of("RagingBull"), List.of(), null);
+        store.putBoat(existing);
+
+        Boat found = store.findOrCreateBoat("AUS1234", "RagingBull", null);
+
+        assertEquals("AUS1234-raging_bull", found.id());
+        assertEquals(1, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateBoatUpgradesNoDesignBoat(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Boat noDesign = new Boat("AUS1234-raging_bull", "AUS1234", "Raging Bull", null, null,
+                List.of(), List.of(), null);
+        store.putBoat(noDesign);
+
+        Design design = new Design("j24", "J/24", List.of(), List.of(), null);
+        store.putDesign(design);
+
+        Boat upgraded = store.findOrCreateBoat("AUS1234", "Raging Bull", design);
+
+        assertEquals("AUS1234-raging_bull-j24", upgraded.id());
+        assertEquals("j24", upgraded.designId());
+        assertFalse(store.boats().containsKey("AUS1234-raging_bull"));
+        assertEquals(1, store.boats().size());
+    }
+
+    @Test
+    void findOrCreateDesignCreatesNewDesign(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Design design = store.findOrCreateDesign("J/24");
+
+        assertEquals("j24", design.id());
+        assertEquals("J/24", design.canonicalName());
+        assertEquals(1, store.designs().size());
+    }
+
+    @Test
+    void findOrCreateDesignMatchesAlias(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Design existing = new Design("j24", "J/24", List.of(), List.of("J 24"), null);
+        store.putDesign(existing);
+
+        Design found = store.findOrCreateDesign("J 24");
+
+        assertEquals("j24", found.id());
+        assertEquals(1, store.designs().size());
     }
 
     // --- Helpers ---
@@ -198,17 +352,18 @@ class DataStoreTest {
                 false,
                 List.of(
                         new Division("Division 1", List.of(
-                                new Finisher("myc100-shear-0001", Duration.ofMinutes(69).plusSeconds(42), false),
-                                new Finisher("myc7-tensixty-0002", Duration.ofMinutes(67).plusSeconds(37), false),
-                                new Finisher("myc12-san-0003", Duration.ofMinutes(67).plusSeconds(22), true),
-                                new Finisher("5656-mondo-0004", Duration.ofMinutes(67).plusSeconds(19), false)
+                                new Finisher("MYC100-shear_magic-adams10", Duration.ofMinutes(69).plusSeconds(42), false),
+                                new Finisher("MYC7-tensixty-radford1060",  Duration.ofMinutes(67).plusSeconds(37), false),
+                                new Finisher("MYC12-san_toy",              Duration.ofMinutes(67).plusSeconds(22), true),
+                                new Finisher("5656-mondo-sydney38",        Duration.ofMinutes(67).plusSeconds(19), false)
                         )),
                         new Division("Division 2", List.of(
-                                new Finisher("1152-bokarra-0005", Duration.ofMinutes(80).plusSeconds(26), false),
-                                new Finisher("1255-melody-0006", Duration.ofMinutes(77).plusSeconds(32), false),
-                                new Finisher("6295-ratty-0007", Duration.ofMinutes(77).plusSeconds(59), false)
+                                new Finisher("1152-bokarra-santana22",     Duration.ofMinutes(80).plusSeconds(26), false),
+                                new Finisher("1255-melody",               Duration.ofMinutes(77).plusSeconds(32), false),
+                                new Finisher("6295-ratty_tooey",          Duration.ofMinutes(77).plusSeconds(59), false)
                         ))
-                )
+                ),
+                null
         );
     }
 }

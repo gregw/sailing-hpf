@@ -7,7 +7,7 @@ import java.util.List;
  * The ID is the normalised maker name (lowercase, non-alphanumeric stripped), e.g. "farr", "beneteau".
  */
 public record Maker(
-        String id,            // normalised name, e.g. "farr"
-        String canonicalName, // display name, e.g. "Farr"
-        List<String> aliases  // alternate names, e.g. "Farr Yacht Design"
+    String id,            // normalised name, e.g. "farr"
+    String canonicalName, // display name, e.g. "Farr"
+    List<String> aliases  // alternate names, e.g. "Farr Yacht Design"
 ) {}

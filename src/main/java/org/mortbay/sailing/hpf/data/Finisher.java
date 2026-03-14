@@ -8,7 +8,7 @@ import java.time.Duration;
  * Uniquely identified by boatId within its containing Division.
  */
 public record Finisher(
-        String boatId,
-        Duration elapsedTime,
-        boolean nonSpinnaker
+    String boatId,
+    Duration elapsedTime,
+    boolean nonSpinnaker
 ) {}

@@ -3,14 +3,21 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>org.example</groupId>
-  <artifactId>sail-handicaps</artifactId>
+  <artifactId>sailing-hpf</artifactId>
   <version>1.0-SNAPSHOT</version>
+
+  <scm>
+    <url>https://github.com/gregw/sailing-hpf</url>
+    <connection>scm:git:https://github.com/gregw/sailing-hpf.git</connection>
+    <developerConnection>scm:git:git@github.com:gregw/sailing-hpf.git</developerConnection>
+  </scm>
 
   <properties>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
-    <jackson.version>2.18.2</jackson.version>
-    <junit.version>5.11.4</junit.version>
+    <jackson.version>2.21.1</jackson.version>
+    <junit.version>5.13.4</junit.version>
+    <jetty.version>12.1.6</jetty.version>
   </properties>
 
   <dependencies>
@@ -27,7 +34,12 @@
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-client</artifactId>
-      <version>12.0.16</version>
+      <version>${jetty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-slf4j-impl</artifactId>
+      <version>${jetty.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -42,7 +54,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.5.2</version>
+        <version>3.5.5</version>
       </plugin>
     </plugins>
   </build>

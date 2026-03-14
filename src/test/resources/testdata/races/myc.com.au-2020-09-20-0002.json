@@ -10,15 +10,15 @@
   "divisions" : [ {
     "name" : "Division 1",
     "finishers" : [ {
-      "boatId" : "myc7-tensixty-0002",
+      "boatId" : "MYC7-tensixty-radford1060",
       "elapsedTime" : "PT1H12M5S",
       "nonSpinnaker" : false
     }, {
-      "boatId" : "myc100-shear-0001",
+      "boatId" : "MYC100-shear_magic-adams10",
       "elapsedTime" : "PT1H14M33S",
       "nonSpinnaker" : false
     }, {
-      "boatId" : "5656-mondo-0004",
+      "boatId" : "5656-mondo-sydney38",
       "elapsedTime" : "PT1H11M48S",
       "nonSpinnaker" : false
     } ]
