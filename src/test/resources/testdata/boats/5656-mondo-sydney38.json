@@ -1,0 +1,17 @@
+{
+  "id" : "5656-mondo-sydney38",
+  "sailNumber" : "5656",
+  "name" : "Mondo",
+  "designId" : "sydney38",
+  "clubId" : "myc.com.au",
+  "aliases" : [ ],
+  "certificates" : [ {
+    "system" : "ORC",
+    "year" : 2020,
+    "value" : 588.4,
+    "nonSpinnaker" : false,
+    "twoHanded" : false,
+    "certificateNumber" : "AUS-2020-1234",
+    "expiryDate" : "2021-06-30"
+  } ]
+}
