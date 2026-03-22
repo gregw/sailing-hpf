@@ -1,0 +1,84 @@
+/* Shared styles for all HPF pages */
+body { font-family: monospace; max-width: 1200px; margin: 0 auto; padding: 0 1rem 2rem; background: #fff; }
+h1 { margin-bottom: 0.5rem; }
+h2 { margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
+button { font-family: monospace; padding: 3px 10px; cursor: pointer; }
+a { color: #2255aa; }
+
+/* Navigation */
+.site-nav {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid #ccc;
+  font-size: 0.95rem;
+}
+.site-nav a { text-decoration: none; color: #333; }
+.site-nav a:hover { color: #2255aa; }
+.site-nav a.nav-home { font-weight: bold; font-size: 1.1rem; margin-right: 0.5rem; color: #111; }
+.site-nav a.active { color: #2255aa; border-bottom: 2px solid #2255aa; margin-bottom: -2px; }
+
+/* Landing page */
+.landing { max-width: 800px; }
+.landing h1 { margin-top: 1.5rem; font-size: 2rem; }
+.lead { font-size: 1.1rem; margin-bottom: 0.5rem; }
+.landing p { line-height: 1.6; margin-bottom: 0.75rem; }
+.landing-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top: 2rem; }
+.landing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border: 1px solid #ccc;
+  padding: 1rem;
+  text-decoration: none;
+  color: #111;
+  background: #fafafa;
+}
+.landing-card:hover { background: #f0f4ff; border-color: #2255aa; }
+.landing-card strong { font-size: 1.05rem; }
+.landing-card span { font-size: 0.85rem; color: #555; line-height: 1.4; }
+
+/* Stats */
+.stats { display: flex; gap: 3rem; background: #f5f5f5; padding: 1rem; margin-bottom: 0.5rem; }
+.stat strong { display: block; font-size: 2rem; }
+
+/* Importers */
+.importer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.importer-card { border: 1px solid #ccc; padding: 1rem; }
+.importer-card h3 { margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.5rem; }
+.badge { padding: 2px 8px; border-radius: 3px; font-size: 0.75rem; }
+.badge-idle { background: #eee; color: #555; }
+.badge-running { background: #4caf50; color: #fff; }
+.run-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.schedule-form label { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
+.schedule-form select, .schedule-form input[type=time] { font-family: monospace; padding: 2px 4px; }
+
+/* Data browser tabs */
+.tabs { display: flex; }
+.tab { padding: 0.4rem 1rem; cursor: pointer; border: 1px solid #ccc; background: #eee; border-bottom: none; }
+.tab:first-child { border-radius: 4px 0 0 0; }
+.tab:last-child { border-radius: 0 4px 0 0; }
+.tab.active { background: #fff; border-bottom: 1px solid #fff; margin-bottom: -1px; z-index: 1; position: relative; }
+.tab-panel { border: 1px solid #ccc; padding: 1rem; display: none; }
+.tab-panel.active { display: block; }
+.search-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+.search-row input { font-family: monospace; padding: 4px; width: 300px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th { text-align: left; padding: 4px 8px; background: #f0f0f0; border-bottom: 2px solid #ccc; }
+td { padding: 4px 8px; border-bottom: 1px solid #eee; }
+tr:hover td { background: #f9f9f9; cursor: pointer; }
+.pagination { margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; }
+pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; font-size: 0.8rem; margin-top: 0.75rem; white-space: pre-wrap; word-break: break-all; }
+.detail-panel { display: none; }
+.detail-panel.visible { display: block; }
+
+/* Analysis */
+.analysis-controls { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+.analysis-controls select, .analysis-controls input[type=number] { font-family: monospace; padding: 3px 6px; }
+.analysis-controls label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+#analysis-plot { width: 100%; height: 420px; }
+.conv-table { max-height: 400px; overflow-y: auto; }
+.conv-table table { width: auto; min-width: 360px; }
+.weight-bar { display: inline-block; background: #4caf50; height: 10px; vertical-align: middle; }

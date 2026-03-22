@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HPF — Handicap Analysis</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="/" class="nav-home">HPF</a>
+    <a href="import.html">Import</a>
+    <a href="data.html">Data</a>
+    <a href="analysis.html">Analysis</a>
+  </nav>
+
+  <h1>Handicap Analysis</h1>
+
+  <div class="analysis-controls">
+    <label>Comparison:
+      <select id="analysis-select" onchange="onAnalysisSelect()">
+        <option value="">— select —</option>
+      </select>
+    </label>
+    <button id="analysis-load-btn" onclick="loadAnalysis()" disabled>Load</button>
+    <span id="analysis-summary" style="font-size:0.85rem;color:#555;"></span>
+  </div>
+
+  <div id="analysis-plot"></div>
+
+  <div id="analysis-table-warning" style="display:none; margin-top:1rem; color:#b00; font-size:0.9rem;"></div>
+
+  <div id="analysis-table-section" style="display:none; margin-top:1rem;">
+    <strong>Conversion table</strong>
+    <div style="display:flex; gap:0.75rem; align-items:center; margin:0.5rem 0; flex-wrap:wrap;">
+      <label style="font-size:0.85rem;">Min: <input type="number" id="tbl-min" value="0.85" step="0.01" style="width:5rem;font-family:monospace;"></label>
+      <label style="font-size:0.85rem;">Max: <input type="number" id="tbl-max" value="1.15" step="0.01" style="width:5rem;font-family:monospace;"></label>
+      <label style="font-size:0.85rem;">Step: <input type="number" id="tbl-step" value="0.01" step="0.005" style="width:5rem;font-family:monospace;"></label>
+      <button onclick="loadConversionTable()">Update table</button>
+    </div>
+    <div class="conv-table">
+      <table>
+        <thead><tr><th id="th-conv-x">x</th><th id="th-conv-y">Predicted y</th><th>Weight</th><th></th></tr></thead>
+        <tbody id="tbody-conv"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="analysis.js"></script>
+</body>
+</html>

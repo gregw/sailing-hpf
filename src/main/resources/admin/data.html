@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HPF — Data Browser</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="/" class="nav-home">HPF</a>
+    <a href="import.html">Import</a>
+    <a href="data.html">Data</a>
+    <a href="analysis.html">Analysis</a>
+  </nav>
+
+  <h1>Data Browser</h1>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-btn-boats" onclick="switchTab('boats')">Boats</div>
+    <div class="tab" id="tab-btn-designs" onclick="switchTab('designs')">Designs</div>
+    <div class="tab" id="tab-btn-races" onclick="switchTab('races')">Races</div>
+  </div>
+
+  <div id="panel-boats" class="tab-panel active">
+    <div class="search-row">
+      <input type="text" id="q-boats" placeholder="Search by id or name…" oninput="debounceSearch('boats')">
+      <button onclick="doSearch('boats')">Search</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Sail</th><th>Name</th><th>Design</th></tr></thead>
+      <tbody id="tbody-boats"></tbody>
+    </table>
+    <div class="pagination" id="pager-boats"></div>
+    <div class="detail-panel" id="detail-boats">
+      <div id="ref-factors-boats" style="margin-bottom:0.75rem;"></div>
+      <pre id="pre-boats"></pre>
+    </div>
+  </div>
+
+  <div id="panel-designs" class="tab-panel">
+    <div class="search-row">
+      <input type="text" id="q-designs" placeholder="Search by id or name…" oninput="debounceSearch('designs')">
+      <button onclick="doSearch('designs')">Search</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Makers</th></tr></thead>
+      <tbody id="tbody-designs"></tbody>
+    </table>
+    <div class="pagination" id="pager-designs"></div>
+    <div class="detail-panel" id="detail-designs"><pre id="pre-designs"></pre></div>
+  </div>
+
+  <div id="panel-races" class="tab-panel">
+    <div class="search-row">
+      <input type="text" id="q-races" placeholder="Search by id or club…" oninput="debounceSearch('races')">
+      <button onclick="doSearch('races')">Search</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Club</th><th>Date</th><th>Handicap System</th></tr></thead>
+      <tbody id="tbody-races"></tbody>
+    </table>
+    <div class="pagination" id="pager-races"></div>
+    <div class="detail-panel" id="detail-races"><pre id="pre-races"></pre></div>
+  </div>
+
+  <script src="common.js"></script>
+  <script src="data.js"></script>
+</body>
+</html>
