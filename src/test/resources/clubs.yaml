@@ -36,7 +36,7 @@ clubs:
     shortName: CYCA
     state: NSW
     fullName: Cruising Yacht Club of Australia
-    aliases: []
+    aliases: ["CYCA/SDYC"]
 
   cycsa.com.au:
     shortName: CYCSA

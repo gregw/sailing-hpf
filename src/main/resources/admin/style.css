@@ -44,16 +44,21 @@ a { color: #2255aa; }
 .stats { display: flex; gap: 3rem; background: #f5f5f5; padding: 1rem; margin-bottom: 0.5rem; }
 .stat strong { display: block; font-size: 2rem; }
 
-/* Importers */
-.importer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
-.importer-card { border: 1px solid #ccc; padding: 1rem; }
-.importer-card h3 { margin: 0 0 0.5rem 0; display: flex; align-items: center; gap: 0.5rem; }
+/* Importers table — order column */
+.order-col { white-space: nowrap; padding: 2px 2px; }
+.order-btn { padding: 0 4px; font-size: 0.85rem; line-height: 1.4; }
+
+/* Importers table */
 .badge { padding: 2px 8px; border-radius: 3px; font-size: 0.75rem; }
 .badge-idle { background: #eee; color: #555; }
 .badge-running { background: #4caf50; color: #fff; }
-.run-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
-.schedule-form label { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem; font-size: 0.85rem; }
-.schedule-form select, .schedule-form input[type=time] { font-family: monospace; padding: 2px 4px; }
+.importer-table td:nth-child(4) { white-space: nowrap; }
+.importer-table td:nth-child(5) { text-align: center; }
+
+/* Schedule section */
+.schedule-days { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.schedule-days label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.9rem; }
+#schedule-time { font-family: monospace; padding: 2px 4px; }
 
 /* Data browser tabs */
 .tabs { display: flex; }
@@ -67,6 +72,9 @@ a { color: #2255aa; }
 .search-row input { font-family: monospace; padding: 4px; width: 300px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th { text-align: left; padding: 4px 8px; background: #f0f0f0; border-bottom: 2px solid #ccc; }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { background: #e0e0e0; }
+th.sort-active { color: #2255aa; }
 td { padding: 4px 8px; border-bottom: 1px solid #eee; }
 tr:hover td { background: #f9f9f9; cursor: pointer; }
 .pagination { margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; }

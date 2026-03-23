@@ -163,6 +163,12 @@ public class DataStore
         return Collections.unmodifiableMap(clubs);
     }
 
+    public Map<String, Club> clubSeed()
+    {
+        requireStarted();
+        return Collections.unmodifiableMap(clubSeed);
+    }
+
     public Map<String, Design> designs()
     {
         requireStarted();
@@ -280,22 +286,56 @@ public class DataStore
     }
 
     /**
-     * Finds a club by short name alone, ignoring state.
-     * If {@code longName} is provided and the short name is ambiguous, narrows to clubs
+     * Finds a club by short name, long name, or alias, ignoring state.
+     * First tries an exact short name match; if that finds nothing, falls back to matching
+     * against long name or aliases (handles full-name club fields from BWPS etc.).
+     * If {@code longName} is provided and the result is still ambiguous, narrows to clubs
      * whose long name matches (case-insensitive) as a tiebreaker.
      * Returns the club if there is exactly one match; null with a log if none or still ambiguous.
      */
     public Club findUniqueClubByShortName(String shortName, String longName)
     {
         requireStarted();
-        List<Club> matches = Stream.concat(
+        List<Club> allClubs = Stream.concat(
                 clubs.values().stream(),
                 clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
+            .toList();
+
+        // Primary: exact short name match
+        List<Club> matches = allClubs.stream()
             .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
             .toList();
+
+        // Fallback: long name or alias match (handles full-name club fields from BWPS etc.)
         if (matches.isEmpty())
         {
-            LOG.info("No club found for shortName={}", shortName);
+            matches = allClubs.stream()
+                .filter(c -> shortName.equalsIgnoreCase(c.longName())
+                          || c.aliases().stream().anyMatch(a -> shortName.equalsIgnoreCase(a)))
+                .toList();
+        }
+
+        // Fallback: compound name (e.g. "CYCA/RPEYC") — try each slash-separated token in order
+        if (matches.isEmpty() && shortName.contains("/"))
+        {
+            for (String token : shortName.split("/"))
+            {
+                String t = token.trim();
+                if (t.isBlank())
+                    continue;
+                matches = allClubs.stream()
+                    .filter(c -> t.equalsIgnoreCase(c.shortName())
+                              || t.equalsIgnoreCase(c.longName())
+                              || c.aliases().stream().anyMatch(a -> t.equalsIgnoreCase(a)))
+                    .toList();
+                if (!matches.isEmpty())
+                    break;
+            }
+        }
+
+        if (matches.isEmpty())
+        {
+            LOG.info("No club found for name={}", shortName);
             return null;
         }
         if (matches.size() > 1 && longName != null && !longName.isBlank())
@@ -310,7 +350,7 @@ public class DataStore
         }
         if (matches.size() > 1)
         {
-            LOG.warn("Ambiguous shortName={} — {} matches ({}); clubId not set",
+            LOG.warn("Ambiguous name={} — {} matches ({}); clubId not set",
                 shortName, matches.size(),
                 matches.stream().map(c -> c.id() + "/" + c.state()).toList());
             return null;

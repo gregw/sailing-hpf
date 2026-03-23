@@ -18,6 +18,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,12 +87,17 @@ public class AdminApiServlet extends HttpServlet
             String mode = req.getParameter("mode");
             if (mode == null)
                 mode = "api";
-            handleImporterRun(name, mode, resp);
+            handleImporterRun(name, mode, req, resp);
         }
-        else if (path.startsWith("/importers/") && path.endsWith("/schedule"))
+        else if ("/importers/stop".equals(path))
         {
-            String name = path.substring("/importers/".length(), path.length() - "/schedule".length());
-            handleSchedule(name, req, resp);
+            importerService.requestStop();
+            resp.setStatus(200);
+            writeJson(resp, Map.of("ok", true));
+        }
+        else if ("/schedule".equals(path))
+        {
+            handleSetSchedule(req, resp);
         }
         else
         {
@@ -115,6 +121,8 @@ public class AdminApiServlet extends HttpServlet
             int page = parseIntParam(req, "page", 0);
             int size = parseIntParam(req, "size", DEFAULT_PAGE_SIZE);
             String q = req.getParameter("q");
+            String sort = req.getParameter("sort");
+            boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
             List<Boat> all = store.boats().values().stream()
@@ -122,6 +130,19 @@ public class AdminApiServlet extends HttpServlet
                     || b.id().toLowerCase().contains(lower)
                     || b.name().toLowerCase().contains(lower))
                 .collect(Collectors.toList());
+
+            if (sort != null && !sort.isBlank())
+            {
+                Comparator<Boat> cmp = switch (sort)
+                {
+                    case "sailNumber" -> Comparator.comparing(Boat::sailNumber, Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "name"       -> Comparator.comparing(Boat::name,       Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsLast(Comparator.naturalOrder()));
+                    default           -> Comparator.comparing(Boat::id,         Comparator.nullsLast(Comparator.naturalOrder()));
+                };
+                all.sort(asc ? cmp : cmp.reversed());
+            }
 
             writeJson(resp, paginate(all, page, size));
         }
@@ -172,6 +193,8 @@ public class AdminApiServlet extends HttpServlet
             int page = parseIntParam(req, "page", 0);
             int size = parseIntParam(req, "size", DEFAULT_PAGE_SIZE);
             String q = req.getParameter("q");
+            String sort = req.getParameter("sort");
+            boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
             List<Design> all = store.designs().values().stream()
@@ -179,6 +202,14 @@ public class AdminApiServlet extends HttpServlet
                     || d.id().toLowerCase().contains(lower)
                     || d.canonicalName().toLowerCase().contains(lower))
                 .collect(Collectors.toList());
+
+            if (sort != null && !sort.isBlank())
+            {
+                Comparator<Design> cmp = "canonicalName".equals(sort)
+                    ? Comparator.comparing(Design::canonicalName, Comparator.nullsLast(Comparator.naturalOrder()))
+                    : Comparator.comparing(Design::id,            Comparator.nullsLast(Comparator.naturalOrder()));
+                all.sort(asc ? cmp : cmp.reversed());
+            }
 
             writeJson(resp, paginate(all, page, size));
         }
@@ -202,15 +233,22 @@ public class AdminApiServlet extends HttpServlet
             int page = parseIntParam(req, "page", 0);
             int size = parseIntParam(req, "size", DEFAULT_PAGE_SIZE);
             String q = req.getParameter("q");
+            String sort = req.getParameter("sort");
+            boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
-            List<Race> all = store.races().values().stream()
+            // Enrich all filtered rows — needed to allow sort by seriesName or finishers
+            List<Map<String, Object>> enriched = store.races().values().stream()
                 .filter(r -> lower == null
                     || r.id().toLowerCase().contains(lower)
                     || (r.clubId() != null && r.clubId().toLowerCase().contains(lower)))
+                .map(this::raceRow)
                 .collect(Collectors.toList());
 
-            writeJson(resp, paginate(all, page, size));
+            if (sort != null && !sort.isBlank())
+                enriched.sort(mapComparator(sort, asc));
+
+            writeJson(resp, paginate(enriched, page, size));
         }
         else
         {
@@ -225,22 +263,68 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    private Map<String, Object> raceRow(Race r)
+    {
+        // Series name: look up via first seriesId in the owning club
+        String seriesName = null;
+        if (r.seriesIds() != null && !r.seriesIds().isEmpty())
+        {
+            String firstSeriesId = r.seriesIds().getFirst();
+            var club = store.clubs().get(r.clubId());
+            if (club != null && club.series() != null)
+            {
+                for (var s : club.series())
+                {
+                    if (firstSeriesId.equals(s.id()))
+                    {
+                        seriesName = s.name();
+                        break;
+                    }
+                }
+            }
+            if (seriesName == null)
+                seriesName = firstSeriesId;
+        }
+
+        // Finisher count: sum across all divisions
+        int finishers = 0;
+        if (r.divisions() != null)
+            for (var div : r.divisions())
+                if (div.finishers() != null)
+                    finishers += div.finishers().size();
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", r.id());
+        row.put("clubId", r.clubId());
+        row.put("date", r.date());
+        row.put("seriesName", seriesName);
+        row.put("name", r.name());
+        row.put("finishers", finishers);
+        return row;
+    }
+
     private void handleImporters(HttpServletResponse resp) throws IOException
     {
-        Map<String, ImporterService.ScheduleConfig> schedules = importerService.schedules();
         ImporterService.ImportStatus status = importerService.currentStatus();
-
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (String name : List.of("sailsys-boats", "sailsys-races", "orc", "ams", "topyacht"))
+        Map<String, Integer> lastIds = importerService.lastSailSysIds();
+        List<Map<String, Object>> entries = new ArrayList<>();
+        for (ImporterService.ImporterEntry e : importerService.importerEntries())
         {
-            ImporterService.ScheduleConfig sc = schedules.get(name);
-            boolean isRunning = status != null && name.equals(status.importerName());
-            result.add(Map.of(
-                "name", name,
-                "schedule", sc != null ? sc : Map.of("enabled", false),
-                "status", isRunning ? "running" : "idle"
-            ));
+            boolean isRunning = status != null
+                && e.name().equals(status.importerName())
+                && e.mode().equals(status.mode());
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("name", e.name());
+            row.put("mode", e.mode());
+            row.put("includeInSchedule", e.includeInSchedule());
+            row.put("status", isRunning ? "running" : "idle");
+            row.put("lastId", lastIds.get(e.name() + "-" + e.mode()));
+            entries.add(row);
         }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("entries", entries);
+        result.put("schedule", importerService.globalSchedule());
+        result.put("targetIrcYear", importerService.targetIrcYear());
         writeJson(resp, result);
     }
 
@@ -253,18 +337,22 @@ public class AdminApiServlet extends HttpServlet
         }
         else
         {
-            writeJson(resp, Map.of(
-                "running", true,
-                "name", status.importerName(),
-                "mode", status.mode(),
-                "startedAt", status.startedAt().toString()
-            ));
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("running", true);
+            m.put("name", status.importerName());
+            m.put("mode", status.mode());
+            m.put("startedAt", status.startedAt().toString());
+            int sailSysId = importerService.currentSailSysId();
+            if (sailSysId > 0)
+                m.put("currentId", sailSysId);
+            writeJson(resp, m);
         }
     }
 
-    private void handleImporterRun(String name, String mode, HttpServletResponse resp) throws IOException
+    private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
-        boolean accepted = importerService.submit(name, mode);
+        int startId = parseIntParam(req, "startId", 1);
+        boolean accepted = importerService.submit(name, mode, startId);
         if (accepted)
         {
             resp.setStatus(202);
@@ -278,29 +366,57 @@ public class AdminApiServlet extends HttpServlet
     }
 
     @SuppressWarnings("unchecked")
-    private void handleSchedule(String name, HttpServletRequest req, HttpServletResponse resp) throws IOException
+    private void handleSetSchedule(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         try
         {
             Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
-            boolean enabled = Boolean.TRUE.equals(body.get("enabled"));
-            String dayStr = body.containsKey("day") ? (String)body.get("day") : "FRIDAY";
-            String timeStr = body.containsKey("time") ? (String)body.get("time") : "03:00";
-            String mode = body.containsKey("mode") ? (String)body.get("mode") : "api";
-
-            DayOfWeek day = DayOfWeek.valueOf(dayStr.toUpperCase());
+            List<String> dayStrs = (List<String>) body.getOrDefault("days", List.of());
+            List<DayOfWeek> days = dayStrs.stream()
+                .map(d -> DayOfWeek.valueOf(d.toUpperCase())).toList();
+            String timeStr = (String) body.getOrDefault("time", "03:00");
             LocalTime time = LocalTime.parse(timeStr);
 
-            ImporterService.ScheduleConfig config = new ImporterService.ScheduleConfig(name, enabled, day, time, mode);
-            importerService.setSchedule(name, config);
+            List<Map<String, Object>> importerMaps =
+                (List<Map<String, Object>>) body.getOrDefault("importers", List.of());
+            List<ImporterService.ImporterEntry> entries = importerMaps.stream()
+                .map(m -> new ImporterService.ImporterEntry(
+                    (String) m.get("name"),
+                    (String) m.get("mode"),
+                    Boolean.TRUE.equals(m.get("includeInSchedule"))))
+                .toList();
+
+            Object rawYear = body.get("targetIrcYear");
+            Integer targetIrcYear = (rawYear instanceof Number n && n.intValue() > 0)
+                ? n.intValue() : null;
+
+            importerService.setConfig(entries, new ImporterService.GlobalSchedule(days, time),
+                targetIrcYear);
             resp.setStatus(200);
-            writeJson(resp, config);
+            writeJson(resp, Map.of("ok", true));
         }
         catch (Exception e)
         {
             resp.setStatus(400);
             writeJson(resp, Map.of("error", e.getMessage()));
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Comparator<Map<String, Object>> mapComparator(String key, boolean asc)
+    {
+        Comparator<Map<String, Object>> cmp = (a, b) ->
+        {
+            Object av = a.get(key);
+            Object bv = b.get(key);
+            if (av == null && bv == null) return 0;
+            if (av == null) return 1;   // nulls last
+            if (bv == null) return -1;
+            if (av instanceof Comparable && bv instanceof Comparable)
+                return ((Comparable<Object>) av).compareTo(bv);
+            return av.toString().compareTo(bv.toString());
+        };
+        return asc ? cmp : cmp.reversed();
     }
 
     private <T> Map<String, Object> paginate(List<T> all, int page, int size)

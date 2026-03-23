@@ -1,0 +1,38 @@
+importers:
+- name: "sailsys-boats"
+  mode: "directory"
+  includeInSchedule: false
+- name: "sailsys-boats"
+  mode: "api"
+  includeInSchedule: false
+- name: "sailsys-races"
+  mode: "directory"
+  includeInSchedule: false
+- name: "sailsys-races"
+  mode: "api"
+  includeInSchedule: false
+- name: "orc"
+  mode: "api"
+  includeInSchedule: false
+- name: "ams"
+  mode: "api"
+  includeInSchedule: false
+- name: "topyacht"
+  mode: "api"
+  includeInSchedule: false
+- name: "bwps"
+  mode: "api"
+  includeInSchedule: false
+- name: "analysis"
+  mode: "run"
+  includeInSchedule: false
+- name: "reference-factors"
+  mode: "run"
+  includeInSchedule: false
+schedule:
+  days: []
+  time: "03:00:00"
+lastSailSysIds:
+  sailsys-boats-api: 13014
+  sailsys-races-api: 40809
+targetIrcYear: 2025

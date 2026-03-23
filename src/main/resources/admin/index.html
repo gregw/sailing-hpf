@@ -20,21 +20,28 @@
 
     <p>The <strong>HPF (Historical Performance Factor)</strong> is the back-calculated handicap
     a boat would have needed, averaged across its racing history, to have been equal-time with
-    a hypothetical 1.000 reference boat. It is a measure of historical performance — not a
-    handicap system.</p>
+    a hypothetical 1.000 reference boat (roughly calibrated with IRC).
+    It is a measure of historical performance — not a handicap system.</p>
 
     <p><strong>Primary use:</strong> Informing the allocation of initial handicaps at season
-    start, or when a new boat joins a series. HPF explicitly does not replace how clubs age
-    or adjust handicaps between races day-to-day.</p>
+    start, or when a new boat joins a series. It facilitates this by showing comparisons between two or more boats on
+    "normalized" corrected times.  HPF explicitly does not replace how clubs age or adjust handicaps between races day-to-day.</p>
 
-    <p>Data is collected from SailSys, TopYacht club pages, ORC certificate feeds, and AMS.
-    Boats with IRC, ORC or AMS certificates serve as reference candles, anchoring the
-    comparison between measurement-based and performance-based handicaps.</p>
+    <p>Public data (boat sail numbers, boat names, club names, and elapsed times) is collected from SailSys and TopYacht
+    results pages and combined with data obtained from publicly available ORC and AMS certificates.
+    Boats with IRC, ORC, or AMS certificates serve as "standard candles" that anchoring the performance factor calculations
+    so they are roughly comparable to current IRC handicaps.</p>
+
+    <div class="stats">
+      <div class="stat"><strong id="stat-boats">–</strong>Boats</div>
+      <div class="stat"><strong id="stat-designs">–</strong>Designs</div>
+      <div class="stat"><strong id="stat-races">–</strong>Races</div>
+    </div>
 
     <div class="landing-links">
       <a class="landing-card" href="import.html">
         <strong>Import</strong>
-        <span>Run data importers and schedule automatic updates from SailSys, TopYacht, ORC and AMS.</span>
+        <span>Run data importers and schedule automatic updates from SailSys, TopYacht, ORC, and AMS.</span>
       </a>
       <a class="landing-card" href="data.html">
         <strong>Data Browser</strong>
@@ -48,5 +55,15 @@
   </main>
 
   <script src="common.js"></script>
+  <script>
+    async function loadStats() {
+        const data = await fetchJson('/api/stats');
+        if (!data) return;
+        document.getElementById('stat-boats').textContent = data.boats.toLocaleString();
+        document.getElementById('stat-designs').textContent = data.designs.toLocaleString();
+        document.getElementById('stat-races').textContent = data.races.toLocaleString();
+    }
+    loadStats();
+  </script>
 </body>
 </html>

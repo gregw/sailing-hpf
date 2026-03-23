@@ -475,6 +475,78 @@ class DataStoreTest {
         assertEquals(1, store.boats().size());
     }
 
+    // --- findUniqueClubByShortName ---
+
+    @Test
+    void findUniqueClubByShortNameMatchesLongName(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Club club = new Club("test.example.com", "TYC", "Test Yacht Club", "NSW",
+                List.of(), List.of(), List.of(), null);
+        store.putClub(club);
+
+        Club found = store.findUniqueClubByShortName("Test Yacht Club", null);
+
+        assertNotNull(found);
+        assertEquals("test.example.com", found.id());
+    }
+
+    @Test
+    void findUniqueClubByShortNameMatchesAlias(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Club club = new Club("test.example.com", "TYC", "Test Yacht Club", "NSW",
+                List.of("TYC/OTHER"), List.of(), List.of(), null);
+        store.putClub(club);
+
+        Club found = store.findUniqueClubByShortName("TYC/OTHER", null);
+
+        assertNotNull(found);
+        assertEquals("test.example.com", found.id());
+    }
+
+    @Test
+    void findUniqueClubByShortNamePrefersShortNameOverLongName(@TempDir Path tempDir) {
+        // Club A: shortName="X", longName="Y"
+        // Club B: shortName="Y", longName="Z"
+        // Searching "Y" should return B (shortName match wins over longName match of A)
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Club clubA = new Club("a.example.com", "X", "Y", "NSW", List.of(), List.of(), List.of(), null);
+        Club clubB = new Club("b.example.com", "Y", "Z", "NSW", List.of(), List.of(), List.of(), null);
+        store.putClub(clubA);
+        store.putClub(clubB);
+
+        Club found = store.findUniqueClubByShortName("Y", null);
+
+        assertNotNull(found);
+        assertEquals("b.example.com", found.id());
+    }
+
+    @Test
+    void findUniqueClubByShortNameMatchesFirstTokenOfCompoundName(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Club club = new Club("test.example.com", "TYC", "Test Yacht Club", "NSW",
+                List.of(), List.of(), List.of(), null);
+        store.putClub(club);
+
+        Club found = store.findUniqueClubByShortName("TYC/OTHER", null);
+
+        assertNotNull(found);
+        assertEquals("test.example.com", found.id());
+    }
+
+    @Test
+    void findUniqueClubByShortNameReturnsNullWhenNoMatch(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Club found = store.findUniqueClubByShortName("Nonexistent Club", null);
+
+        assertNull(found);
+    }
+
     // --- Helpers ---
 
     private DataStore testDataStore() throws URISyntaxException {

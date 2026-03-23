@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 
 /**
  * Shared cache for analysis results. Holds the output of {@link HandicapAnalyser#analyseAll()}
@@ -34,19 +35,66 @@ public class AnalysisCache
         this.store = store;
     }
 
-    public void refresh()
+    /**
+     * Recomputes comparisons and reference factors.
+     *
+     * @param targetIrcYear override target IRC year, or null to auto-detect from data
+     */
+    public void refresh(Integer targetIrcYear)
     {
         LOG.info("AnalysisCache: refreshing...");
         List<ComparisonResult> newComparisons = new HandicapAnalyser(store).analyseAll();
-
-        int currentYear = LocalDate.now().getYear();
         ConversionGraph graph = ConversionGraph.from(newComparisons);
+        int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         Map<String, BoatReferenceFactors> newFactors =
-            new ReferenceNetworkBuilder().build(store, graph, currentYear);
+            new ReferenceNetworkBuilder().build(store, graph, year);
 
         comparisons = newComparisons;
         referenceFactors = newFactors;
-        LOG.info("AnalysisCache: {} comparisons, {} reference factors", newComparisons.size(), newFactors.size());
+        LOG.info("AnalysisCache: {} comparisons, {} reference factors (targetYear={})",
+            newComparisons.size(), newFactors.size(), year);
+    }
+
+    /**
+     * Recomputes reference factors only, using the existing comparisons and conversion graph.
+     * Faster than {@link #refresh(Integer)} when only the boat certificate data has changed.
+     *
+     * @param targetIrcYear override target IRC year, or null to auto-detect from data
+     */
+    public void refreshReferenceFactors(Integer targetIrcYear)
+    {
+        LOG.info("AnalysisCache: refreshing reference factors...");
+        ConversionGraph graph = ConversionGraph.from(comparisons);
+        int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
+        Map<String, BoatReferenceFactors> newFactors =
+            new ReferenceNetworkBuilder().build(store, graph, year);
+        referenceFactors = newFactors;
+        LOG.info("AnalysisCache: {} reference factors (targetYear={})", newFactors.size(), year);
+    }
+
+    /**
+     * Returns the maximum year among real (issued) IRC certificates in the store,
+     * falling back to the current calendar year if none exist.
+     * <p>
+     * Inferred IRC certificates (created by the race importer from race AHC values)
+     * are excluded — they have a null expiry date and a cert number containing
+     * "-inferred-". Using only issued certs ensures the DFS target year matches
+     * the certs that boats actually hold, rather than race-scoring artefacts.
+     * <p>
+     * Australian IRC certs expiring in May of year Y are assigned year Y-1, so the
+     * maximum issued cert year typically lags the calendar year in the first half
+     * of the year.
+     */
+    private int maxIrcCertYear()
+    {
+        OptionalInt max = store.boats().values().stream()
+            .flatMap(b -> b.certificates().stream())
+            .filter(c -> "IRC".equals(c.system()) && c.expiryDate() != null)
+            .mapToInt(c -> c.year())
+            .max();
+        int year = max.orElse(LocalDate.now().getYear());
+        LOG.info("AnalysisCache: using currentYear={} for reference factor target", year);
+        return year;
     }
 
     public List<ComparisonResult> comparisons()

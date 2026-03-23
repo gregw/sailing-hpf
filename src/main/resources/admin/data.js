@@ -1,5 +1,30 @@
+const COLUMNS = {
+    boats: [
+        { label: 'ID',     key: 'id' },
+        { label: 'Sail',   key: 'sailNumber' },
+        { label: 'Name',   key: 'name' },
+        { label: 'Design', key: 'designId' },
+        { label: 'Club',   key: 'clubId' },
+    ],
+    designs: [
+        { label: 'ID',     key: 'id' },
+        { label: 'Name',   key: 'canonicalName' },
+        { label: 'Makers', key: 'makerIds', render: v => esc((v || []).join(', ')) },
+    ],
+    races: [
+        { label: 'ID',        key: 'id' },
+        { label: 'Club',      key: 'clubId' },
+        { label: 'Date',      key: 'date' },
+        { label: 'Series',    key: 'seriesName' },
+        { label: 'Race',      key: 'name' },
+        { label: 'Finishers', key: 'finishers' },
+    ],
+};
+
 const state = {
-    pages: { boats: 0, designs: 0, races: 0 },
+    pages:  { boats: 0, designs: 0, races: 0 },
+    sort:   { boats: 'id', designs: 'id', races: 'date' },
+    dir:    { boats: 'asc', designs: 'asc', races: 'desc' },
     searchTimers: {},
     activeTab: 'boats'
 };
@@ -27,28 +52,55 @@ function doSearch(entity) {
 
 async function loadList(entity, page) {
     state.pages[entity] = page;
-    const q = document.getElementById('q-' + entity).value;
-    const data = await fetchJson(`/api/${entity}?page=${page}&size=50&q=${encodeURIComponent(q)}`);
+    const q    = document.getElementById('q-' + entity).value;
+    const sort = state.sort[entity];
+    const dir  = state.dir[entity];
+    const data = await fetchJson(
+        `/api/${entity}?page=${page}&size=50&q=${encodeURIComponent(q)}&sort=${sort}&dir=${dir}`
+    );
     if (!data) return;
 
+    renderHeaders(entity);
     renderTable(entity, data.items);
     renderPager(entity, data);
+}
+
+function renderHeaders(entity) {
+    const thead  = document.getElementById('thead-' + entity);
+    const cols   = COLUMNS[entity];
+    const active = state.sort[entity];
+    const dir    = state.dir[entity];
+    thead.innerHTML = cols.map(col => {
+        const isActive = col.key === active;
+        const arrow    = isActive ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
+        return `<th class="sortable${isActive ? ' sort-active' : ''}"
+                    onclick="sortBy('${entity}', '${col.key}')">${esc(col.label)}${arrow}</th>`;
+    }).join('');
+}
+
+function sortBy(entity, key) {
+    if (state.sort[entity] === key) {
+        state.dir[entity] = state.dir[entity] === 'asc' ? 'desc' : 'asc';
+    } else {
+        state.sort[entity] = key;
+        state.dir[entity]  = 'asc';
+    }
+    loadList(entity, 0);
 }
 
 function renderTable(entity, items) {
     const tbody = document.getElementById('tbody-' + entity);
     tbody.innerHTML = '';
+    const cols = COLUMNS[entity];
 
     for (const item of items) {
         const tr = document.createElement('tr');
         tr.onclick = () => loadDetail(entity, item.id);
-        if (entity === 'boats') {
-            tr.innerHTML = `<td>${esc(item.id)}</td><td>${esc(item.sailNumber)}</td><td>${esc(item.name)}</td><td>${esc(item.designId)}</td>`;
-        } else if (entity === 'designs') {
-            tr.innerHTML = `<td>${esc(item.id)}</td><td>${esc(item.canonicalName)}</td><td>${esc((item.makerIds || []).join(', '))}</td>`;
-        } else if (entity === 'races') {
-            tr.innerHTML = `<td>${esc(item.id)}</td><td>${esc(item.clubId)}</td><td>${esc(item.date)}</td><td>${esc(item.handicapSystem)}</td>`;
-        }
+        tr.innerHTML = cols.map(col => {
+            const v = item[col.key];
+            const cell = col.render ? col.render(v) : esc(v != null ? String(v) : '');
+            return `<td>${cell}</td>`;
+        }).join('');
         tbody.appendChild(tr);
     }
 }
@@ -83,7 +135,7 @@ async function loadDetail(entity, id) {
     if (!data) return;
 
     const panel = document.getElementById('detail-' + entity);
-    const pre = document.getElementById('pre-' + entity);
+    const pre   = document.getElementById('pre-' + entity);
     pre.textContent = JSON.stringify(data, null, 2);
 
     if (entity === 'boats') {

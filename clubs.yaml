@@ -36,7 +36,7 @@ clubs:
     shortName: CYCA
     state: NSW
     fullName: Cruising Yacht Club of Australia
-    aliases: []
+    aliases: ["CYCA/SDYC"]
     topyacht:
       - https://cyca.com.au/results/2019/bwps_1920/index.htm
 

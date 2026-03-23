@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Imports race results from TopYacht club pages.
@@ -84,11 +86,37 @@ public class TopYachtImporter
         this.httpClient = httpClient;
     }
 
+    public static void main(String[] args) throws Exception
+    {
+        Path dataRoot = DataStore.resolveDataRoot(args);
+        DataStore dataStore = new DataStore(dataRoot);
+        dataStore.start();
+
+        HttpClient client = new HttpClient();
+        client.start();
+        try
+        {
+            new TopYachtImporter(dataStore, client).run();
+        }
+        finally
+        {
+            dataStore.stop();
+            client.stop();
+        }
+    }
+
     // --- Entry point ---
 
     public void run() throws Exception
     {
-        for (Club club : store.clubs().values())
+        // topyachtUrls are configured in the seed (clubs.yaml); merge seed + persisted
+        // so we don't miss clubs that haven't been imported yet.
+        List<Club> allClubs = Stream.concat(
+            store.clubs().values().stream(),
+            store.clubSeed().values().stream().filter(c -> !store.clubs().containsKey(c.id()))
+        ).toList();
+
+        for (Club club : allClubs)
         {
             for (String indexUrl : club.topyachtUrls())
             {
@@ -626,7 +654,17 @@ public class TopYachtImporter
     {
         Club club = store.clubs().get(clubId);
         if (club == null)
-            return;
+        {
+            // Club not yet persisted — initialise from seed so series can be recorded
+            Club seed = store.clubSeed().get(clubId);
+            if (seed == null)
+                return;
+            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(),
+                seed.aliases() != null ? seed.aliases() : List.of(),
+                seed.topyachtUrls() != null ? seed.topyachtUrls() : List.of(),
+                List.of(), null);
+            store.putClub(club);
+        }
 
         List<Series> series = new ArrayList<>(club.series());
         int idx = -1;

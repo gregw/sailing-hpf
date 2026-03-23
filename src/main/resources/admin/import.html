@@ -17,17 +17,30 @@
   <h1>Import</h1>
 
   <section>
-    <h2>Stats</h2>
-    <div class="stats">
-      <div class="stat"><strong id="stat-boats">–</strong>Boats</div>
-      <div class="stat"><strong id="stat-designs">–</strong>Designs</div>
-      <div class="stat"><strong id="stat-races">–</strong>Races</div>
-    </div>
+    <h2>Importers</h2>
+    <table class="importer-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Importer</th>
+          <th>Mode</th>
+          <th>Status</th>
+          <th>Run</th>
+          <th>In schedule</th>
+        </tr>
+      </thead>
+      <tbody id="importers-body"></tbody>
+    </table>
   </section>
 
   <section>
-    <h2>Importers</h2>
-    <div id="importers" class="importer-grid"></div>
+    <h2>Schedule</h2>
+    <p>Select days to run all ticked importers sequentially, then refresh analysis. No days selected = disabled.</p>
+    <div class="schedule-days" id="schedule-days"></div>
+    <label>Time: <input type="time" id="schedule-time" value="03:00"></label>
+    <label>Target IRC year: <input type="number" id="target-irc-year" min="2019" max="2099"
+           style="width:5em" placeholder="auto"></label>
+    <button onclick="saveSchedule()">Save schedule</button>
   </section>
 
   <script src="common.js"></script>

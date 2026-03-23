@@ -8,6 +8,8 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,6 +74,8 @@ public class SailSysBoatImporter
 
         String mode = args.length > 1 ? args[1] : "--local";
 
+        Path defaultBoatsDir = dataRoot.resolve("sailsys/boats");
+
         if ("--api".equals(mode))
         {
             int startId = args.length > 2 ? Integer.parseInt(args[2]) : 1;
@@ -79,7 +83,7 @@ public class SailSysBoatImporter
             client.start();
             try
             {
-                new SailSysBoatImporter(dataStore, client).runFromApi(startId);
+                new SailSysBoatImporter(dataStore, client).runFromApi(startId, id -> {}, () -> false, defaultBoatsDir);
             }
             finally
             {
@@ -89,7 +93,7 @@ public class SailSysBoatImporter
         }
         else
         {
-            Path boatsDir = args.length > 2 ? Path.of(args[2]) : Path.of("OLD/sailsys/boats");
+            Path boatsDir = args.length > 2 ? Path.of(args[2]) : defaultBoatsDir;
             try
             {
                 new SailSysBoatImporter(dataStore, null).runFromDirectory(boatsDir);
@@ -144,10 +148,15 @@ public class SailSysBoatImporter
     }
 
     /**
-     * Fetches boats sequentially from the SailSys API starting at {@code startId}.
-     * Stops after {@value #NOT_FOUND_THRESHOLD} consecutive not-found responses.
+     * Fetches boats sequentially from the SailSys API starting at {@code startId},
+     * caching each response as {@code boat-{id}.json} under {@code cacheDir} (if non-null).
+     * On subsequent runs, cached files are read directly without an HTTP request.
+     * Stops after {@value #NOT_FOUND_THRESHOLD} consecutive not-found responses, or when
+     * {@code stop} returns true (checked after each successfully fetched boat).
+     * {@code onId} is called with the current SailSys ID on each successful fetch.
      */
-    public void runFromApi(int startId) throws Exception
+    public void runFromApi(int startId, IntConsumer onId, BooleanSupplier stop, Path cacheDir)
+        throws Exception
     {
         LOG.info("Fetching boats from SailSys API starting at id={}", startId);
         int id = startId;
@@ -156,13 +165,27 @@ public class SailSysBoatImporter
 
         while (consecutiveNotFound < NOT_FOUND_THRESHOLD)
         {
+            LOG.info("Fetching boat id={}", id);
             String url = API_BASE + id;
             String json;
+            Path cachedFile = (cacheDir != null) ? cacheDir.resolve(String.format("boat-%06d.json", id)) : null;
             try
             {
-                Thread.sleep(HTTP_DELAY_MS);
-                ContentResponse response = client.GET(url);
-                json = response.getContentAsString();
+                if (cachedFile != null && Files.exists(cachedFile))
+                {
+                    json = Files.readString(cachedFile);
+                }
+                else
+                {
+                    Thread.sleep(HTTP_DELAY_MS);
+                    ContentResponse response = client.GET(url);
+                    json = response.getContentAsString();
+                    if (cachedFile != null)
+                    {
+                        Files.createDirectories(cacheDir);
+                        Files.writeString(cachedFile, json);
+                    }
+                }
             }
             catch (Exception e)
             {
@@ -173,7 +196,10 @@ public class SailSysBoatImporter
 
             boolean found = processBoatJson(json);
             if (found)
+            {
                 consecutiveNotFound = 0;
+                onId.accept(id);
+            }
             else
                 consecutiveNotFound++;
 
@@ -183,11 +209,18 @@ public class SailSysBoatImporter
                 LOG.info("Fetched {} boats (id={}) — saving", processed, id);
                 store.save();
             }
+
+            if (stop.getAsBoolean())
+            {
+                LOG.info("Stop requested — stopping after boat id={}", id);
+                break;
+            }
+
             id++;
         }
 
         store.save();
-        LOG.info("Done. Stopped at id={} after {} consecutive not-found responses.", id, NOT_FOUND_THRESHOLD);
+        LOG.info("Done. Last id={}, processed={}.", id, processed);
     }
 
     // --- Parse / import layer (package-private for testing) ---
