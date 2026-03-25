@@ -1,0 +1,74 @@
+# Designs to exclude from HPF calculation (dinghies, off-the-beach, beach cats).
+# Values are matched case-insensitively against the normalised design ID.
+# Named keelboat one-designs (Dragon, Etchells, Elliott, VX One, etc.) are NOT listed here.
+excluded:
+  - Dinghy
+  - Optimist
+  - ILCA 4
+  - ILCA 6
+  - ILCA 7
+  - Laser
+  - OK Dinghy
+  - Finn
+  - Pacer
+  - Flying 11
+  - Sabot
+  - Minnow
+  - Contender
+  - 29er
+  - 49er
+  - 79er
+  - 470
+  - 420
+  - 505
+  - Tasar
+  - NS14
+  - B14
+  - International 14
+  - International Canoe
+  - Cherub
+  - O'pen Skiff
+  - International Cadet
+  - Flying Ant
+  - Windsurfer
+  - Windfoil
+  - Waszp
+  - Hobie 14
+  - Hobie 14 Turbo
+  - Hobie 16
+  - Hobie 17
+  - Hobie 18
+  - F16
+  - F18
+  - A Class Catamaran
+  - Nacra 4.5
+  - Nacra 16
+  - Nacra 17
+  - Paper Tiger
+  - Skud 18
+  - Musto Skiff
+  - RS Aero 6
+  - RS Aero 7
+  - RS200
+  - RS Quest
+  - RS Feva
+  - Feva XL
+  - RS800
+  - RS100 8.4
+  - 12ft Skiff
+  - 13ft Skiff
+  - 16ft Skiff
+  - 18ft Skiff
+  - Historic 18 foot Skiffs
+  - International Moth
+  - Scow Moth
+  - Mosquito
+  - Javelin
+  - Skate
+  - Heron
+  - Sailfish
+  - Pittwater Junior
+  - Spiral
+  - Sharpie
+  - Blazer
+  - Arrow
