@@ -17,14 +17,22 @@ public record Design(
     String canonicalName, // display name, e.g. "J/24", "Farr 40"
     List<String> makerIds, // normalised maker IDs; usually one
     List<String> aliases,  // alternate design names, e.g. "Mumm 30" for "Farr 30"
+    List<String> sources,  // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
+    Instant lastUpdated,   // when this record was last written by an importer; nullable
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Design>
 {
 
+    public Design
+    {
+        if (sources == null)
+            sources = List.of();
+    }
+
     @Override
     public Design withLoadedAt(Instant t)
     {
-        return new Design(id, canonicalName, makerIds, aliases, t);
+        return new Design(id, canonicalName, makerIds, aliases, sources, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -36,12 +44,13 @@ public record Design(
         if (!(o instanceof Design d))
             return false;
         return Objects.equals(id, d.id) && Objects.equals(canonicalName, d.canonicalName)
-            && Objects.equals(makerIds, d.makerIds) && Objects.equals(aliases, d.aliases);
+            && Objects.equals(makerIds, d.makerIds) && Objects.equals(aliases, d.aliases)
+            && Objects.equals(sources, d.sources) && Objects.equals(lastUpdated, d.lastUpdated);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, canonicalName, makerIds, aliases);
+        return Objects.hash(id, canonicalName, makerIds, aliases, sources, lastUpdated);
     }
 }

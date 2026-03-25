@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
@@ -60,6 +61,8 @@ import java.util.stream.Stream;
 public class TopYachtImporter
 {
     private static final Logger LOG = LoggerFactory.getLogger(TopYachtImporter.class);
+
+    static final String SOURCE = "TopYacht";
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("d/M/yyyy");
     private static final Pattern RACE_LABEL = Pattern.compile(
@@ -236,7 +239,7 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, handicapSystem, false, List.copyOf(divisions), null));
+            null, handicapSystem, false, List.copyOf(divisions), SOURCE, Instant.now(), null));
         LOG.info("TopYacht: imported race {} ({} finishers, {} division(s), system={})",
             raceId, totalFinishers, divisions.size(), handicapSystem);
 
@@ -316,7 +319,7 @@ public class TopYachtImporter
             MergeEntry me = e.getValue();
 
             Design design = me.designName != null
-                ? store.findOrCreateDesign(me.designName) : null;
+                ? store.findOrCreateDesign(me.designName, SOURCE) : null;
             Boat boat = store.findOrCreateBoat(sailNo, me.boatName, design);
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null)
@@ -325,7 +328,8 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(), null));
+                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(),
+                        addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
 
@@ -347,7 +351,7 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, handicapSystem, false, List.of(new Division(null, List.copyOf(finishers))), null));
+            null, handicapSystem, false, List.of(new Division(null, List.copyOf(finishers))), SOURCE, Instant.now(), null));
         LOG.info("TopYacht: imported race {} ({} finishers, system={})",
             raceId, finishers.size(), handicapSystem);
 
@@ -584,7 +588,7 @@ public class TopYachtImporter
         for (ParsedRow row : rows)
         {
             Design design = row.designName() != null
-                ? store.findOrCreateDesign(row.designName()) : null;
+                ? store.findOrCreateDesign(row.designName(), SOURCE) : null;
             Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), design);
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null)
@@ -593,7 +597,8 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(), null));
+                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(),
+                        addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
 
@@ -645,7 +650,8 @@ public class TopYachtImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(certs), null));
+            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(certs),
+            addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;
     }
@@ -660,6 +666,15 @@ public class TopYachtImporter
         return "IRC".equalsIgnoreCase(system)
             || "ORC".equalsIgnoreCase(system)
             || "AMS".equalsIgnoreCase(system);
+    }
+
+    private static List<String> addSource(List<String> existing, String source)
+    {
+        if (existing.contains(source))
+            return existing;
+        List<String> updated = new ArrayList<>(existing);
+        updated.add(source);
+        return List.copyOf(updated);
     }
 
     private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)

@@ -1,6 +1,7 @@
 package org.mortbay.sailing.hpf.importer;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -29,6 +30,8 @@ public class AmsImporter
 {
 
     private static final Logger LOG = LoggerFactory.getLogger(AmsImporter.class);
+
+    static final String SOURCE = "AMS";
 
     private static final String LIST_URL = "https://topyacht.com.au/ams/ams_list.php";
 
@@ -78,6 +81,15 @@ public class AmsImporter
         parseAndImport(html);
         store.save();
         LOG.info("Done.");
+    }
+
+    private static List<String> addSource(List<String> existing, String source)
+    {
+        if (existing.contains(source))
+            return existing;
+        List<String> updated = new ArrayList<>(existing);
+        updated.add(source);
+        return List.copyOf(updated);
     }
 
     private String fetch(String url) throws Exception
@@ -168,7 +180,7 @@ public class AmsImporter
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
                 boat.designId(), boat.clubId(), boat.aliases(),
-                List.copyOf(updatedCerts), null));
+                List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
     }
 
     private Double parseRating(String value, String boatName, String kind)

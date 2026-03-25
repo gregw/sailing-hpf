@@ -3,6 +3,7 @@ package org.mortbay.sailing.hpf.importer;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,6 +37,8 @@ public class OrcImporter
 {
 
     private static final Logger LOG = LoggerFactory.getLogger(OrcImporter.class);
+
+    static final String SOURCE = "ORC";
 
     private static final String LIST_URL =
         "https://data.orc.org/public/WPub.dll?action=activecerts&CountryId=AUS";
@@ -212,7 +215,7 @@ public class OrcImporter
         }
 
         // Find-or-create Design
-        Design design = store.findOrCreateDesign(className);
+        Design design = store.findOrCreateDesign(className, SOURCE);
 
         // Find-or-create Boat
         Boat boat = store.findOrCreateBoat(sailNo, yachtName.trim(), design);
@@ -231,7 +234,16 @@ public class OrcImporter
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubId(), boat.aliases(),
-            List.copyOf(updatedCerts), null));
+            List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
+    }
+
+    private static List<String> addSource(List<String> existing, String source)
+    {
+        if (existing.contains(source))
+            return existing;
+        List<String> updated = new ArrayList<>(existing);
+        updated.add(source);
+        return List.copyOf(updated);
     }
 
     /**

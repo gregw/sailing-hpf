@@ -247,6 +247,56 @@ public class AliasSeedLoader
     // ---- Alias file update (called after a merge operation) ----
 
     /**
+     * Reads aliases.yaml, merges in design alias entries from a merge operation, and writes back.
+     * For each alias name (canonical names and IDs of the merged-away designs), adds an entry
+     * under the keep design's ID in the {@code designs:} section.
+     */
+    public static void appendDesignMergeAliases(Path configDir, String keepId, String canonicalName, List<String> aliasNames)
+    {
+        Path file = configDir.resolve(FILENAME);
+        SeedFile seedFile = null;
+        if (Files.exists(file))
+        {
+            try
+            {
+                seedFile = YAML_MAPPER.readValue(file.toFile(), SeedFile.class);
+            }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for update: {}", file, e.getMessage());
+                return;
+            }
+        }
+        if (seedFile == null)
+            seedFile = new SeedFile();
+        if (seedFile.designs == null)
+            seedFile.designs = new LinkedHashMap<>();
+
+        DesignSeedEntry entry = seedFile.designs.computeIfAbsent(keepId, k -> new DesignSeedEntry());
+        if (entry.canonicalName == null && canonicalName != null)
+            entry.canonicalName = canonicalName;
+        if (entry.aliases == null)
+            entry.aliases = new ArrayList<>();
+        for (String name : aliasNames)
+        {
+            boolean present = entry.aliases.stream().anyMatch(a -> name.equalsIgnoreCase(a));
+            if (!present)
+                entry.aliases.add(name);
+        }
+
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), seedFile);
+            LOG.info("Updated {} with design merge aliases for keepId={}", file, keepId);
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+        }
+    }
+
+    /**
      * Spec for one merged-away boat: what alias entries to add to aliases.yaml.
      */
     public record MergeAliasSpec(

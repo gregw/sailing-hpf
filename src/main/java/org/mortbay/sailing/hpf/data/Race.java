@@ -27,6 +27,8 @@ public record Race(
     String handicapSystem,           // primary scoring system, e.g. "PHS", "IRC", "ORC", "AMS"
     boolean offsetPursuit,           // true if pursuit-format race
     List<Division> divisions,
+    String source,                   // short importer name that created this record, e.g. "TopYacht"; nullable
+    Instant lastUpdated,             // when this record was last written by an importer; nullable
     @JsonIgnore Instant loadedAt     // file modification time at load; not persisted
 ) implements Loadable<Race>
 {
@@ -34,7 +36,7 @@ public record Race(
     @Override
     public Race withLoadedAt(Instant t)
     {
-        return new Race(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions, t);
+        return new Race(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions, source, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -49,12 +51,13 @@ public record Race(
             && Objects.equals(id, r.id) && Objects.equals(clubId, r.clubId)
             && Objects.equals(seriesIds, r.seriesIds) && Objects.equals(date, r.date)
             && Objects.equals(name, r.name) && Objects.equals(handicapSystem, r.handicapSystem)
-            && Objects.equals(divisions, r.divisions);
+            && Objects.equals(divisions, r.divisions)
+            && Objects.equals(source, r.source) && Objects.equals(lastUpdated, r.lastUpdated);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions);
+        return Objects.hash(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions, source, lastUpdated);
     }
 }

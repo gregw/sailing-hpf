@@ -132,7 +132,7 @@ class SailSysBoatImporterTest
         Certificate orcCert = new Certificate("ORC", 2023, 588.4, false, false, false, "AUS-2023-XYZ", null);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
             boat.designId(), boat.clubId(), boat.aliases(),
-            List.of(boat.certificates().getFirst(), orcCert), null));
+            List.of(boat.certificates().getFirst(), orcCert), boat.sources(), boat.lastUpdated(), null));
 
         // Re-run SailSys importer with updated IRC
         importer.processBoatJson(boatJson(6, "Papillon", "6841", "RSAYS", "Archambault", "40",

@@ -11,6 +11,7 @@ const DISPLAY_NAMES = {
     'orc': 'ORC',
     'ams': 'AMS',
     'topyacht': 'TopYacht',
+    'bwps': 'BWPS',
     'analysis': 'Analysis',
     'reference-factors': 'Reference Factors'
 };

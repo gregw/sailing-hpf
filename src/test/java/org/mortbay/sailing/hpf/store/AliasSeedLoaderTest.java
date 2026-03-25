@@ -1,6 +1,7 @@
 package org.mortbay.sailing.hpf.store;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mortbay.sailing.hpf.data.TimedAlias;
 
 import java.nio.file.Path;
@@ -126,5 +127,25 @@ class AliasSeedLoaderTest
         assertNull(empty.designCanonicalName("anything"));
         assertTrue(empty.boatAliases("anything").isEmpty());
         assertNull(empty.boatCanonicalName("anything"));
+    }
+
+    @Test
+    void appendDesignMergeAliasesSetsCanonicalName(@TempDir Path tempDir) throws Exception
+    {
+        AliasSeedLoader.appendDesignMergeAliases(tempDir, "mydesign", "My Design Name", List.of("Alt Name"));
+
+        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(tempDir);
+        assertEquals("My Design Name", seed.designCanonicalName("mydesign"));
+        assertEquals("mydesign", seed.resolveDesignAlias("altname"));
+    }
+
+    @Test
+    void appendDesignMergeAliasesDoesNotOverwriteExistingCanonicalName(@TempDir Path tempDir) throws Exception
+    {
+        AliasSeedLoader.appendDesignMergeAliases(tempDir, "mydesign", "First Name", List.of());
+        AliasSeedLoader.appendDesignMergeAliases(tempDir, "mydesign", "Second Name", List.of());
+
+        AliasSeedLoader.AliasSeed seed = AliasSeedLoader.load(tempDir);
+        assertEquals("First Name", seed.designCanonicalName("mydesign"));
     }
 }

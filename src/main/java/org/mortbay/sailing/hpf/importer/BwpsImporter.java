@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -52,6 +53,7 @@ public class BwpsImporter
 {
     private static final Logger LOG = LoggerFactory.getLogger(BwpsImporter.class);
 
+    static final String SOURCE = "BWPS";
     static final String BASE_URL = "https://bwps.cycaracing.com";
     static final int MIN_YEAR = 2020;
     static final String CLUB_ID = "cyca.com.au";
@@ -211,7 +213,7 @@ public class BwpsImporter
             }
 
             Design design = (detail.type() != null && !detail.type().isBlank())
-                ? store.findOrCreateDesign(detail.type()) : null;
+                ? store.findOrCreateDesign(detail.type(), SOURCE) : null;
             Boat boat = store.findOrCreateBoat(detail.sailNumber(), detail.yachtName(), design);
 
             if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null)
@@ -220,7 +222,8 @@ public class BwpsImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(), null));
+                        boat.designId(), fromClub.id(), boat.aliases(), boat.certificates(),
+                        addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
 
@@ -249,7 +252,7 @@ public class BwpsImporter
         String handicapSystem = hasIrc && hasOrc ? "IRC/ORC" : hasIrc ? "IRC" : "ORC";
 
         store.putRace(new Race(raceId, CLUB_ID, List.of(seriesId), raceDate, 1,
-            raceName, handicapSystem, false, divisions, null));
+            raceName, handicapSystem, false, divisions, SOURCE, Instant.now(), null));
         LOG.info("BWPS: imported race {} '{}' {} ({} finishers, {} division(s), system={})",
             raceId, raceName, year, finisherCount, divisions.size(), handicapSystem);
 
@@ -586,9 +589,19 @@ public class BwpsImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(certs), null));
+            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(certs),
+            addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("BWPS: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;
+    }
+
+    private static List<String> addSource(List<String> existing, String source)
+    {
+        if (existing.contains(source))
+            return existing;
+        List<String> updated = new ArrayList<>(existing);
+        updated.add(source);
+        return List.copyOf(updated);
     }
 
     private void updateClubSeries(String clubId, String seriesId, String seriesName, String raceId)

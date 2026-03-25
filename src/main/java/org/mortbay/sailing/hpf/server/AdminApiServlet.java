@@ -21,9 +21,11 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class AdminApiServlet extends HttpServlet
@@ -105,6 +107,10 @@ public class AdminApiServlet extends HttpServlet
         {
             handleMergeBoats(req, resp);
         }
+        else if ("/designs/merge".equals(path))
+        {
+            handleMergeDesigns(req, resp);
+        }
         else
         {
             resp.sendError(404);
@@ -130,8 +136,29 @@ public class AdminApiServlet extends HttpServlet
             String sort = req.getParameter("sort");
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
+            boolean dupeSails = "true".equals(req.getParameter("dupeSails"));
 
+            // Duplicate-sail filter operates on the full dataset, text search is applied on top.
+            Set<String> candidateIds = null;
+            if (dupeSails)
+            {
+                Set<String> dupeSailNums = store.boats().values().stream()
+                    .collect(Collectors.groupingBy(Boat::sailNumber, Collectors.counting()))
+                    .entrySet().stream()
+                    .filter(e -> e.getValue() > 1)
+                    .map(Map.Entry::getKey)
+                    .collect(Collectors.toSet());
+                candidateIds = store.boats().values().stream()
+                    .filter(b -> dupeSailNums.contains(b.sailNumber()))
+                    .map(Boat::id)
+                    .collect(Collectors.toCollection(HashSet::new));
+            }
+
+            boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+            final Set<String> finalCandidateIds = candidateIds;
             List<Boat> all = store.boats().values().stream()
+                .filter(b -> finalCandidateIds == null || finalCandidateIds.contains(b.id()))
+                .filter(b -> showExcluded || b.designId() == null || !store.isDesignExcluded(b.designId()))
                 .filter(b -> lower == null
                     || b.id().toLowerCase().contains(lower)
                     || b.name().toLowerCase().contains(lower))
@@ -265,6 +292,81 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private void handleMergeDesigns(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String keepId = (String) body.get("keepId");
+            List<String> mergeIds = (List<String>) body.get("mergeIds");
+
+            if (keepId == null || keepId.isBlank())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "keepId is required"));
+                return;
+            }
+            if (mergeIds == null || mergeIds.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "mergeIds must be a non-empty list"));
+                return;
+            }
+            if (mergeIds.contains(keepId))
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "keepId must not appear in mergeIds"));
+                return;
+            }
+
+            Design keepDesign = store.designs().get(keepId);
+            if (keepDesign == null)
+            {
+                resp.setStatus(404);
+                writeJson(resp, Map.of("error", "Keep design not found: " + keepId));
+                return;
+            }
+
+            // Collect alias names (canonical names + IDs of the merged-away designs) before merging
+            List<String> aliasNames = new ArrayList<>();
+            for (String mergeId : mergeIds)
+            {
+                var md = store.designs().get(mergeId);
+                if (md == null)
+                {
+                    resp.setStatus(404);
+                    writeJson(resp, Map.of("error", "Merge design not found: " + mergeId));
+                    return;
+                }
+                aliasNames.add(md.canonicalName());
+                aliasNames.add(mergeId); // normalised ID also becomes an alias
+                aliasNames.addAll(md.aliases());
+            }
+
+            DataStore.DesignMergeResult result = store.mergeDesigns(keepId, mergeIds);
+            store.save();
+
+            AliasSeedLoader.appendDesignMergeAliases(store.configDir(), keepId, keepDesign.canonicalName(), aliasNames);
+            store.reloadAliasSeed();
+
+            writeJson(resp, Map.of("ok", true,
+                "updatedBoats", result.updatedBoats(),
+                "updatedRaces", result.updatedRaces(),
+                "updatedFinishers", result.updatedFinishers()));
+        }
+        catch (IllegalArgumentException e)
+        {
+            resp.setStatus(400);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
     private Map<String, Object> factorMap(Factor f)
     {
         if (f == null)
@@ -286,7 +388,9 @@ public class AdminApiServlet extends HttpServlet
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
+            boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             List<Design> all = store.designs().values().stream()
+                .filter(d -> showExcluded || !store.isDesignExcluded(d.id()))
                 .filter(d -> lower == null
                     || d.id().toLowerCase().contains(lower)
                     || d.canonicalName().toLowerCase().contains(lower))
@@ -326,11 +430,13 @@ public class AdminApiServlet extends HttpServlet
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
+            boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             // Enrich all filtered rows — needed to allow sort by seriesName or finishers
             List<Map<String, Object>> enriched = store.races().values().stream()
                 .filter(r -> lower == null
                     || r.id().toLowerCase().contains(lower)
                     || (r.clubId() != null && r.clubId().toLowerCase().contains(lower)))
+                .filter(r -> showExcluded || !isRaceAllExcluded(r))
                 .map(this::raceRow)
                 .collect(Collectors.toList());
 
@@ -350,6 +456,24 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJson(resp, race);
         }
+    }
+
+    private boolean isRaceAllExcluded(Race r)
+    {
+        if (r.divisions() == null || r.divisions().isEmpty())
+            return false;
+        for (var div : r.divisions())
+        {
+            if (div.finishers() == null || div.finishers().isEmpty())
+                continue;
+            for (var f : div.finishers())
+            {
+                Boat b = store.boats().get(f.boatId());
+                if (b == null || b.designId() == null || !store.isDesignExcluded(b.designId()))
+                    return false;
+            }
+        }
+        return true;
     }
 
     private Map<String, Object> raceRow(Race r)

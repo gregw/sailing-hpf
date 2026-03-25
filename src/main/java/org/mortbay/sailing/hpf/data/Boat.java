@@ -26,6 +26,8 @@ public record Boat(
     String clubId,       // primary home club domain, nullable
     List<String> aliases, // alternate names seen for this boat across sources
     List<Certificate> certificates, // measurement certificates held by this boat
+    List<String> sources, // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
+    Instant lastUpdated,  // when this record was last written by an importer; nullable
     @JsonIgnore Instant loadedAt  // file modification time at load; not persisted
 ) implements Loadable<Boat>
 {
@@ -34,12 +36,14 @@ public record Boat(
     {
         if (certificates == null)
             certificates = List.of();
+        if (sources == null)
+            sources = List.of();
     }
 
     @Override
     public Boat withLoadedAt(Instant t)
     {
-        return new Boat(id, sailNumber, name, designId, clubId, aliases, certificates, t);
+        return new Boat(id, sailNumber, name, designId, clubId, aliases, certificates, sources, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -53,12 +57,13 @@ public record Boat(
         return Objects.equals(id, b.id) && Objects.equals(sailNumber, b.sailNumber)
             && Objects.equals(name, b.name) && Objects.equals(designId, b.designId)
             && Objects.equals(clubId, b.clubId) && Objects.equals(aliases, b.aliases)
-            && Objects.equals(certificates, b.certificates);
+            && Objects.equals(certificates, b.certificates)
+            && Objects.equals(sources, b.sources) && Objects.equals(lastUpdated, b.lastUpdated);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, sailNumber, name, designId, clubId, aliases, certificates);
+        return Objects.hash(id, sailNumber, name, designId, clubId, aliases, certificates, sources, lastUpdated);
     }
 }

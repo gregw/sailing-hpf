@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,6 +48,8 @@ import org.slf4j.LoggerFactory;
 public class SailSysBoatImporter
 {
     private static final Logger LOG = LoggerFactory.getLogger(SailSysBoatImporter.class);
+
+    static final String SOURCE = "SailSys";
 
     private static final String API_BASE = "https://api.sailsys.com.au/api/v1/boats/";
     private static final int NOT_FOUND_THRESHOLD = 200;
@@ -263,11 +266,20 @@ public class SailSysBoatImporter
         }
 
         // Design: combine make and model. If only one is present, use that alone.
+        // Fall back to boatClass.name when make/model are both blank, but only for
+        // specific class names (not generic categories like "Keelboat").
         String make = boat.make != null ? boat.make.trim() : "";
         String model = boat.model != null ? boat.model.trim() : "";
         String designName = (!make.isBlank() && !model.isBlank()) ? make + " " + model
             : (!make.isBlank() ? make : (!model.isBlank() ? model : null));
-        Design design = store.findOrCreateDesign(designName);
+        if (designName == null && boat.boatClass != null
+                && boat.boatClass.name != null
+                && !boat.boatClass.name.isBlank()
+                && !isGenericBoatClass(boat.boatClass.name))
+        {
+            designName = boat.boatClass.name;
+        }
+        Design design = store.findOrCreateDesign(designName, SOURCE);
 
         // Club: SailSys gives shortName + longName; use longName to disambiguate if needed.
         Club club = resolveClub(boat.clubShortName, boat.clubLongName);
@@ -283,7 +295,8 @@ public class SailSysBoatImporter
         List<Certificate> certs = upsertIrcCerts(existing.certificates(), boat.handicaps);
 
         store.putBoat(new Boat(existing.id(), existing.sailNumber(), existing.name(),
-            existing.designId(), clubId, existing.aliases(), List.copyOf(certs), null));
+            existing.designId(), clubId, existing.aliases(), List.copyOf(certs),
+            addSource(existing.sources(), SOURCE), Instant.now(), null));
     }
 
     /**
@@ -371,6 +384,22 @@ public class SailSysBoatImporter
         return expiry.getMonthValue() <= 6 ? expiry.getYear() - 1 : expiry.getYear();
     }
 
+    private static List<String> addSource(List<String> existing, String source)
+    {
+        if (existing.contains(source))
+            return existing;
+        List<String> updated = new ArrayList<>(existing);
+        updated.add(source);
+        return List.copyOf(updated);
+    }
+
+    private static boolean isGenericBoatClass(String name)
+    {
+        return "Keelboat".equalsIgnoreCase(name)
+            || "Trailable".equalsIgnoreCase(name)
+            || "Hong Kong - Big Boats".equalsIgnoreCase(name);
+    }
+
     // --- Jackson DTOs (package-private for testing) ---
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -391,7 +420,14 @@ public class SailSysBoatImporter
         public String clubLongName;
         public String make;
         public String model;
+        public BoatClass boatClass;
         public List<HandicapEntry> handicaps;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    static class BoatClass
+    {
+        public String name;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

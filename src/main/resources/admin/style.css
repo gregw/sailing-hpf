@@ -1,5 +1,5 @@
 /* Shared styles for all HPF pages */
-body { font-family: monospace; max-width: 1200px; margin: 0 auto; padding: 0 1rem 2rem; background: #fff; }
+body { font-family: monospace; margin: 0 auto; padding: 0 1.5rem 2rem; background: #fff; }
 h1 { margin-bottom: 0.5rem; }
 h2 { margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
 button { font-family: monospace; padding: 3px 10px; cursor: pointer; }
@@ -69,7 +69,7 @@ a { color: #2255aa; }
 .tab-panel { border: 1px solid #ccc; padding: 1rem; display: none; }
 .tab-panel.active { display: block; }
 .search-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
-.search-row input { font-family: monospace; padding: 4px; width: 300px; }
+.search-row input { font-family: monospace; padding: 4px; width: 300px; max-width: 600px; flex: 1 1 300px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th { text-align: left; padding: 4px 8px; background: #f0f0f0; border-bottom: 2px solid #ccc; }
 th.sortable { cursor: pointer; user-select: none; }

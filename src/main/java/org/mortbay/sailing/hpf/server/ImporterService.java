@@ -67,7 +67,8 @@ public class ImporterService
 
     private record AdminConfig(List<ImporterEntry> importers, GlobalSchedule schedule,
                                Map<String, Integer> lastSailSysIds, Integer targetIrcYear,
-                               Double outlierSigma) {}
+                               Double outlierSigma, Double mergeCandidateThreshold,
+                               Double fuzzyMatchThreshold) {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
         new ImporterEntry("sailsys-boats", "directory", false),
@@ -86,8 +87,10 @@ public class ImporterService
     private GlobalSchedule globalSchedule = new GlobalSchedule(List.of(), LocalTime.of(3, 0));
     private ScheduledFuture<?> scheduledFuture;
     private volatile Map<String, Integer> lastSailSysIds = Map.of();
-    private volatile Integer targetIrcYear = null;   // null = auto-detect from data
-    private volatile Double outlierSigma = null;     // null = use default (2.5)
+    private volatile Integer targetIrcYear = null;          // null = auto-detect from data
+    private volatile Double outlierSigma = null;            // null = use default (2.5)
+    private volatile double mergeCandidateThreshold = 0.50; // JW threshold for similar-name merge candidate filter
+    private volatile double fuzzyMatchThreshold = 0.90;     // JW threshold for boat/design name matching in DataStore
 
     public ImporterService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
@@ -123,6 +126,13 @@ public class ImporterService
                 lastSailSysIds = Map.copyOf(config.lastSailSysIds());
             targetIrcYear = config.targetIrcYear();   // null is valid (auto-detect)
             outlierSigma = config.outlierSigma();    // null is valid (use default 2.5)
+            if (config.mergeCandidateThreshold() != null)
+                mergeCandidateThreshold = config.mergeCandidateThreshold();
+            if (config.fuzzyMatchThreshold() != null)
+            {
+                fuzzyMatchThreshold = config.fuzzyMatchThreshold();
+                store.setFuzzyThreshold(fuzzyMatchThreshold);
+            }
             if (globalSchedule != null && !globalSchedule.days().isEmpty())
                 armSchedule();
             LOG.info("Loaded admin config from {}", configFile);
@@ -243,6 +253,16 @@ public void stop()
     public Double outlierSigma()
     {
         return outlierSigma;
+    }
+
+    public double mergeCandidateThreshold()
+    {
+        return mergeCandidateThreshold;
+    }
+
+    public double fuzzyMatchThreshold()
+    {
+        return fuzzyMatchThreshold;
     }
 
     public void submitScheduledRun()
@@ -375,7 +395,7 @@ public void stop()
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(
                 configFile.toFile(),
                 new AdminConfig(importerEntries, globalSchedule, new LinkedHashMap<>(lastSailSysIds),
-                    targetIrcYear, outlierSigma));
+                    targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold));
         }
         catch (IOException e)
         {

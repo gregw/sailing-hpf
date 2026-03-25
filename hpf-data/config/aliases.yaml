@@ -1,17 +1,117 @@
-# Design name equivalences.
-# Key: canonical design ID (normalised, e.g. "sydney36cr").
-# aliases: alternate names that should resolve to this design.
 designs:
   sydney36cr:
-    canonicalName: Sydney 36 CR
+    canonicalName: "Sydney 36 CR"
     aliases:
-      - Sydney 36 OD
-
-# Boat name aliases, keyed by normalised sail number.
-# All aliases use the object form; 'from' and 'until' are optional ISO dates.
+    - "Sydney 36 OD"
+  customplym61:
+    canonicalName: "Custom Plym 61"
+    aliases:
+    - "Custom timber sloop built by Plym boatbuilders in Sweden 61 Square Meter designed\
+      \ by E Salander"
+  "29er":
+    canonicalName: null
+    aliases:
+    - "29er 29er"
+    - "29er29er"
+  beneteaufirst407:
+    canonicalName: "Beneteau First 40.7"
+    aliases:
+    - "FIRST 40.7"
+    - "first407"
+  beneteaufirst477:
+    canonicalName: "Beneteau First 47.7"
+    aliases:
+    - "FIRST 47.7"
+    - "first477"
+  beneteaufirst447:
+    canonicalName: "Beneteau First 44.7"
+    aliases:
+    - "FIRST 44.7"
+    - "first447"
+  beneteaufirst347:
+    canonicalName: "Beneteau First 34.7"
+    aliases:
+    - "FIRST 34.7"
+    - "first347"
+  beneteaufirst337:
+    canonicalName: "Beneteau First 33.7"
+    aliases:
+    - "FIRST 33.7"
+    - "first337"
+  beneteaufirst367:
+    canonicalName: "Beneteau First 36.7"
+    aliases:
+    - "FIRST 36.7"
+    - "first367"
+  archambaultgrandsurprise:
+    canonicalName: null
+    aliases:
+    - "Archambault 32"
+    - "archambault32"
 boats:
   MYC7:
-    canonicalName: Day Dreaming
+    canonicalName: "Day Dreaming"
     aliases:
-      - name: "1060"
-      - name: TenSixty
+    - name: "1060"
+      from: null
+      until: "2026-01-01"
+    - name: "TenSixty"
+      from: null
+      until: "2026-01-01"
+  "040":
+    canonicalName: "Navy One"
+    aliases:
+    - name: "Navy One"
+      from: null
+      until: null
+  "0404":
+    canonicalName: "Navy One"
+    aliases:
+    - name: "B Navy One"
+      from: null
+      until: null
+    - name: "NAVY ONE"
+      from: null
+      until: null
+  "052":
+    canonicalName: "Gweilo"
+    aliases:
+    - name: "Gweilo"
+      from: null
+      until: null
+  "1088":
+    canonicalName: "Norton White Corum"
+    aliases:
+    - name: "CORUM"
+      from: null
+      until: null
+  "1014":
+    canonicalName: "Wild Thing"
+    aliases:
+    - name: "UBS Wild Thing"
+      from: null
+      until: null
+    - name: "Tribeca Wild Thing"
+      from: null
+      until: null
+  "1956":
+    canonicalName: "Cheeky"
+    aliases:
+    - name: "Rhianon"
+      from: null
+      until: null
+  "2499":
+    canonicalName: "Cheeky"
+    aliases:
+    - name: "Cheeky"
+      from: null
+      until: null
+  ASC1:
+    canonicalName: "Rising Sun"
+    aliases:
+    - name: "Rising Sun"
+      from: null
+      until: null
+sailNumberRedirects:
+  "040": "0404"
+  "1956": "2499"

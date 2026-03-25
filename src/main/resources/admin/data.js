@@ -27,8 +27,8 @@ const state = {
     dir:    { boats: 'asc', designs: 'asc', races: 'desc' },
     searchTimers: {},
     activeTab: 'boats',
-    selectedBoats: new Set(),   // IDs of checked boat rows
-    selectedBoatData: new Map() // id → { id, sailNumber, name } for merge panel
+    selected:     { boats: new Set(), designs: new Set() },   // IDs of checked rows
+    selectedData: { boats: new Map(), designs: new Map() },   // id → item for merge panel
 };
 
 function switchTab(entity) {
@@ -57,9 +57,12 @@ async function loadList(entity, page) {
     const q    = document.getElementById('q-' + entity).value;
     const sort = state.sort[entity];
     const dir  = state.dir[entity];
-    const data = await fetchJson(
-        `/api/${entity}?page=${page}&size=50&q=${encodeURIComponent(q)}&sort=${sort}&dir=${dir}`
-    );
+    let url = `/api/${entity}?page=${page}&size=50&q=${encodeURIComponent(q)}&sort=${sort}&dir=${dir}`;
+    if (entity === 'boats') {
+        if (document.getElementById('filter-dupe-sails').checked) url += '&dupeSails=true';
+    }
+    if (document.getElementById('show-excluded-' + entity).checked) url += '&showExcluded=true';
+    const data = await fetchJson(url);
     if (!data) return;
 
     renderHeaders(entity);
@@ -73,7 +76,7 @@ function renderHeaders(entity) {
     const active = state.sort[entity];
     const dir    = state.dir[entity];
     let html = '';
-    if (entity === 'boats') html += '<th style="width:2rem"></th>';
+    if (entity === 'boats' || entity === 'designs') html += '<th style="width:2rem"></th>';
     html += cols.map(col => {
         const isActive = col.key === active;
         const arrow    = isActive ? (dir === 'asc' ? ' ↑' : ' ↓') : '';
@@ -100,21 +103,19 @@ function renderTable(entity, items) {
 
     for (const item of items) {
         const tr = document.createElement('tr');
-        if (entity === 'boats') {
-            if (state.selectedBoats.has(item.id)) tr.classList.add('selected');
+        if (entity === 'boats' || entity === 'designs') {
+            if (state.selected[entity].has(item.id)) tr.classList.add('selected');
             // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
             const tdCb = document.createElement('td');
             tdCb.style.textAlign = 'center';
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.checked = state.selectedBoats.has(item.id);
-            cb.onclick = (e) => { e.stopPropagation(); toggleBoatSelect(item, cb.checked); };
+            cb.checked = state.selected[entity].has(item.id);
+            cb.onclick = (e) => { e.stopPropagation(); toggleSelect(entity, item, cb.checked); };
             tdCb.appendChild(cb);
             tr.appendChild(tdCb);
-            tr.onclick = () => loadDetail(entity, item.id);
-        } else {
-            tr.onclick = () => loadDetail(entity, item.id);
         }
+        tr.onclick = () => loadDetail(entity, item.id);
         cols.forEach(col => {
             const td = document.createElement('td');
             const v = item[col.key];
@@ -126,28 +127,18 @@ function renderTable(entity, items) {
 }
 
 function renderPager(entity, data) {
-    const div = document.getElementById('pager-' + entity);
-    div.innerHTML = '';
     const page = data.page;
     const totalPages = Math.ceil(data.total / data.size) || 1;
+    let html = '';
+    if (page > 0)
+        html += `<button onclick="loadList('${entity}', ${page - 1})">← Prev</button>`;
+    html += `<span>Page ${page + 1} of ${totalPages} (${data.total.toLocaleString()} total)</span>`;
+    if ((page + 1) * data.size < data.total)
+        html += `<button onclick="loadList('${entity}', ${page + 1})">Next →</button>`;
 
-    if (page > 0) {
-        const btn = document.createElement('button');
-        btn.textContent = '← Prev';
-        btn.onclick = () => loadList(entity, page - 1);
-        div.appendChild(btn);
-    }
-
-    const info = document.createElement('span');
-    info.textContent = `Page ${page + 1} of ${totalPages} (${data.total.toLocaleString()} total)`;
-    div.appendChild(info);
-
-    if ((page + 1) * data.size < data.total) {
-        const btn = document.createElement('button');
-        btn.textContent = 'Next →';
-        btn.onclick = () => loadList(entity, page + 1);
-        div.appendChild(btn);
-    }
+    document.getElementById('pager-' + entity).innerHTML = html;
+    const topEl = document.getElementById('pager-top-' + entity);
+    if (topEl) topEl.innerHTML = html;
 }
 
 async function loadDetail(entity, id) {
@@ -190,75 +181,76 @@ function renderReferenceFactors(ref) {
       </table>`;
 }
 
-// ---- Boat selection and merge ----
+// ---- Selection and merge (boats and designs) ----
 
-function toggleBoatSelect(item, checked) {
+function toggleSelect(entity, item, checked) {
     if (checked) {
-        state.selectedBoats.add(item.id);
-        state.selectedBoatData.set(item.id, item);
+        state.selected[entity].add(item.id);
+        state.selectedData[entity].set(item.id, item);
     } else {
-        state.selectedBoats.delete(item.id);
-        state.selectedBoatData.delete(item.id);
+        state.selected[entity].delete(item.id);
+        state.selectedData[entity].delete(item.id);
     }
-    updateMergeBar();
+    updateMergeBar(entity);
 }
 
-function updateMergeBar() {
-    const n = state.selectedBoats.size;
-    const bar = document.getElementById('merge-bar');
+function updateMergeBar(entity) {
+    const n   = state.selected[entity].size;
+    const bar = document.getElementById('merge-bar-' + entity);
     bar.style.display = n >= 2 ? '' : 'none';
-    document.getElementById('merge-bar-count').textContent =
-        n + ' boat' + (n !== 1 ? 's' : '') + ' selected';
+    const noun = entity === 'boats' ? 'boat' : 'design';
+    document.getElementById('merge-bar-count-' + entity).textContent =
+        n + ' ' + noun + (n !== 1 ? 's' : '') + ' selected';
 }
 
-function clearSelection() {
-    state.selectedBoats.clear();
-    state.selectedBoatData.clear();
-    updateMergeBar();
-    hideMergePanel();
-    // Uncheck any visible checkboxes
-    document.querySelectorAll('#tbody-boats input[type=checkbox]').forEach(cb => cb.checked = false);
-    document.querySelectorAll('#tbody-boats tr.selected').forEach(tr => tr.classList.remove('selected'));
+function clearSelection(entity) {
+    state.selected[entity].clear();
+    state.selectedData[entity].clear();
+    updateMergeBar(entity);
+    hideMergePanel(entity);
+    document.querySelectorAll('#tbody-' + entity + ' input[type=checkbox]').forEach(cb => cb.checked = false);
+    document.querySelectorAll('#tbody-' + entity + ' tr.selected').forEach(tr => tr.classList.remove('selected'));
 }
 
-function showMergePanel() {
-    const panel = document.getElementById('merge-panel');
-    const list  = document.getElementById('merge-radio-list');
-    document.getElementById('merge-status').textContent = '';
+function showMergePanel(entity) {
+    const panel = document.getElementById('merge-panel-' + entity);
+    const list  = document.getElementById('merge-radio-list-' + entity);
+    document.getElementById('merge-status-' + entity).textContent = '';
     list.innerHTML = '';
-    const ids = Array.from(state.selectedBoats);
+    const ids = Array.from(state.selected[entity]);
     ids.forEach((id, i) => {
-        const b = state.selectedBoatData.get(id);
+        const item  = state.selectedData[entity].get(id);
         const label = document.createElement('label');
         label.style.display = 'block';
         label.style.margin  = '0.25rem 0';
         const radio = document.createElement('input');
         radio.type  = 'radio';
-        radio.name  = 'merge-keep';
+        radio.name  = 'merge-keep-' + entity;
         radio.value = id;
         if (i === 0) radio.checked = true;
         label.appendChild(radio);
-        label.appendChild(document.createTextNode(
-            ' ' + esc(id) + '  —  sail: ' + esc(b.sailNumber || '') + '  name: ' + esc(b.name || '')
-        ));
+        const desc = entity === 'boats'
+            ? ' ' + esc(id) + '  —  sail: ' + esc(item.sailNumber || '') + '  name: ' + esc(item.name || '')
+            : ' ' + esc(id) + '  —  ' + esc(item.canonicalName || '');
+        label.appendChild(document.createTextNode(desc));
         list.appendChild(label);
     });
     panel.style.display = '';
 }
 
-function hideMergePanel() {
-    document.getElementById('merge-panel').style.display = 'none';
+function hideMergePanel(entity) {
+    document.getElementById('merge-panel-' + entity).style.display = 'none';
 }
 
-async function performMerge() {
-    const keepRadio = document.querySelector('#merge-radio-list input[name="merge-keep"]:checked');
+async function performMerge(entity) {
+    const keepRadio = document.querySelector('#merge-radio-list-' + entity + ' input[name="merge-keep-' + entity + '"]:checked');
     if (!keepRadio) return;
     const keepId   = keepRadio.value;
-    const mergeIds = Array.from(state.selectedBoats).filter(id => id !== keepId);
-    const statusEl = document.getElementById('merge-status');
+    const mergeIds = Array.from(state.selected[entity]).filter(id => id !== keepId);
+    const statusEl = document.getElementById('merge-status-' + entity);
     statusEl.textContent = 'Merging…';
 
-    const result = await fetchJson('/api/boats/merge', {
+    const result = await fetchJson('/api/' + entity + '/merge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keepId, mergeIds })
@@ -268,11 +260,15 @@ async function performMerge() {
         statusEl.textContent = 'Merge failed — see console.';
         return;
     }
-    statusEl.textContent =
-        'Merged. Updated ' + result.updatedRaces + ' race(s), ' + result.updatedFinishers + ' finisher record(s).';
-    clearSelection();
-    hideMergePanel();
-    loadList('boats', 0);
+    if (entity === 'boats') {
+        statusEl.textContent =
+            'Merged. Updated ' + result.updatedRaces + ' race(s), ' + result.updatedFinishers + ' finisher record(s).';
+    } else {
+        statusEl.textContent = 'Merged. Updated ' + result.updatedBoats + ' boat(s).';
+    }
+    clearSelection(entity);
+    hideMergePanel(entity);
+    loadList(entity, 0);
 }
 
 loadList('boats', 0);

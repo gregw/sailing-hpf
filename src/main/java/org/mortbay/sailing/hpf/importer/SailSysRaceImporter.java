@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -53,6 +54,8 @@ import org.slf4j.LoggerFactory;
 public class SailSysRaceImporter
 {
     private static final Logger LOG = LoggerFactory.getLogger(SailSysRaceImporter.class);
+
+    static final String SOURCE = "SailSys";
 
     private static final String API_BASE = "https://api.sailsys.com.au/api/v1/races/";
     private static final String API_SUFFIX = "/resultsentrants/display";
@@ -321,6 +324,8 @@ public class SailSysRaceImporter
             handicapSystem,
             data.offsetPursuitRace != null && data.offsetPursuitRace,
             divisions,
+            SOURCE,
+            Instant.now(),
             null
         );
 
@@ -422,9 +427,19 @@ public class SailSysRaceImporter
         List<Certificate> updatedCerts = new ArrayList<>(boat.certificates());
         updatedCerts.add(cert);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(updatedCerts), null));
+            boat.designId(), boat.clubId(), boat.aliases(), List.copyOf(updatedCerts),
+            addSource(boat.sources(), SOURCE), Instant.now(), null));
 
         return certNum;
+    }
+
+    private static List<String> addSource(List<String> existing, String source)
+    {
+        if (existing.contains(source))
+            return existing;
+        List<String> updated = new ArrayList<>(existing);
+        updated.add(source);
+        return List.copyOf(updated);
     }
 
     /**
