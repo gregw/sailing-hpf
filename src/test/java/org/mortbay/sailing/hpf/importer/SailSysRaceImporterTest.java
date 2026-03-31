@@ -81,7 +81,7 @@ class SailSysRaceImporterTest
     void phsRaceImportedWithoutCertificateNumber()
     {
         // Seed the club so it can be resolved
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         boolean result = importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -104,7 +104,7 @@ class SailSysRaceImporterTest
     @Test
     void ircRaceImportedWithCertificateNumber()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         boolean result = importer.processRaceJson(raceJson(2, 4, "2020-09-13T00:00:00.000",
@@ -137,7 +137,7 @@ class SailSysRaceImporterTest
     @Test
     void ircRaceReusesExistingCertificateBySystemAndValue()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         // Pre-populate the boat with a known cert
@@ -174,7 +174,7 @@ class SailSysRaceImporterTest
     @Test
     void seriesCreatedOnFirstRace()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -193,7 +193,7 @@ class SailSysRaceImporterTest
     @Test
     void seriesUpdatedOnSubsequentRace()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -215,7 +215,7 @@ class SailSysRaceImporterTest
     @Test
     void dnsFinishersExcluded()
     {
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         importer.processRaceJson(raceJson(1, 4, "2020-09-13T00:00:00.000",
@@ -243,7 +243,7 @@ class SailSysRaceImporterTest
 
         importer.setBoatCacheParams(boatsDir, 7, 0);
 
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW",
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false,
             List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
@@ -264,7 +264,7 @@ class SailSysRaceImporterTest
         Path racesDir = tempDir.resolve("races-input");
         Files.createDirectories(racesDir);
 
-        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         store.putClub(myc);
 
         Files.writeString(racesDir.resolve("race-000001.json"),
@@ -283,7 +283,7 @@ class SailSysRaceImporterTest
 
         DataStore testStore = new DataStore(tempDir.resolve("hpf-data"));
         testStore.start();
-        Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
+        Club myc2 = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
         testStore.putClub(myc2);
         SailSysRaceImporter testImporter = new SailSysRaceImporter(testStore, null);
 

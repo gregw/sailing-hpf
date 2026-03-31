@@ -6,8 +6,11 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.mortbay.sailing.hpf.analysis.BoatReferenceFactors;
+import org.mortbay.sailing.hpf.analysis.BoatDerived;
+import org.mortbay.sailing.hpf.analysis.DesignDerived;
+import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.data.Boat;
+import org.mortbay.sailing.hpf.data.Club;
 import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Factor;
 import org.mortbay.sailing.hpf.data.Race;
@@ -65,6 +68,8 @@ public class AdminApiServlet extends HttpServlet
             handleBoats(path.substring("/boats".length()), req, resp);
         else if (path.startsWith("/designs"))
             handleDesigns(path.substring("/designs".length()), req, resp);
+        else if (path.startsWith("/clubs"))
+            handleClubs(path.substring("/clubs".length()), req, resp);
         else if (path.startsWith("/races"))
             handleRaces(path.substring("/races".length()), req, resp);
         else if ("/importers/status".equals(path))
@@ -89,6 +94,8 @@ public class AdminApiServlet extends HttpServlet
             handleSetExcluded("boats", req, resp);
         else if ("/designs/exclude".equals(path))
             handleSetExcluded("designs", req, resp);
+        else if ("/clubs/exclude".equals(path))
+            handleSetClubExcluded(req, resp);
         else if ("/races/exclude".equals(path))
             handleSetExcluded("races", req, resp);
         else if (path.startsWith("/importers/") && path.endsWith("/run"))
@@ -156,10 +163,14 @@ public class AdminApiServlet extends HttpServlet
 
     private void handleStats(HttpServletResponse resp) throws IOException
     {
+        // Merge seed + persisted to get total club count
+        Map<String, Club> allClubs = new LinkedHashMap<>(store.clubSeed());
+        allClubs.putAll(store.clubs());
         writeJson(resp, Map.of(
             "races", store.races().size(),
             "boats", store.boats().size(),
-            "designs", store.designs().size()
+            "designs", store.designs().size(),
+            "clubs", allClubs.size()
         ));
     }
 
@@ -214,8 +225,8 @@ public class AdminApiServlet extends HttpServlet
                     case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsLast(Comparator.naturalOrder()));
                     case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsLast(Comparator.naturalOrder()));
                     case "spinRef"    -> Comparator.comparing(
-                                            (Boat b2) -> { BoatReferenceFactors brf2 = cache.referenceFactors().get(b2.id()); return (brf2 != null && brf2.spin() != null) ? brf2.spin().value() : null; },
-                                            Comparator.nullsLast(Comparator.<Double>naturalOrder()));
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.referenceFactors() != null && bd2.referenceFactors().spin() != null) ? bd2.referenceFactors().spin().value() : 0.0; },
+                                            Comparator.<Double>naturalOrder());
                     default           -> Comparator.comparing(Boat::id,         Comparator.nullsLast(Comparator.naturalOrder()));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
@@ -231,9 +242,10 @@ public class AdminApiServlet extends HttpServlet
                 row.put("name",       b.name());
                 row.put("designId",   b.designId());
                 row.put("clubId",     b.clubId());
-                BoatReferenceFactors brf = cache.referenceFactors().get(b.id());
-                Factor spin = (brf != null) ? brf.spin() : null;
+                BoatDerived bd = cache.boatDerived().get(b.id());
+                Factor spin = (bd != null && bd.referenceFactors() != null) ? bd.referenceFactors().spin() : null;
                 row.put("spinRef",    spin != null ? factorMap(spin) : null);
+                row.put("finishes", bd != null ? bd.raceIds().size() : 0);
                 row.put("excluded",   excl);
                 return row;
             }).collect(Collectors.toList());
@@ -260,7 +272,8 @@ public class AdminApiServlet extends HttpServlet
             resp.sendError(404);
             return;
         }
-        BoatReferenceFactors factors = cache.referenceFactors().get(id);
+        BoatDerived bd = cache.boatDerived().get(id);
+        ReferenceFactors factors = bd != null ? bd.referenceFactors() : null;
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("boatId", id);
         result.put("currentYear", cache.targetYear());
@@ -268,6 +281,91 @@ public class AdminApiServlet extends HttpServlet
         result.put("nonSpin",   factors != null ? factorMap(factors.nonSpin(),   factors.nonSpinGeneration())   : null);
         result.put("twoHanded", factors != null ? factorMap(factors.twoHanded(), factors.twoHandedGeneration()) : null);
         writeJson(resp, result);
+    }
+
+    private void handleClubs(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        if (sub.isEmpty() || "/".equals(sub))
+        {
+            int page = parseIntParam(req, "page", 0);
+            int size = parseIntParam(req, "size", DEFAULT_PAGE_SIZE);
+            String q = req.getParameter("q");
+            String sort = req.getParameter("sort");
+            boolean asc = !"desc".equals(req.getParameter("dir"));
+            String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
+            boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
+
+            // Merge persisted clubs and seed stubs into a unified view
+            Map<String, Club> all = new LinkedHashMap<>(store.clubSeed());
+            all.putAll(store.clubs());  // persisted overrides seed
+
+            List<Map<String, Object>> rows = all.values().stream()
+                .filter(c -> showExcluded || !c.excluded())
+                .filter(c -> lower == null
+                    || c.id().toLowerCase().contains(lower)
+                    || (c.shortName() != null && c.shortName().toLowerCase().contains(lower))
+                    || (c.longName() != null && c.longName().toLowerCase().contains(lower)))
+                .map(c ->
+                {
+                    // Count races for this club
+                    long raceCount = store.races().values().stream()
+                        .filter(r -> c.id().equals(r.clubId()))
+                        .count();
+
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", c.id());
+                    row.put("shortName", c.shortName());
+                    row.put("longName", c.longName());
+                    row.put("state", c.state());
+                    row.put("races", raceCount);
+                    row.put("excluded", c.excluded());
+                    return row;
+                })
+                .collect(Collectors.toList());
+
+            if (sort != null && !sort.isBlank())
+                rows.sort(mapComparator(sort, asc));
+
+            writeJson(resp, paginate(rows, page, size));
+        }
+        else
+        {
+            String id = sub.startsWith("/") ? sub.substring(1) : sub;
+            // Check persisted clubs first, then seed
+            Club club = store.clubs().get(id);
+            if (club == null)
+                club = store.clubSeed().get(id);
+            if (club == null)
+            {
+                resp.sendError(404);
+                return;
+            }
+            writeJson(resp, club);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void handleSetClubExcluded(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String id = (String) body.get("id");
+            if (id == null)
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "id is required"));
+                return;
+            }
+            boolean excluded = Boolean.TRUE.equals(body.get("excluded"));
+            store.setClubExcluded(id, excluded);
+            writeJson(resp, Map.of("ok", true, "excluded", excluded));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -471,23 +569,14 @@ public class AdminApiServlet extends HttpServlet
                     || d.canonicalName().toLowerCase().contains(lower))
                 .collect(Collectors.toList());
 
-            // Design-level spin factors from AnalysisCache (cert-based + race-propagated boats only)
-            Map<String, Factor> designSpinRef = new LinkedHashMap<>();
-            for (Map.Entry<String, Factor[]> e : cache.designFactors().entrySet())
-            {
-                Factor spin = e.getValue()[0];  // [0] = spin
-                if (spin != null)
-                    designSpinRef.put(e.getKey(), spin);
-            }
-
             if (sort != null && !sort.isBlank())
             {
                 Comparator<Design> cmp = switch (sort)
                 {
                     case "canonicalName" -> Comparator.comparing(Design::canonicalName, Comparator.nullsLast(Comparator.naturalOrder()));
                     case "spinRef"       -> Comparator.comparing(
-                                               (Design d2) -> { Factor f = designSpinRef.get(d2.id()); return f != null ? f.value() : null; },
-                                               Comparator.nullsLast(Comparator.<Double>naturalOrder()));
+                                               (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return (dd2 != null && dd2.referenceFactors() != null && dd2.referenceFactors().spin() != null) ? dd2.referenceFactors().spin().value() : 0.0; },
+                                               Comparator.<Double>naturalOrder());
                     default              -> Comparator.comparing(Design::id, Comparator.nullsLast(Comparator.naturalOrder()));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
@@ -499,8 +588,10 @@ public class AdminApiServlet extends HttpServlet
                 row.put("id",            d.id());
                 row.put("canonicalName", d.canonicalName());
                 row.put("makerIds",      d.makerIds());
-                Factor dspin = designSpinRef.get(d.id());
+                DesignDerived dd = cache.designDerived().get(d.id());
+                Factor dspin = (dd != null && dd.referenceFactors() != null) ? dd.referenceFactors().spin() : null;
                 row.put("spinRef",       dspin != null ? factorMap(dspin) : null);
+                row.put("boats",         dd != null ? dd.boatIds().size() : 0);
                 row.put("excluded",      store.isDesignExcluded(d.id()));
                 return row;
             }).collect(Collectors.toList());
@@ -532,10 +623,12 @@ public class AdminApiServlet extends HttpServlet
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
             String filterBoatId = req.getParameter("boatId");
+            String filterClubId = req.getParameter("clubId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             // Enrich all filtered rows — needed to allow sort by seriesName or finishers
             List<Map<String, Object>> enriched = store.races().values().stream()
                 .filter(r -> filterBoatId == null || raceContainsBoat(r, filterBoatId))
+                .filter(r -> filterClubId == null || filterClubId.equals(r.clubId()))
                 .filter(r -> lower == null
                     || r.id().toLowerCase().contains(lower)
                     || (r.clubId() != null && r.clubId().toLowerCase().contains(lower)))

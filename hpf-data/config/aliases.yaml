@@ -8,6 +8,7 @@ designs:
     aliases:
     - "Custom timber sloop built by Plym boatbuilders in Sweden 61 Square Meter designed\
       \ by E Salander"
+    - "customtimbersloopbuiltbyplymboatbuildersinsweden61squaremetredesignedbyesalander"
   "29er":
     canonicalName: null
     aliases:
@@ -381,6 +382,94 @@ boats:
       until: null
     altSailNumbers:
     - number: "SM150"
+      from: null
+      until: null
+  wings_of_fire-optimistopen:
+    canonicalName: "Wings of Fire"
+    canonicalSailNumber: "AUS1797"
+    aliases:
+    - name: "Wings of Fire"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "AUS1791"
+      from: null
+      until: null
+  vivacite-d3:
+    canonicalName: "VIVACITE"
+    canonicalSailNumber: "G5"
+    aliases:
+    - name: "VIVACITE"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "5"
+      from: null
+      until: null
+  the_usual_suspects-d1:
+    canonicalName: "THE USUAL SUSPECTS"
+    canonicalSailNumber: "G6525"
+    aliases:
+    - name: "THE USUAL SUSPECTS"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "6525"
+      from: null
+      until: null
+  comanche-vplpverdiermaxi100ft:
+    canonicalName: "Comanche"
+    canonicalSailNumber: "CAY007"
+    aliases:
+    - name: "Andoo Comanche"
+      from: null
+      until: null
+    - name: "Master Lock Comanche"
+      from: null
+      until: null
+    altSailNumbers: []
+  hamilton_island_wild_oats:
+    canonicalName: "HAMILTON ISLAND WILD OATS"
+    canonicalSailNumber: "AUS10001"
+    aliases:
+    - name: "Hamilton Island Wild Oats"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "10001"
+      from: null
+      until: null
+  no_limit-reichelpugh63:
+    canonicalName: "No Limit"
+    canonicalSailNumber: "AUS98888"
+    aliases:
+    - name: "No Limit"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "98888"
+      from: null
+      until: null
+  celestial-tp52:
+    canonicalName: "Celestial"
+    canonicalSailNumber: "SM9535"
+    aliases:
+    - name: "Celestial"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "9535"
+      from: null
+      until: null
+  another_planet-sydney36cr:
+    canonicalName: "Another Planet"
+    canonicalSailNumber: "YC521"
+    aliases:
+    - name: "ANOTHER PLANET"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "521"
       from: null
       until: null
 sailNumberRedirects: {}

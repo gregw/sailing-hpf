@@ -84,6 +84,7 @@ class DesignCatalogueLoader
     static class CatalogueFile
     {
         public List<String> excluded;
+        public List<String> ignored;
         public List<DesignOverride> boatDesignOverrides;
     }
 
@@ -94,6 +95,7 @@ class DesignCatalogueLoader
         static final DesignCatalogue EMPTY = new DesignCatalogue(null);
 
         private final Set<String> excludedIds;
+        private final Set<String> ignoredIds;
         /** "normSail|normName" → designId */
         private final Map<String, String> overridesByKey;
 
@@ -102,6 +104,7 @@ class DesignCatalogueLoader
             if (file == null)
             {
                 excludedIds = Set.of();
+                ignoredIds = Set.of();
                 overridesByKey = Map.of();
                 return;
             }
@@ -118,6 +121,19 @@ class DesignCatalogueLoader
             excludedIds = Collections.unmodifiableSet(ids);
             if (!ids.isEmpty())
                 LOG.info("Loaded design catalogue: {} excluded design(s)", ids.size());
+
+            Set<String> ign = new HashSet<>();
+            if (file.ignored != null)
+            {
+                for (String name : file.ignored)
+                {
+                    if (name != null && !name.isBlank())
+                        ign.add(IdGenerator.normaliseDesignName(name));
+                }
+            }
+            ignoredIds = Collections.unmodifiableSet(ign);
+            if (!ign.isEmpty())
+                LOG.info("Loaded design catalogue: {} ignored design name(s)", ign.size());
 
             Map<String, String> overrides = new HashMap<>();
             if (file.boatDesignOverrides != null)
@@ -147,6 +163,13 @@ class DesignCatalogueLoader
             if (normalisedDesignId == null)
                 return false;
             return excludedIds.contains(normalisedDesignId);
+        }
+
+        boolean isIgnored(String normalisedDesignId)
+        {
+            if (normalisedDesignId == null)
+                return false;
+            return ignoredIds.contains(normalisedDesignId);
         }
 
         /**

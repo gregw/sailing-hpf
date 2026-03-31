@@ -863,7 +863,7 @@ public class TopYachtImporter
             Club seed = store.clubSeed().get(clubId);
             if (seed == null)
                 return;
-            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(),
+            club = new Club(seed.id(), seed.shortName(), seed.longName(), seed.state(), seed.excluded(),
                 seed.aliases() != null ? seed.aliases() : List.of(),
                 seed.topyachtUrls() != null ? seed.topyachtUrls() : List.of(),
                 List.of(), null);
@@ -897,7 +897,7 @@ public class TopYachtImporter
             series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
         }
 
-        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(),
+        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
             club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
     }
 

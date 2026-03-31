@@ -741,14 +741,14 @@ clubs:
     state: NSW
     fullName: Multihull Cruising Yacht Club
     aliases: []
-    exclude: true;
+    excluded: true
 
   rhkyc.org.hk:
     shortName: RHKYC
     state: HongKong
     fullName: Royal Hong Kong Yacht Club
     aliases: []
-    exclude: true;
+    excluded: true
 
   jbcyc.com.au:
     shortName: JBCYC

@@ -23,6 +23,7 @@
   <div class="tabs">
     <div class="tab active" id="tab-btn-boats" onclick="switchTab('boats')">Boats</div>
     <div class="tab" id="tab-btn-designs" onclick="switchTab('designs')">Designs</div>
+    <div class="tab" id="tab-btn-clubs" onclick="switchTab('clubs')">Clubs</div>
     <div class="tab" id="tab-btn-races" onclick="switchTab('races')">Races</div>
   </div>
 
@@ -90,6 +91,22 @@
     </div>
 
     <div class="detail-panel" id="detail-designs"><div id="pre-designs" class="json-tree"></div></div>
+  </div>
+
+  <div id="panel-clubs" class="tab-panel">
+    <div id="filter-banner-clubs" class="filter-banner" style="display:none"></div>
+    <div class="search-row">
+      <input type="text" id="q-clubs" placeholder="Search by id, short name or long name…" oninput="debounceSearch('clubs')">
+      <button onclick="doSearch('clubs')">Search</button>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show excluded</label>
+    </div>
+    <div class="pagination" id="pager-top-clubs"></div>
+    <table>
+      <thead><tr id="thead-clubs"></tr></thead>
+      <tbody id="tbody-clubs"></tbody>
+    </table>
+    <div class="pagination" id="pager-clubs"></div>
+    <div class="detail-panel" id="detail-clubs"><div id="pre-clubs" class="json-tree"></div></div>
   </div>
 
   <div id="panel-races" class="tab-panel">

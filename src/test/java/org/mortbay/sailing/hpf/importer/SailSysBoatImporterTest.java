@@ -224,8 +224,8 @@ class SailSysBoatImporterTest
     void longNameDisambiguatesWhenShortNameIsAmbiguous()
     {
         // Seed two clubs with the same shortName but different longNames
-        Club mycNsw = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
-        Club mycVic = new Club("morningtonyc.net.au", "MYC", "Mornington Yacht Club", "VIC", List.of(), List.of(), List.of(), null);
+        Club mycNsw = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club mycVic = new Club("morningtonyc.net.au", "MYC", "Mornington Yacht Club", "VIC", false, List.of(), List.of(), List.of(), null);
         store.putClub(mycNsw);
         store.putClub(mycVic);
 
@@ -239,8 +239,8 @@ class SailSysBoatImporterTest
     @Test
     void ambiguousShortNameWithNoLongNameLeavesClubNull()
     {
-        Club mycNsw = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", List.of(), List.of(), List.of(), null);
-        Club mycVic = new Club("morningtonyc.net.au", "MYC", "Mornington Yacht Club", "VIC", List.of(), List.of(), List.of(), null);
+        Club mycNsw = new Club("myc.org.au", "MYC", "Manly Yacht Club", "NSW", false, List.of(), List.of(), List.of(), null);
+        Club mycVic = new Club("morningtonyc.net.au", "MYC", "Mornington Yacht Club", "VIC", false, List.of(), List.of(), List.of(), null);
         store.putClub(mycNsw);
         store.putClub(mycVic);
 

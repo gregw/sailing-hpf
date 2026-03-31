@@ -25,9 +25,8 @@ importers:
   includeInSchedule: true
 schedule:
   days:
-  - "MONDAY"
-  - "SUNDAY"
-  time: "14:42:00"
+  - "TUESDAY"
+  time: "09:38:00"
 nextSailSysRaceId: 32638
 targetIrcYear: 2025
 outlierSigma: null

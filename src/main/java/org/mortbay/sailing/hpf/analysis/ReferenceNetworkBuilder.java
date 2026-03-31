@@ -19,7 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Builds a map of boatId → {@link BoatReferenceFactors} implementing pipeline steps 8–12.
+ * Builds a map of boatId → {@link ReferenceFactors} implementing pipeline steps 8–12.
  *
  * <h2>Step 8 — Certificate-based factors (generation 0)</h2>
  * For each boat and each target variant (spin, non-spin, two-handed):
@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  *   <li><b>Step 11</b>: For boats that still lack a factor, fall back to the design-level
  *       factor (if their design has one).</li>
  * </ol>
- * Each iteration's generation number is recorded on every {@link BoatReferenceFactors}
+ * Each iteration's generation number is recorded on every {@link ReferenceFactors}
  * record it modifies; generation 0 = step 8 only.
  *
  * <h2>Certificate base weights</h2>
@@ -122,18 +122,18 @@ public class ReferenceNetworkBuilder
      * cert-based and race-propagated boats, not from design-fallback boats).
      *
      * <p>Design factor arrays are indexed as {@code [0]=spin, [1]=nonSpin, [2]=twoHanded}.
-     * A null element means no factor was available for that variant.
+     * A null factor within a {@link ReferenceFactors} means no factor was available for that variant.
      */
     public record BuildResult(
-        Map<String, BoatReferenceFactors> boatFactors,
-        Map<String, Factor[]> designFactors
+        Map<String, ReferenceFactors> boatFactors,
+        Map<String, ReferenceFactors> designFactors
     ) {}
 
     /**
      * Computes reference factors for a single boat using a pre-built conversion graph.
      * Only step 8 (certificate-based) is applied; propagation (steps 9–12) is skipped.
      */
-    public BoatReferenceFactors buildForBoat(Boat boat, ConversionGraph graph, int currentYear)
+    public ReferenceFactors buildForBoat(Boat boat, ConversionGraph graph, int currentYear)
     {
         List<Certificate> validCerts = validCerts(boat, currentYear);
 
@@ -145,7 +145,7 @@ public class ReferenceNetworkBuilder
         if (nonSpin == null) nonSpin = computeVariantFactor(validCerts, graph, currentYear, true,  false, true);
         if (twoH    == null) twoH    = computeVariantFactor(validCerts, graph, currentYear, false, true,  true);
 
-        return new BoatReferenceFactors(spin, nonSpin, twoH, 0, 0, 0);
+        return new ReferenceFactors(spin, nonSpin, twoH, 0, 0, 0);
     }
 
     /**
@@ -173,7 +173,7 @@ public class ReferenceNetworkBuilder
     public BuildResult build(DataStore store, ConversionGraph graph, int currentYear)
     {
         // Step 8: certificate-based factors (generation 0)
-        Map<String, BoatReferenceFactors> result = new LinkedHashMap<>();
+        Map<String, ReferenceFactors> result = new LinkedHashMap<>();
         for (Boat boat : store.boats().values())
         {
             List<Certificate> validCerts = validCerts(boat, currentYear);
@@ -186,7 +186,7 @@ public class ReferenceNetworkBuilder
             if (nonSpin == null) nonSpin = computeVariantFactor(validCerts, graph, currentYear, true,  false, true);
             if (twoH    == null) twoH    = computeVariantFactor(validCerts, graph, currentYear, false, true,  true);
 
-            result.put(boat.id(), new BoatReferenceFactors(spin, nonSpin, twoH, 0, 0, 0));
+            result.put(boat.id(), new ReferenceFactors(spin, nonSpin, twoH, 0, 0, 0));
 
             if (spin != null)
                 LOG.debug("boat={} spin=({}, w={})", boat.id(),
@@ -204,7 +204,7 @@ public class ReferenceNetworkBuilder
         // Run for at least 2 generations before considering convergence, so that boats added in
         // generation 1 can themselves serve as references for others in generation 2.
         int lastGen = 1;
-        Map<String, Factor[]> convergenceDesignFactors = Map.of();
+        Map<String, ReferenceFactors> convergenceDesignFactors = Map.of();
         for (int gen = 1; gen <= MAX_ITERATIONS; gen++)
         {
             lastGen = gen;
@@ -253,30 +253,43 @@ public class ReferenceNetworkBuilder
 
     /**
      * Aggregates per-boat reference factors up to design level.
-     * Returns a map from designId to Factor[3] = {spin, nonSpin, twoHanded},
-     * where each non-null entry is the log-space weighted mean of all contributing boats,
-     * capped at {@link #DESIGN_FACTOR_WEIGHT}.
+     * Returns a map from designId to {@link ReferenceFactors},
+     * where each non-null factor is the log-space weighted mean of all contributing boats,
+     * capped at {@link #DESIGN_FACTOR_WEIGHT}. Generations are the ceiling of the
+     * average generation of contributing boats for each variant.
      */
-    private static Map<String, Factor[]> computeDesignFactors(
-        Map<String, BoatReferenceFactors> brf, Map<String, Boat> boats)
+    private static Map<String, ReferenceFactors> computeDesignFactors(
+        Map<String, ReferenceFactors> brf, Map<String, Boat> boats)
     {
         Map<String, List<Factor>> spinByDesign    = new LinkedHashMap<>();
         Map<String, List<Factor>> nonSpinByDesign = new LinkedHashMap<>();
         Map<String, List<Factor>> twoHByDesign    = new LinkedHashMap<>();
+        Map<String, List<Integer>> spinGenByDesign    = new LinkedHashMap<>();
+        Map<String, List<Integer>> nonSpinGenByDesign = new LinkedHashMap<>();
+        Map<String, List<Integer>> twoHGenByDesign    = new LinkedHashMap<>();
 
-        for (Map.Entry<String, BoatReferenceFactors> e : brf.entrySet())
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
         {
             Boat boat = boats.get(e.getKey());
             if (boat == null || boat.designId() == null) continue;
             String designId = boat.designId();
-            BoatReferenceFactors f = e.getValue();
+            ReferenceFactors f = e.getValue();
 
-            if (f.spin()      != null)
+            if (f.spin() != null)
+            {
                 spinByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.spin());
-            if (f.nonSpin()   != null)
+                spinGenByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.spinGeneration());
+            }
+            if (f.nonSpin() != null)
+            {
                 nonSpinByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.nonSpin());
+                nonSpinGenByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.nonSpinGeneration());
+            }
             if (f.twoHanded() != null)
+            {
                 twoHByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.twoHanded());
+                twoHGenByDesign.computeIfAbsent(designId, k -> new ArrayList<>()).add(f.twoHandedGeneration());
+            }
         }
 
         Set<String> allDesigns = new HashSet<>();
@@ -284,19 +297,28 @@ public class ReferenceNetworkBuilder
         allDesigns.addAll(nonSpinByDesign.keySet());
         allDesigns.addAll(twoHByDesign.keySet());
 
-        Map<String, Factor[]> result = new LinkedHashMap<>();
+        Map<String, ReferenceFactors> result = new LinkedHashMap<>();
         for (String designId : allDesigns)
         {
-            Factor[] df = new Factor[3];  // [0]=spin, [1]=nonSpin, [2]=twoHanded
             List<Factor> s  = spinByDesign.getOrDefault(designId, List.of());
             List<Factor> ns = nonSpinByDesign.getOrDefault(designId, List.of());
             List<Factor> th = twoHByDesign.getOrDefault(designId, List.of());
-            if (!s.isEmpty())  df[0] = logAggregate(s,  DESIGN_FACTOR_WEIGHT);
-            if (!ns.isEmpty()) df[1] = logAggregate(ns, DESIGN_FACTOR_WEIGHT);
-            if (!th.isEmpty()) df[2] = logAggregate(th, DESIGN_FACTOR_WEIGHT);
-            result.put(designId, df);
+            Factor spinF = !s.isEmpty()  ? logAggregate(s,  DESIGN_FACTOR_WEIGHT) : null;
+            Factor nsF   = !ns.isEmpty() ? logAggregate(ns, DESIGN_FACTOR_WEIGHT) : null;
+            Factor thF   = !th.isEmpty() ? logAggregate(th, DESIGN_FACTOR_WEIGHT) : null;
+            int spinGen = ceilAvgGen(spinGenByDesign.getOrDefault(designId, List.of()));
+            int nsGen   = ceilAvgGen(nonSpinGenByDesign.getOrDefault(designId, List.of()));
+            int thGen   = ceilAvgGen(twoHGenByDesign.getOrDefault(designId, List.of()));
+            result.put(designId, new ReferenceFactors(spinF, nsF, thF, spinGen, nsGen, thGen));
         }
         return result;
+    }
+
+    /** Returns the ceiling of the average of a list of generation ints, or 0 if empty. */
+    private static int ceilAvgGen(List<Integer> gens)
+    {
+        if (gens.isEmpty()) return 0;
+        return (int) Math.ceil(gens.stream().mapToInt(Integer::intValue).average().orElse(0));
     }
 
     // ==========================================================================
@@ -357,16 +379,16 @@ public class ReferenceNetworkBuilder
      * present (step 8 pre-populates every boat), so no structural changes occur.
      */
     private static int propagateViaRaces(
-        Map<String, BoatReferenceFactors> brf,
+        Map<String, ReferenceFactors> brf,
         Map<String, List<DivisionEntry>> boatDivIndex,
         int generation)
     {
         int newCount = 0;
 
-        for (Map.Entry<String, BoatReferenceFactors> e : brf.entrySet())
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
         {
             String boatId = e.getKey();
-            BoatReferenceFactors current = e.getValue();
+            ReferenceFactors current = e.getValue();
 
             boolean needSpin    = current.spin()    == null;
             boolean needNonSpin = current.nonSpin() == null;
@@ -393,7 +415,7 @@ public class ReferenceNetworkBuilder
                 for (Finisher peer : entry.peers())
                 {
                     if (peer.nonSpinnaker() != isNS) continue;
-                    BoatReferenceFactors peerFactors = brf.get(peer.boatId());
+                    ReferenceFactors peerFactors = brf.get(peer.boatId());
                     if (peerFactors == null) continue;
 
                     Factor peerFactor = isNS ? peerFactors.nonSpin() : peerFactors.spin();
@@ -430,7 +452,7 @@ public class ReferenceNetworkBuilder
 
             if (newSpin != null || newNonSpin != null)
             {
-                brf.put(boatId, new BoatReferenceFactors(
+                brf.put(boatId, new ReferenceFactors(
                     newSpin    != null ? newSpin    : current.spin(),
                     newNonSpin != null ? newNonSpin : current.nonSpin(),
                     current.twoHanded(),
@@ -453,28 +475,28 @@ public class ReferenceNetworkBuilder
      * variant and whose design has a computed factor. Returns the count updated.
      */
     private static int applyDesignFallback(
-        Map<String, BoatReferenceFactors> brf,
-        Map<String, Factor[]> designFactors,
+        Map<String, ReferenceFactors> brf,
+        Map<String, ReferenceFactors> designFactors,
         Map<String, Boat> boats,
         int generation)
     {
         int newCount = 0;
-        for (Map.Entry<String, BoatReferenceFactors> e : brf.entrySet())
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
         {
             String boatId = e.getKey();
-            BoatReferenceFactors current = e.getValue();
+            ReferenceFactors current = e.getValue();
             if (current.spin() != null && current.nonSpin() != null && current.twoHanded() != null)
                 continue;
 
             Boat boat = boats.get(boatId);
             if (boat == null || boat.designId() == null) continue;
 
-            Factor[] df = designFactors.get(boat.designId());
+            ReferenceFactors df = designFactors.get(boat.designId());
             if (df == null) continue;
 
-            Factor newSpin    = current.spin()      != null ? current.spin()      : df[0];
-            Factor newNonSpin = current.nonSpin()   != null ? current.nonSpin()   : df[1];
-            Factor newTwoH    = current.twoHanded() != null ? current.twoHanded() : df[2];
+            Factor newSpin    = current.spin()      != null ? current.spin()      : df.spin();
+            Factor newNonSpin = current.nonSpin()   != null ? current.nonSpin()   : df.nonSpin();
+            Factor newTwoH    = current.twoHanded() != null ? current.twoHanded() : df.twoHanded();
 
             boolean changed = newSpin != current.spin()
                 || newNonSpin != current.nonSpin()
@@ -482,7 +504,7 @@ public class ReferenceNetworkBuilder
 
             if (changed)
             {
-                brf.put(boatId, new BoatReferenceFactors(
+                brf.put(boatId, new ReferenceFactors(
                     newSpin, newNonSpin, newTwoH,
                     newSpin    != current.spin()      ? generation : current.spinGeneration(),
                     newNonSpin != current.nonSpin()   ? generation : current.nonSpinGeneration(),
@@ -513,7 +535,7 @@ public class ReferenceNetworkBuilder
      * @return number of boats updated
      */
     private static int fillMissingVariantsFromExisting(
-        Map<String, BoatReferenceFactors> brf,
+        Map<String, ReferenceFactors> brf,
         ConversionGraph graph,
         int currentYear,
         int generation)
@@ -523,9 +545,9 @@ public class ReferenceNetworkBuilder
         ConversionNode ircTwoH  = new ConversionNode("IRC", currentYear, false, true);
 
         int newCount = 0;
-        for (Map.Entry<String, BoatReferenceFactors> e : brf.entrySet())
+        for (Map.Entry<String, ReferenceFactors> e : brf.entrySet())
         {
-            BoatReferenceFactors cur = e.getValue();
+            ReferenceFactors cur = e.getValue();
             Factor spin    = cur.spin();
             Factor nonSpin = cur.nonSpin();
             Factor twoH    = cur.twoHanded();
@@ -552,7 +574,7 @@ public class ReferenceNetworkBuilder
 
             if (changed)
             {
-                brf.put(e.getKey(), new BoatReferenceFactors(
+                brf.put(e.getKey(), new ReferenceFactors(
                     spin, nonSpin, twoH,
                     spin    != cur.spin()      ? generation : cur.spinGeneration(),
                     nonSpin != cur.nonSpin()   ? generation : cur.nonSpinGeneration(),

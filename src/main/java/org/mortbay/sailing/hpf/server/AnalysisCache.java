@@ -1,11 +1,15 @@
 package org.mortbay.sailing.hpf.server;
 
-import org.mortbay.sailing.hpf.analysis.BoatReferenceFactors;
+import org.mortbay.sailing.hpf.analysis.BoatDerived;
 import org.mortbay.sailing.hpf.analysis.ComparisonResult;
 import org.mortbay.sailing.hpf.analysis.ConversionGraph;
-import org.mortbay.sailing.hpf.data.Factor;
+import org.mortbay.sailing.hpf.analysis.DesignDerived;
+import org.mortbay.sailing.hpf.analysis.RaceDerived;
+import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.analysis.HandicapAnalyser;
 import org.mortbay.sailing.hpf.analysis.ReferenceNetworkBuilder;
+import org.mortbay.sailing.hpf.data.Boat;
+import org.mortbay.sailing.hpf.data.Design;
 import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Race;
@@ -27,29 +31,29 @@ import java.util.Set;
  * <p>
  * Both are recomputed together via {@link #refresh()} so they are always consistent.
  * {@link #refresh()} is called on startup and after each importer run completes.
+ * <p>
+ * Per-entity derived data is consolidated into three maps: {@link BoatDerived},
+ * {@link DesignDerived}, and {@link RaceDerived}. Individual entries are invalidated
+ * via the {@link DataStore.InvalidationListener} interface when raw entities change.
  */
-public class AnalysisCache
+public class AnalysisCache implements DataStore.InvalidationListener
 {
     private static final Logger LOG = LoggerFactory.getLogger(AnalysisCache.class);
 
     private final DataStore store;
 
     private volatile List<ComparisonResult> comparisons = List.of();
-    private volatile Map<String, BoatReferenceFactors> referenceFactors = Map.of();
-    /** Design-level factors at the point race propagation converged (excludes design-fallback boats). */
-    private volatile Map<String, Factor[]> designFactors = Map.of();
     private volatile int targetYear = LocalDate.now().getYear();
 
-    /** designId → set of boatIds for that design. Empty until {@link #refreshIndexes()} is called. */
-    private volatile Map<String, Set<String>> boatIdsByDesignId = Map.of();
-    /** boatId → set of raceIds in which that boat finished. Empty until {@link #refreshIndexes()} is called. */
-    private volatile Map<String, Set<String>> raceIdsByBoatId   = Map.of();
-    /** boatId → set of seriesIds in which that boat finished. Empty until {@link #refreshIndexes()} is called. */
-    private volatile Map<String, Set<String>> seriesIdsByBoatId = Map.of();
+    // Consolidated per-entity derived data
+    private volatile Map<String, BoatDerived> boatDerived = Map.of();
+    private volatile Map<String, DesignDerived> designDerived = Map.of();
+    private volatile Map<String, RaceDerived> raceDerived = Map.of();
 
     public AnalysisCache(DataStore store)
     {
         this.store = store;
+        store.setInvalidationListener(this);
     }
 
     /**
@@ -67,17 +71,16 @@ public class AnalysisCache
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
 
-        comparisons     = newComparisons;
-        referenceFactors = built.boatFactors();
-        designFactors    = built.designFactors();
-        targetYear       = year;
-        LOG.info("AnalysisCache: {} comparisons, {} reference factors, {} design factors (targetYear={})",
-            newComparisons.size(), referenceFactors.size(), designFactors.size(), year);
+        comparisons = newComparisons;
+        targetYear  = year;
+        mergeReferenceFactors(built);
+        LOG.info("AnalysisCache: {} comparisons, {} boat derived, {} design derived (targetYear={})",
+            newComparisons.size(), boatDerived.size(), designDerived.size(), year);
     }
 
     /**
      * Recomputes reference factors only, using the existing comparisons and conversion graph.
-     * Faster than {@link #refresh(Integer, Double)} when only the boat certificate data has changed.
+     * Faster than {@link #refresh(Integer, Double, double)} when only the boat certificate data has changed.
      *
      * @param targetIrcYear override target IRC year, or null to auto-detect from data
      */
@@ -87,25 +90,63 @@ public class AnalysisCache
         ConversionGraph graph = ConversionGraph.from(comparisons);
         int year = targetIrcYear != null ? targetIrcYear : maxIrcCertYear();
         ReferenceNetworkBuilder.BuildResult built = new ReferenceNetworkBuilder(clubCertificateWeight).build(store, graph, year);
-        referenceFactors = built.boatFactors();
-        designFactors    = built.designFactors();
-        targetYear       = year;
-        LOG.info("AnalysisCache: {} reference factors, {} design factors (targetYear={})",
-            referenceFactors.size(), designFactors.size(), year);
+        targetYear = year;
+        mergeReferenceFactors(built);
+        LOG.info("AnalysisCache: {} boat derived, {} design derived (targetYear={})",
+            boatDerived.size(), designDerived.size(), year);
+    }
+
+    /**
+     * Merges reference factors from a BuildResult into the consolidated Derived maps,
+     * preserving existing index data (raceIds, seriesIds, boatIds).
+     */
+    private void mergeReferenceFactors(ReferenceNetworkBuilder.BuildResult built)
+    {
+        // Merge boat reference factors with existing index data
+        Map<String, BoatDerived> currentBoats = this.boatDerived;
+        Map<String, BoatDerived> newBoats = new LinkedHashMap<>();
+        for (Map.Entry<String, ReferenceFactors> e : built.boatFactors().entrySet())
+        {
+            String id = e.getKey();
+            Boat boat = store.boats().get(id);
+            if (boat == null) continue;
+            BoatDerived existing = currentBoats.get(id);
+            Set<String> raceIds = existing != null ? existing.raceIds() : Set.of();
+            Set<String> seriesIds = existing != null ? existing.seriesIds() : Set.of();
+            newBoats.put(id, new BoatDerived(boat, e.getValue(), raceIds, seriesIds));
+        }
+        // Keep entries that have index data but no reference factors (boats not in BuildResult)
+        for (Map.Entry<String, BoatDerived> e : currentBoats.entrySet())
+        {
+            if (!newBoats.containsKey(e.getKey()) && (!e.getValue().raceIds().isEmpty() || !e.getValue().seriesIds().isEmpty()))
+                newBoats.put(e.getKey(), new BoatDerived(e.getValue().boat(), null, e.getValue().raceIds(), e.getValue().seriesIds()));
+        }
+        this.boatDerived = Map.copyOf(newBoats);
+
+        // Merge design reference factors with existing index data
+        Map<String, DesignDerived> currentDesigns = this.designDerived;
+        Map<String, DesignDerived> newDesigns = new LinkedHashMap<>();
+        for (Map.Entry<String, ReferenceFactors> e : built.designFactors().entrySet())
+        {
+            String id = e.getKey();
+            Design design = store.designs().get(id);
+            if (design == null) continue;
+            DesignDerived existing = currentDesigns.get(id);
+            Set<String> boatIds = existing != null ? existing.boatIds() : Set.of();
+            newDesigns.put(id, new DesignDerived(design, e.getValue(), boatIds));
+        }
+        // Keep entries that have index data but no reference factors
+        for (Map.Entry<String, DesignDerived> e : currentDesigns.entrySet())
+        {
+            if (!newDesigns.containsKey(e.getKey()) && !e.getValue().boatIds().isEmpty())
+                newDesigns.put(e.getKey(), new DesignDerived(e.getValue().design(), null, e.getValue().boatIds()));
+        }
+        this.designDerived = Map.copyOf(newDesigns);
     }
 
     /**
      * Returns the maximum year among real (issued) IRC certificates in the store,
      * falling back to the current calendar year if none exist.
-     * <p>
-     * Inferred IRC certificates (created by the race importer from race AHC values)
-     * are excluded — they have a null expiry date and a cert number containing
-     * "-inferred-". Using only issued certs ensures the DFS target year matches
-     * the certs that boats actually hold, rather than race-scoring artefacts.
-     * <p>
-     * Australian IRC certs expiring in May of year Y are assigned year Y-1, so the
-     * maximum issued cert year typically lags the calendar year in the first half
-     * of the year.
      */
     private int maxIrcCertYear()
     {
@@ -120,13 +161,8 @@ public class AnalysisCache
     }
 
     /**
-     * Builds the three navigation indexes from raw store data:
-     * <ul>
-     *   <li>boats by design (designId → Set of boatIds)</li>
-     *   <li>races by boat  (boatId  → Set of raceIds)</li>
-     *   <li>series by boat (boatId  → Set of seriesIds)</li>
-     * </ul>
-     * These are used by later optimisation steps and by the data browser filter links.
+     * Builds navigation indexes from raw store data and merges them into the
+     * consolidated Derived maps. Also builds {@link RaceDerived} for all races.
      */
     public void refreshIndexes()
     {
@@ -156,12 +192,113 @@ public class AnalysisCache
             }
         }
 
-        boatIdsByDesignId = byDesign;
-        raceIdsByBoatId   = byBoatR;
-        seriesIdsByBoatId = byBoatS;
-        LOG.info("AnalysisCache indexes: {} designs, {} boats with races, {} boats with series",
-            byDesign.size(), byBoatR.size(), byBoatS.size());
+        // Merge index data with existing reference factors into BoatDerived
+        Map<String, BoatDerived> currentBoats = this.boatDerived;
+        Map<String, BoatDerived> newBoats = new LinkedHashMap<>();
+        // All boats that have index data
+        Set<String> allBoatIds = new LinkedHashSet<>();
+        allBoatIds.addAll(byBoatR.keySet());
+        allBoatIds.addAll(byBoatS.keySet());
+        allBoatIds.addAll(currentBoats.keySet());
+        for (String id : allBoatIds)
+        {
+            Boat boat = store.boats().get(id);
+            if (boat == null) continue;
+            BoatDerived existing = currentBoats.get(id);
+            ReferenceFactors rf = existing != null ? existing.referenceFactors() : null;
+            Set<String> raceIds = byBoatR.getOrDefault(id, Set.of());
+            Set<String> seriesIds = byBoatS.getOrDefault(id, Set.of());
+            newBoats.put(id, new BoatDerived(boat, rf, raceIds, seriesIds));
+        }
+        this.boatDerived = Map.copyOf(newBoats);
+
+        // Merge index data with existing reference factors into DesignDerived
+        Map<String, DesignDerived> currentDesigns = this.designDerived;
+        Map<String, DesignDerived> newDesigns = new LinkedHashMap<>();
+        Set<String> allDesignIds = new LinkedHashSet<>();
+        allDesignIds.addAll(byDesign.keySet());
+        allDesignIds.addAll(currentDesigns.keySet());
+        for (String id : allDesignIds)
+        {
+            Design design = store.designs().get(id);
+            if (design == null) continue;
+            DesignDerived existing = currentDesigns.get(id);
+            ReferenceFactors rf = existing != null ? existing.referenceFactors() : null;
+            Set<String> boatIds = byDesign.getOrDefault(id, Set.of());
+            newDesigns.put(id, new DesignDerived(design, rf, boatIds));
+        }
+        this.designDerived = Map.copyOf(newDesigns);
+
+        // Build RaceDerived for all races
+        Map<String, RaceDerived> newRaces = new LinkedHashMap<>();
+        for (Race race : store.races().values())
+        {
+            int finisherCount = 0;
+            if (race.divisions() != null)
+                for (Division div : race.divisions())
+                    if (div.finishers() != null)
+                        finisherCount += div.finishers().size();
+            newRaces.put(race.id(), new RaceDerived(race, finisherCount));
+        }
+        this.raceDerived = Map.copyOf(newRaces);
+
+        LOG.info("AnalysisCache indexes: {} designs, {} boats with derived, {} races",
+            newDesigns.size(), newBoats.size(), newRaces.size());
     }
+
+    // --- InvalidationListener ---
+
+    @Override
+    public void onBoatChanged(String boatId)
+    {
+        Map<String, BoatDerived> current = this.boatDerived;
+        if (current.containsKey(boatId))
+        {
+            var copy = new LinkedHashMap<>(current);
+            copy.remove(boatId);
+            this.boatDerived = Map.copyOf(copy);
+        }
+    }
+
+    @Override
+    public void onDesignChanged(String designId)
+    {
+        Map<String, DesignDerived> current = this.designDerived;
+        if (current.containsKey(designId))
+        {
+            var copy = new LinkedHashMap<>(current);
+            copy.remove(designId);
+            this.designDerived = Map.copyOf(copy);
+        }
+    }
+
+    @Override
+    public void onRaceChanged(String raceId)
+    {
+        Map<String, RaceDerived> current = this.raceDerived;
+        if (current.containsKey(raceId))
+        {
+            var copy = new LinkedHashMap<>(current);
+            copy.remove(raceId);
+            this.raceDerived = Map.copyOf(copy);
+        }
+    }
+
+    @Override
+    public void onClubChanged(String clubId)
+    {
+        // Club changes don't affect derived data currently
+    }
+
+    @Override
+    public void onAllChanged()
+    {
+        this.boatDerived = Map.of();
+        this.designDerived = Map.of();
+        this.raceDerived = Map.of();
+    }
+
+    // --- Accessors ---
 
     public int targetYear()
     {
@@ -173,18 +310,18 @@ public class AnalysisCache
         return comparisons;
     }
 
-    public Map<String, BoatReferenceFactors> referenceFactors()
+    public Map<String, BoatDerived> boatDerived()
     {
-        return referenceFactors;
+        return boatDerived;
     }
 
-    /** Design-level factors indexed as [0]=spin, [1]=nonSpin, [2]=twoHanded. */
-    public Map<String, Factor[]> designFactors()
+    public Map<String, DesignDerived> designDerived()
     {
-        return designFactors;
+        return designDerived;
     }
 
-    public Map<String, Set<String>> boatIdsByDesignId() { return boatIdsByDesignId; }
-    public Map<String, Set<String>> raceIdsByBoatId()   { return raceIdsByBoatId;   }
-    public Map<String, Set<String>> seriesIdsByBoatId() { return seriesIdsByBoatId; }
+    public Map<String, RaceDerived> raceDerived()
+    {
+        return raceDerived;
+    }
 }

@@ -51,6 +51,7 @@ class ClubSeedLoader
                     continue;
                 }
                 Club stub = new Club(domain, entry.shortName, entry.fullName, entry.state,
+                    Boolean.TRUE.equals(entry.excluded),
                     entry.aliases != null ? entry.aliases : List.of(),
                     entry.topyacht != null ? entry.topyacht : List.of(),
                     List.of(), null);
@@ -95,6 +96,7 @@ class ClubSeedLoader
         public String shortName;
         public String state;
         public String fullName;
+        public Boolean excluded;
         public List<String> aliases;
         public List<String> topyacht;
     }

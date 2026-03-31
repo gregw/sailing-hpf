@@ -634,7 +634,7 @@ public class SailSysRaceImporter
             series.add(new Series(seriesId, seriesName, false, List.of(raceId)));
         }
 
-        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(),
+        store.putClub(new Club(club.id(), club.shortName(), club.longName(), club.state(), club.excluded(),
             club.aliases(), club.topyachtUrls(), List.copyOf(series), null));
     }
 

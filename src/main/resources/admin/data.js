@@ -40,6 +40,7 @@ const COLUMNS = {
             : '<span style="color:#bbb">—</span>' },
         { label: 'Club',     key: 'clubId' },
         { label: 'Finishes', type: 'action',
+          render: item => item.finishes ? String(item.finishes) : '',
           action: item => { setFilter('races', 'boatId', item.id,
                             'Races for ' + (item.name || item.id)); switchTab('races'); } },
         { label: 'Excl',   key: 'excluded', type: 'toggle' },
@@ -53,9 +54,21 @@ const COLUMNS = {
             : '<span style="color:#bbb">—</span>' },
         { label: 'Makers', key: 'makerIds', render: v => esc((v || []).join(', ')) },
         { label: 'Boats',  type: 'action',
+          render: item => item.boats ? String(item.boats) : '',
           action: item => { setFilter('boats', 'designId', item.id,
                             'Boats of design ' + (item.canonicalName || item.id)); switchTab('boats'); } },
         { label: 'Excl',   key: 'excluded', type: 'toggle' },
+    ],
+    clubs: [
+        { label: 'ID',        key: 'id' },
+        { label: 'Short',     key: 'shortName' },
+        { label: 'Name',      key: 'longName' },
+        { label: 'State',     key: 'state' },
+        { label: 'Races',     type: 'action',
+          render: item => item.races != null ? String(item.races) : '',
+          action: item => { setFilter('races', 'clubId', item.id,
+                            'Races at ' + (item.shortName || item.id)); switchTab('races'); } },
+        { label: 'Excl',      key: 'excluded', type: 'toggle' },
     ],
     races: [
         { label: 'ID',        key: 'id' },
@@ -69,18 +82,18 @@ const COLUMNS = {
 };
 
 const state = {
-    pages:  { boats: 0, designs: 0, races: 0 },
-    sort:   { boats: 'id', designs: 'id', races: 'date' },
-    dir:    { boats: 'asc', designs: 'asc', races: 'desc' },
+    pages:  { boats: 0, designs: 0, clubs: 0, races: 0 },
+    sort:   { boats: 'id', designs: 'id', clubs: 'shortName', races: 'date' },
+    dir:    { boats: 'asc', designs: 'asc', clubs: 'asc', races: 'desc' },
     searchTimers: {},
     activeTab: 'boats',
     selected:     { boats: new Set(), designs: new Set() },   // IDs of checked rows
     selectedData: { boats: new Map(), designs: new Map() },   // id → item for merge panel
-    filter: { boats: null, designs: null, races: null },      // { param, value, label } or null
+    filter: { boats: null, designs: null, clubs: null, races: null },
 };
 
 function switchTab(entity) {
-    ['boats', 'designs', 'races'].forEach(e => {
+    ['boats', 'designs', 'clubs', 'races'].forEach(e => {
         document.getElementById('tab-btn-' + e).classList.toggle('active', e === entity);
         document.getElementById('panel-' + e).classList.toggle('active', e === entity);
     });
@@ -224,11 +237,16 @@ function renderTable(entity, items) {
                 };
                 td.appendChild(ecb);
             } else if (col.type === 'action') {
-                const btn = document.createElement('button');
-                btn.className = 'link-btn';
-                btn.textContent = col.label;
-                btn.onclick = (e) => { e.stopPropagation(); col.action(item); };
-                td.appendChild(btn);
+                const text = col.render ? col.render(item) : col.label;
+                if (text && col.action) {
+                    const btn = document.createElement('button');
+                    btn.className = 'link-btn';
+                    btn.textContent = text;
+                    btn.onclick = (e) => { e.stopPropagation(); col.action(item); };
+                    td.appendChild(btn);
+                } else {
+                    td.textContent = text || '';
+                }
             } else {
                 const v = item[col.key];
                 td.innerHTML = col.render ? col.render(v) : esc(v != null ? String(v) : '');

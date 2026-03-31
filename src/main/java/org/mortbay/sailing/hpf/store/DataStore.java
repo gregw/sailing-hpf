@@ -82,6 +82,27 @@ public class DataStore
     private final Set<String> excludedDesignOverrideIds = new LinkedHashSet<>();
     private final Set<String> excludedRaceIds           = new LinkedHashSet<>();
 
+    // Invalidation listener for derived data caches
+    private volatile InvalidationListener invalidationListener;
+
+    /**
+     * Listener notified when raw entities are added, updated, or removed.
+     * Used by AnalysisCache to invalidate per-entity derived data.
+     */
+    public interface InvalidationListener
+    {
+        void onBoatChanged(String boatId);
+        void onDesignChanged(String designId);
+        void onRaceChanged(String raceId);
+        void onClubChanged(String clubId);
+        void onAllChanged();
+    }
+
+    public void setInvalidationListener(InvalidationListener listener)
+    {
+        this.invalidationListener = listener;
+    }
+
     public DataStore(Path root)
     {
         this.root = root;
@@ -359,6 +380,8 @@ public class DataStore
         if (className == null || className.isBlank())
             return null;
         String designId = IdGenerator.normaliseDesignName(className);
+        if (designCatalogue.isIgnored(designId))
+            return null;
         Design design = designs.get(designId);
         if (design != null)
             return design;
@@ -533,18 +556,24 @@ public class DataStore
     {
         requireStarted();
         boats.put(boat.id(), boat);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onBoatChanged(boat.id());
     }
 
     public void putClub(Club club)
     {
         requireStarted();
         clubs.put(club.id(), club);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onClubChanged(club.id());
     }
 
     public void putDesign(Design design)
     {
         requireStarted();
         designs.put(design.id(), design);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onDesignChanged(design.id());
     }
 
     public void putMakers(List<Maker> makers)
@@ -558,6 +587,8 @@ public class DataStore
     {
         requireStarted();
         races.put(race.id(), race);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onRaceChanged(race.id());
     }
 
     public Map<String, Race> races()
@@ -580,6 +611,8 @@ public class DataStore
             {
                 LOG.warn("Could not delete boat file {}: {}", id, e.getMessage());
             }
+            InvalidationListener l = invalidationListener;
+            if (l != null) l.onBoatChanged(id);
         }
     }
 
@@ -597,6 +630,8 @@ public class DataStore
             {
                 LOG.warn("Could not delete design file {}: {}", id, e.getMessage());
             }
+            InvalidationListener l = invalidationListener;
+            if (l != null) l.onDesignChanged(id);
         }
     }
 
@@ -750,6 +785,8 @@ public class DataStore
 
         LOG.info("mergeDesigns: kept={} merged={} updatedBoats={} updatedRaces={} updatedFinishers={}",
             keepId, mergeIds, updatedBoats, updatedRaces, updatedFinishers);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
         return new DesignMergeResult(updatedBoats, updatedRaces, updatedFinishers);
     }
 
@@ -763,6 +800,39 @@ public class DataStore
     {
         requireStarted();
         return designCatalogue.isExcluded(designId) || excludedDesignOverrideIds.contains(designId);
+    }
+
+    /**
+     * Returns true if the club is excluded from analysis (e.g. multihull club, non-Australian).
+     * Checks the persisted club record first, then falls back to the seed.
+     */
+    public boolean isClubExcluded(String clubId)
+    {
+        requireStarted();
+        Club club = clubs.get(clubId);
+        if (club != null)
+            return club.excluded();
+        Club seed = clubSeed.get(clubId);
+        return seed != null && seed.excluded();
+    }
+
+    /**
+     * Toggles the excluded flag on a club. If the club doesn't yet have a persisted record,
+     * one is created from the seed.
+     */
+    public void setClubExcluded(String clubId, boolean excluded)
+    {
+        requireStarted();
+        Club club = clubs.get(clubId);
+        if (club == null)
+        {
+            Club seed = clubSeed.get(clubId);
+            if (seed == null)
+                throw new IllegalArgumentException("Unknown club: " + clubId);
+            club = seed;
+        }
+        putClub(club.withExcluded(excluded));
+        save();
     }
 
     /** Returns true if the boat has been manually excluded from analysis via the admin UI. */
@@ -983,6 +1053,8 @@ public class DataStore
 
         LOG.info("mergeBoats: kept={} merged={} updatedRaces={} updatedFinishers={}",
             keepId, mergeIds, updatedRaces, updatedFinishers);
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
         return new MergeResult(updatedRaces, updatedFinishers);
     }
 
