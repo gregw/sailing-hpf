@@ -7,30 +7,27 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <nav class="site-nav">
-    <a href="/" class="nav-home">HPF</a>
-    <a href="import.html">Import</a>
-    <a href="data.html">Data</a>
-    <a href="analysis.html">Analysis</a>
-  </nav>
+<!-- INCLUDE _nav.html -->
 
   <main class="landing">
     <h1>Historical Performance Factors</h1>
     <p class="lead">An online database of elapsed times from Australian yacht racing.</p>
 
-    <p>The <strong>HPF (Historical Performance Factor)</strong> is the back-calculated handicap
+    <p>The <strong>HPF (Historical Performance Factor)</strong> is an optimized time correction factor
     a boat would have needed, averaged across its racing history, to have been equal-time with
     a hypothetical 1.000 reference boat (roughly calibrated with IRC).
-    It is a measure of historical performance — not a handicap system.</p>
+    It is a measure of historical performance — not a handicap system.  Specifically, a HPF is only meaningful when
+    analysing large numbers of past performances and cannot be used to age a handicap from week to week.</p>
 
     <p><strong>Primary use:</strong> Informing the allocation of initial handicaps at season
-    start, or when a new boat joins a series. It facilitates this by showing comparisons between two or more boats on
-    "normalized" corrected times.  HPF explicitly does not replace how clubs age or adjust handicaps between races day-to-day.</p>
+    start, or when a new boat joins a series. It facilitates this by showing comparisons between two or more boats/designs on
+    "normalized" corrected times. Handicap calculators are provided so that handicaps for other boats/designs are suggested
+    based on a handicap assigned to a particular boat/design and the ratios of HPF.
+    HPF explicitly does not replace how clubs age or adjust handicaps between races day-to-day.</p>
 
-    <p>Public data (boat sail numbers, boat names, club names, and elapsed times) is collected from SailSys and TopYacht
-    results pages and combined with data obtained from publicly available ORC and AMS certificates.
+    <p>Data of public record is collected from ORC, AMS, BWPS, SailSys and TopYacht.
     Boats with IRC, ORC, or AMS certificates serve as "standard candles" that anchoring the performance factor calculations
-    so they are roughly comparable to current IRC handicaps.</p>
+    so the resulting optimised numbers are roughly comparable to IRC handicaps or the target year.</p>
 
     <div class="stats">
       <div class="stat"><strong id="stat-boats">–</strong>Boats</div>
@@ -40,7 +37,7 @@
 
     <div class="landing-links">
       <a class="landing-card" href="import.html">
-        <strong>Import</strong>
+        <strong>Tasks</strong>
         <span>Run data importers and schedule automatic updates from SailSys, TopYacht, ORC, and AMS.</span>
       </a>
       <a class="landing-card" href="data.html">
@@ -49,7 +46,11 @@
       </a>
       <a class="landing-card" href="analysis.html">
         <strong>Handicap Analysis</strong>
-        <span>Compare handicap systems across years and view scatter plots with regression fits and conversion tables.</span>
+        <span>Compare handicap systems across years, view scatter plots with regression fits, and review HPF run quality.</span>
+      </a>
+      <a class="landing-card" href="comparison.html">
+        <strong>Comparison</strong>
+        <span>Compare boats and designs side-by-side by HPF and reference factor.</span>
       </a>
     </div>
   </main>

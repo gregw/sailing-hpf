@@ -1,4 +1,10 @@
 let currentAnalysisId = null;
+let showAnalysisErrors = false;
+
+function onAnalysisErrorsChange() {
+    showAnalysisErrors = document.getElementById('show-analysis-errors').checked;
+    if (currentAnalysisId) loadAnalysis();
+}
 
 async function loadAnalysisList() {
     const data = await fetchJson('/api/analyse');
@@ -141,6 +147,7 @@ function renderScatterPlot(id, data) {
         const lineX = [xMin - margin, xMax + margin];
         const lineY = lineX.map(x => fit.slope * x + fit.intercept);
 
+        const fitLineIdx = traces.length;
         traces.push({
             x: lineX,
             y: lineY,
@@ -158,6 +165,28 @@ function renderScatterPlot(id, data) {
             name: 'y = x (reference)',
             line: { color: '#aaa', width: 1, dash: 'dot' }
         });
+
+        if (showAnalysisErrors && fit.se > 0 && fit.ssx > 0) {
+            const bandXs = Array.from({length: 51}, (_, i) => xMin - margin + i * (xMax - xMin + 2 * margin) / 50);
+            const upper = bandXs.map(x => {
+                const yHat   = fit.slope * x + fit.intercept;
+                const sePred = fit.se * Math.sqrt(1 + 1 / fit.n + Math.pow(x - fit.xMean, 2) / fit.ssx);
+                return yHat + 1.96 * sePred;
+            });
+            const lower = bandXs.map(x => {
+                const yHat   = fit.slope * x + fit.intercept;
+                const sePred = fit.se * Math.sqrt(1 + 1 / fit.n + Math.pow(x - fit.xMean, 2) / fit.ssx);
+                return yHat - 1.96 * sePred;
+            });
+            traces.splice(fitLineIdx, 0, {
+                x: [...bandXs, ...bandXs.slice().reverse()],
+                y: [...upper, ...lower.slice().reverse()],
+                type: 'scatter', mode: 'lines', fill: 'toself',
+                fillcolor: 'rgba(224,48,48,0.12)',
+                line: { color: 'transparent' },
+                showlegend: false, hoverinfo: 'skip', name: '95% prediction interval'
+            });
+        }
     }
 
     const labels = axisLabels(id);
@@ -592,5 +621,59 @@ function renderNetworkGraph(data) {
     });
 }
 
+async function loadHpfQuality() {
+    try {
+        const resp = await fetch('/api/hpf/quality');
+        if (resp.status === 404) { document.getElementById('hpf-quality').style.display = 'none'; return; }
+        if (!resp.ok) return;
+        renderHpfQuality(await resp.json());
+    } catch (e) { /* ignore */ }
+}
+
+function fmtTrace(trace) {
+    if (!trace || trace.length === 0) return '';
+    const f = v => v.toFixed(3);
+    if (trace.length <= 10) return trace.map(f).join(' → ');
+    return [...trace.slice(0, 3).map(f), '\u2026', ...trace.slice(-3).map(f)].join(' → ');
+}
+
+function renderHpfQuality(q) {
+    const section = document.getElementById('hpf-quality');
+    section.style.display = '';
+    const innerStatus = q.innerConverged
+        ? `converged in ${q.innerIterations} iterations (max\u0394=${fmt(q.finalMaxDelta)})`
+        : `<span style="color:#c62828;font-weight:bold">did not converge</span> after ${q.innerIterations} iterations (max\u0394=${fmt(q.finalMaxDelta)})`;
+    const traceStr = fmtTrace(q.outerDeltaTrace);
+    const traceLine = traceStr
+        ? `<br><span style="font-size:0.85em;color:#666;">\u0394w per cycle: ${traceStr}</span>`
+        : '';
+    const outerStatus = q.outerConverged
+        ? `converged in ${q.outerIterations} cycles${traceLine}`
+        : `<span style="color:#c62828;font-weight:bold">did not converge</span> after ${q.outerIterations} cycles (max\u0394w=${fmt(q.finalMaxWeightChange)})${traceLine}`;
+    const medRes = q.medianResidual;
+    const fitColour = medRes < 0.03 ? '#2e7d32' : medRes < 0.08 ? '#f57f17' : '#c62828';
+    const dwPct = q.totalEntries > 0 ? (100 * q.downWeightedEntries / q.totalEntries).toFixed(1) : '0';
+    document.getElementById('hpf-quality-content').innerHTML = `
+      <table style="border-collapse:collapse;font-size:0.95em">
+        <tr><td style="padding:2px 1em"><b>Convergence</b> ${infoBtn('hpf-quality-convergence','Whether the inner (factor) and outer (weight) iteration loops converged within the allowed number of iterations.')}</td>
+            <td>Inner: ${innerStatus} | Outer: ${outerStatus}</td></tr>
+        <tr><td style="padding:2px 1em"><b>Scale</b> ${infoBtn('hpf-quality-scale','Number of boats, race divisions, and individual race entries used in the most recent HPF optimisation run.')}</td>
+            <td>${q.boatsWithHpf} boats, ${q.divisionsUsed} divisions, ${q.totalEntries} entries</td></tr>
+        <tr><td style="padding:2px 1em"><b>Fit quality</b> ${infoBtn('hpf-quality-fit','Median absolute residual and spread of residuals across all race entries. Lower values indicate a better fit between predicted and observed factors.')}</td>
+            <td style="color:${fitColour}">Median |residual|: ${fmt(medRes)} (residual IQR: ${fmt(q.iqrResidual)}, |residual| P95: ${fmt(q.pct95Residual)})</td></tr>
+        <tr><td style="padding:2px 1em"><b>Outliers</b> ${infoBtn('hpf-quality-outliers','Entries assigned reduced weight due to large residuals, and divisions with high internal spread. Outlier down-weighting reduces their influence on the optimised HPF values.')}</td>
+            <td>${q.downWeightedEntries} entries down-weighted (${dwPct}%), ${q.highDispersionDivisions} high-dispersion divisions</td></tr>
+        <tr><td style="padding:2px 1em"><b>Confidence</b> ${infoBtn('hpf-quality-confidence','Median boat confidence score, reflecting the quantity and quality of race data available per boat. Higher confidence means the HPF estimate is better supported by data.')}</td>
+            <td>Median boat confidence: ${fmt(q.medianBoatConfidence)}</td></tr>
+      </table>`;
+}
+
+function fmt(v) {
+    if (v == null) return '?';
+    if (Math.abs(v) < 0.001) return v.toExponential(1);
+    return v.toFixed(4);
+}
+
 loadAnalysisList();
 loadNetwork();
+loadHpfQuality();

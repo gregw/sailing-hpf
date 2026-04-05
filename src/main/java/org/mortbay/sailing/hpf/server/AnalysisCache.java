@@ -1,9 +1,16 @@
 package org.mortbay.sailing.hpf.server;
 
 import org.mortbay.sailing.hpf.analysis.BoatDerived;
+import org.mortbay.sailing.hpf.analysis.BoatHpf;
 import org.mortbay.sailing.hpf.analysis.ComparisonResult;
 import org.mortbay.sailing.hpf.analysis.ConversionGraph;
 import org.mortbay.sailing.hpf.analysis.DesignDerived;
+import org.mortbay.sailing.hpf.analysis.DivisionHpf;
+import org.mortbay.sailing.hpf.analysis.EntryResidual;
+import org.mortbay.sailing.hpf.analysis.HpfConfig;
+import org.mortbay.sailing.hpf.analysis.HpfOptimiser;
+import org.mortbay.sailing.hpf.analysis.HpfQuality;
+import org.mortbay.sailing.hpf.analysis.HpfResult;
 import org.mortbay.sailing.hpf.analysis.RaceDerived;
 import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.analysis.HandicapAnalyser;
@@ -49,6 +56,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
     private volatile Map<String, BoatDerived> boatDerived = Map.of();
     private volatile Map<String, DesignDerived> designDerived = Map.of();
     private volatile Map<String, RaceDerived> raceDerived = Map.of();
+    private volatile Map<String, List<EntryResidual>> residualsByBoatId = Map.of();
+    private volatile HpfQuality lastHpfQuality;  // null until first run
 
     public AnalysisCache(DataStore store)
     {
@@ -113,13 +122,14 @@ public class AnalysisCache implements DataStore.InvalidationListener
             BoatDerived existing = currentBoats.get(id);
             Set<String> raceIds = existing != null ? existing.raceIds() : Set.of();
             Set<String> seriesIds = existing != null ? existing.seriesIds() : Set.of();
-            newBoats.put(id, new BoatDerived(boat, e.getValue(), raceIds, seriesIds));
+            BoatHpf existingHpf = existing != null ? existing.hpf() : null;
+            newBoats.put(id, new BoatDerived(boat, e.getValue(), raceIds, seriesIds, existingHpf));
         }
         // Keep entries that have index data but no reference factors (boats not in BuildResult)
         for (Map.Entry<String, BoatDerived> e : currentBoats.entrySet())
         {
             if (!newBoats.containsKey(e.getKey()) && (!e.getValue().raceIds().isEmpty() || !e.getValue().seriesIds().isEmpty()))
-                newBoats.put(e.getKey(), new BoatDerived(e.getValue().boat(), null, e.getValue().raceIds(), e.getValue().seriesIds()));
+                newBoats.put(e.getKey(), new BoatDerived(e.getValue().boat(), null, e.getValue().raceIds(), e.getValue().seriesIds(), e.getValue().hpf()));
         }
         this.boatDerived = Map.copyOf(newBoats);
 
@@ -208,7 +218,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
             ReferenceFactors rf = existing != null ? existing.referenceFactors() : null;
             Set<String> raceIds = byBoatR.getOrDefault(id, Set.of());
             Set<String> seriesIds = byBoatS.getOrDefault(id, Set.of());
-            newBoats.put(id, new BoatDerived(boat, rf, raceIds, seriesIds));
+            BoatHpf existingHpf = existing != null ? existing.hpf() : null;
+            newBoats.put(id, new BoatDerived(boat, rf, raceIds, seriesIds, existingHpf));
         }
         this.boatDerived = Map.copyOf(newBoats);
 
@@ -238,7 +249,9 @@ public class AnalysisCache implements DataStore.InvalidationListener
                 for (Division div : race.divisions())
                     if (div.finishers() != null)
                         finisherCount += div.finishers().size();
-            newRaces.put(race.id(), new RaceDerived(race, finisherCount));
+            RaceDerived existingRd = this.raceDerived.get(race.id());
+            List<DivisionHpf> existingDivHpfs = existingRd != null ? existingRd.divisionHpfs() : null;
+            newRaces.put(race.id(), new RaceDerived(race, finisherCount, existingDivHpfs));
         }
         this.raceDerived = Map.copyOf(newRaces);
 
@@ -296,6 +309,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         this.boatDerived = Map.of();
         this.designDerived = Map.of();
         this.raceDerived = Map.of();
+        this.residualsByBoatId = Map.of();
     }
 
     // --- Accessors ---
@@ -323,5 +337,69 @@ public class AnalysisCache implements DataStore.InvalidationListener
     public Map<String, RaceDerived> raceDerived()
     {
         return raceDerived;
+    }
+
+    public Map<String, List<EntryResidual>> residualsByBoatId()
+    {
+        return residualsByBoatId;
+    }
+
+    public HpfQuality hpfQuality()
+    {
+        return lastHpfQuality;
+    }
+
+    /**
+     * Runs the HPF optimiser and merges results into the Derived maps.
+     */
+    public void refreshHpf(HpfConfig config, java.util.function.Supplier<Boolean> stopCheck)
+    {
+        LOG.info("AnalysisCache: running HPF optimiser...");
+        HpfResult result = new HpfOptimiser().optimise(store, boatDerived, config, stopCheck);
+        if (result.boatHpfs().isEmpty())
+        {
+            LOG.info("AnalysisCache: HPF optimiser returned no results (stopped or no data)");
+            return;
+        }
+        mergeHpfResults(result);
+        LOG.info("AnalysisCache: HPF merged — {} boats, {} races, {} inner iters, {} outer iters",
+            result.boatHpfs().size(), result.divisionHpfsByRaceId().size(),
+            result.innerIterations(), result.outerIterations());
+    }
+
+    /**
+     * Merges HPF results into the consolidated Derived maps using copy-on-write.
+     */
+    private void mergeHpfResults(HpfResult result)
+    {
+        // Merge BoatHpf into BoatDerived
+        Map<String, BoatDerived> currentBoats = this.boatDerived;
+        Map<String, BoatDerived> newBoats = new LinkedHashMap<>(currentBoats);
+        for (Map.Entry<String, BoatHpf> e : result.boatHpfs().entrySet())
+        {
+            BoatDerived existing = currentBoats.get(e.getKey());
+            if (existing != null)
+                newBoats.put(e.getKey(), new BoatDerived(existing.boat(), existing.referenceFactors(),
+                    existing.raceIds(), existing.seriesIds(), e.getValue()));
+        }
+        this.boatDerived = Map.copyOf(newBoats);
+
+        // Merge DivisionHpf into RaceDerived
+        Map<String, RaceDerived> currentRaces = this.raceDerived;
+        Map<String, RaceDerived> newRaces = new LinkedHashMap<>(currentRaces);
+        for (Map.Entry<String, List<DivisionHpf>> e : result.divisionHpfsByRaceId().entrySet())
+        {
+            RaceDerived existing = currentRaces.get(e.getKey());
+            if (existing != null)
+                newRaces.put(e.getKey(), new RaceDerived(existing.race(), existing.finisherCount(), e.getValue()));
+        }
+        this.raceDerived = Map.copyOf(newRaces);
+
+        // Store residuals separately
+        this.residualsByBoatId = result.residualsByBoatId();
+
+        // Store quality summary
+        if (result.quality() != null)
+            this.lastHpfQuality = result.quality();
     }
 }

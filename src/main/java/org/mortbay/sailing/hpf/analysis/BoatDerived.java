@@ -12,5 +12,6 @@ public record BoatDerived(
     Boat boat,
     ReferenceFactors referenceFactors,  // nullable
     Set<String> raceIds,
-    Set<String> seriesIds
+    Set<String> seriesIds,
+    BoatHpf hpf                         // nullable; set after HPF optimisation
 ) {}

@@ -287,7 +287,10 @@ clubs:
     shortName: RSYS
     state: NSW
     fullName: Royal Sydney Yacht Squadron
-    aliases: []
+    aliases: [
+      "RSYSAcademy",
+      "RSYS - Academy"
+    ]
 
   ransa.com.au:
     shortName: RANSA
@@ -754,4 +757,28 @@ clubs:
     shortName: JBCYC
     state: NSW
     fullName: Jervis Bay Cruising Yacht Club
+    aliases: []
+
+  ketteringyachtclub.org.au:
+    shortName: KYC
+    state: TAS
+    fullName: Kettering Yacht Club
+    aliases: []
+
+  sailsys.com.au:
+    shortName: SAILSYS
+    state: NSW
+    fullName: Sailsys
+    aliases: []
+
+  sailportstephens.com.au:
+    shortName: SPS
+    state: NSW
+    fullName: Sail Port Stephens
+    aliases: []
+
+  opuacruisingclub.co.nz:
+    shortName: OCC
+    state: NZ
+    fullName: Opua Cruising Club
     aliases: []

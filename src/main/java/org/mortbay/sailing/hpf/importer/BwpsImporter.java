@@ -218,7 +218,8 @@ public class BwpsImporter
 
             if (detail.club() != null && !detail.club().isBlank() && boat.clubId() == null)
             {
-                Club fromClub = store.findUniqueClubByShortName(detail.club(), null);
+                Club fromClub = store.findUniqueClubByShortName(detail.club(), null,
+                    "BWPS boat sailNumber=" + detail.sailNumber() + " name=" + detail.yachtName());
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
@@ -231,7 +232,14 @@ public class BwpsImporter
             boat = store.boats().get(boat.id());
             String certNum = inferCertificate(boat, row.system(), year, row.hcap());
 
-            Finisher finisher = new Finisher(boat.id(), lh.elapsed(), false, certNum);
+            Duration lhElapsed = lh.elapsed();
+            if (lhElapsed == null || lhElapsed.isNegative() || lhElapsed.isZero())
+            {
+                LOG.warn("BWPS: skipping finisher '{}' in race '{}' year={}: non-positive elapsed {}",
+                    boat.id(), raceName, year, lhElapsed);
+                continue;
+            }
+            Finisher finisher = new Finisher(boat.id(), lhElapsed, false, certNum);
             divMap.computeIfAbsent(row.div(), k -> new ArrayList<>()).add(finisher);
             finisherCount++;
         }

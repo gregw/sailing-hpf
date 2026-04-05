@@ -71,7 +71,9 @@ public class SailSysRaceImporter
 
     // Set at start of run() so resolveBoatId can use them without extra params
     private Path boatsDir;
-    private int cacheMaxAgeDays = 7;
+    private int youngCacheMaxAgeDays = 7;
+    private int oldCacheMaxAgeDays = 352;
+    private int youngRaceMaxAgeDays = 365;
     private int httpDelayMs = 200;
     private int recentRaceDays = 14;
     // SailSys integer ID of the race currently being processed (for source tagging)
@@ -214,14 +216,10 @@ public class SailSysRaceImporter
                 continue;
             }
 
+            onId.accept(id);
             boolean found = processRaceJson(json);
-            if (found)
-            {
-                consecutiveNotFound = 0;
-                onId.accept(id);
-            }
-            else
-                consecutiveNotFound++;
+            if (found) consecutiveNotFound = 0;
+            else consecutiveNotFound++;
 
             processed++;
             if (processed % SAVE_INTERVAL == 0)
@@ -254,22 +252,25 @@ public class SailSysRaceImporter
      *         or 0 if no races were in the recent window.
      */
     public int run(int startId, IntConsumer onId, BooleanSupplier stop,
-                   Path racesDir, Path boatsDir, int cacheMaxAgeDays, int httpDelayMs,
-                   int recentRaceDays)
+                   Path racesDir, Path boatsDir, int youngCacheMaxAgeDays, int oldCacheMaxAgeDays,
+                   int youngRaceMaxAgeDays, int httpDelayMs,
+                   int recentRaceDays, int notFoundThreshold)
         throws Exception
     {
         this.boatsDir = boatsDir;
-        this.cacheMaxAgeDays = cacheMaxAgeDays;
+        this.youngCacheMaxAgeDays = youngCacheMaxAgeDays;
+        this.oldCacheMaxAgeDays = oldCacheMaxAgeDays;
+        this.youngRaceMaxAgeDays = youngRaceMaxAgeDays;
         this.httpDelayMs = httpDelayMs;
         this.recentRaceDays = recentRaceDays;
 
-        LOG.info("Importing SailSys races starting at id={}", startId);
+        LOG.info("Importing SailSys races starting at id={}, notFoundThreshold={}", startId, notFoundThreshold);
         int id = startId;
         int consecutiveNotFound = 0;
         int processed = 0;
         int minRecentId = Integer.MAX_VALUE;
 
-        while (consecutiveNotFound < NOT_FOUND_THRESHOLD)
+        while (consecutiveNotFound < notFoundThreshold)
         {
             LOG.info("Fetching race id={}", id);
             Path cachedFile = racesDir != null
@@ -280,10 +281,23 @@ public class SailSysRaceImporter
             if (cachedFile != null && Files.exists(cachedFile))
                 cachedJson = Files.readString(cachedFile);
 
-            boolean forceRefresh = cachedJson != null && isRecent(peekRaceDate(cachedJson));
+            boolean useCache = false;
+            if (cachedJson != null)
+            {
+                LocalDate raceDate = peekRaceDate(cachedJson);
+                if (isRecent(raceDate))
+                {
+                    // Recent or future races always refreshed so results are picked up promptly
+                    useCache = false;
+                }
+                else
+                {
+                    int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
+                    useCache = !SailSysBoatImporter.isStale(cachedFile, maxAge);
+                }
+            }
 
-            if (!forceRefresh && cachedJson != null
-                    && !SailSysBoatImporter.isStale(cachedFile, cacheMaxAgeDays))
+            if (useCache)
             {
                 json = cachedJson;
             }
@@ -320,9 +334,18 @@ public class SailSysRaceImporter
             if (isRecent(raceDate))
                 minRecentId = Math.min(minRecentId, id);
 
-            boolean found = processRaceJson(json);
-            if (found) { consecutiveNotFound = 0; onId.accept(id); }
+            // Only count genuinely absent API responses toward the stop threshold.
+            // Races that exist but have status≠4 (not yet processed by SailSys) prove
+            // the ID space is active and must not trigger an early stop.
+            // Report every scanned ID to the caller so the UI progress indicator updates
+            // continuously, not only when a race is successfully imported.
+            // After run() returns, ImporterService overwrites currentSailSysId with
+            // minRecentId-1 before persisting, so this does not affect the saved start ID.
+            onId.accept(id);
+            boolean apiFound = isApiFound(json);
+            if (apiFound) consecutiveNotFound = 0;
             else consecutiveNotFound++;
+            apiFound = apiFound && processRaceJson(json);
 
             processed++;
             if (processed % SAVE_INTERVAL == 0)
@@ -359,11 +382,17 @@ public class SailSysRaceImporter
         return date != null && !date.isBefore(LocalDate.now().minusDays(recentRaceDays));
     }
 
+    private boolean isYoung(LocalDate date)
+    {
+        // null date → treat as young (safer: use shorter cache age)
+        return date == null || !date.isBefore(LocalDate.now().minusDays(youngRaceMaxAgeDays));
+    }
+
     /** Package-private — allows tests to exercise on-demand boat fetch without calling run(). */
-    void setBoatCacheParams(Path boatsDir, int cacheMaxAgeDays, int httpDelayMs)
+    void setBoatCacheParams(Path boatsDir, int youngCacheMaxAgeDays, int httpDelayMs)
     {
         this.boatsDir = boatsDir;
-        this.cacheMaxAgeDays = cacheMaxAgeDays;
+        this.youngCacheMaxAgeDays = youngCacheMaxAgeDays;
         this.httpDelayMs = httpDelayMs;
     }
 
@@ -375,6 +404,19 @@ public class SailSysRaceImporter
      * @return {@code true} if the response contained a valid, processed race,
      *         {@code false} if it was a not-found, error, or unprocessed response.
      */
+    boolean isApiFound(String json)
+    {
+        try
+        {
+            RaceResponse response = MAPPER.readValue(json, RaceResponse.class);
+            return "success".equals(response.result) && response.data != null;
+        }
+        catch (Exception e)
+        {
+            return false;
+        }
+    }
+
     boolean processRaceJson(String json)
     {
         RaceResponse response;
@@ -427,7 +469,8 @@ public class SailSysRaceImporter
         // Club resolution
         Club club = null;
         if (data.club != null && data.club.shortName != null)
-            club = store.findUniqueClubByShortName(data.club.shortName, data.club.longName);
+            club = store.findUniqueClubByShortName(data.club.shortName, data.club.longName,
+                "SailSys race id=" + data.id + " series=" + (data.series != null ? data.series.name : "?"));
 
         String clubId = club != null ? club.id() : null;
 
@@ -505,6 +548,11 @@ public class SailSysRaceImporter
                 LOG.debug("Skipping entry: cannot parse elapsedTime={}", entry.elapsedTime);
                 continue;
             }
+            if (elapsed.isNegative() || elapsed.isZero())
+            {
+                LOG.warn("Skipping entry: non-positive elapsedTime={}", entry.elapsedTime);
+                continue;
+            }
 
             boolean nonSpinnaker = entry.nonSpinnaker != null && entry.nonSpinnaker;
 
@@ -545,7 +593,7 @@ public class SailSysRaceImporter
         {
             try
             {
-                boatImporter.fetchAndImport(boat.id, boatsDir, cacheMaxAgeDays, httpDelayMs);
+                boatImporter.fetchAndImport(boat.id, boatsDir, youngCacheMaxAgeDays, httpDelayMs);
                 existing = store.findOrCreateBoat(boat.sailNumber.trim(), boat.name.trim(), null);
             }
             catch (Exception e)

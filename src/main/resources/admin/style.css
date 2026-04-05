@@ -12,6 +12,9 @@ a { color: #2255aa; }
   margin-bottom: 0.75rem; font-size: 0.9em; color: #856404;
 }
 
+/* Auth nudge banner (reuses .import-warning-banner colouring) */
+#auth-nudge { margin-bottom: 0.75rem; }
+
 /* Navigation */
 .site-nav {
   display: flex;
@@ -130,3 +133,83 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
 
 /* Inline action link button (Finishes, Boats) */
 .link-btn { background: none; border: none; color: #2255aa; cursor: pointer; padding: 0; font-family: monospace; font-size: inherit; text-decoration: underline; }
+
+/* Comparison page */
+.comparison-controls { margin-bottom: 1rem; }
+.selector-panels { display: flex; gap: 1.5rem; margin-bottom: 0.75rem; }
+.selector-panel { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-width: 0; }
+.selector-panel h3 { margin: 0 0 0.25rem; font-size: 1rem; }
+.selector-search { font-family: monospace; padding: 4px 6px; width: 100%; box-sizing: border-box; }
+.selector-list {
+    border: 1px solid #ccc; height: 200px; overflow-y: auto;
+    background: #fafafa; font-size: 0.88rem;
+}
+.selector-item { padding: 4px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.selector-item:hover { background: #f0f4ff; }
+.selector-item.focused { background: #e8f0fe; font-weight: bold; }
+.selector-empty { padding: 4px 8px; color: #999; font-style: italic; }
+.all-available-label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+.comparison-options-row { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.variant-label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
+.variant-label select { font-family: monospace; padding: 3px 6px; }
+
+/* Comparison chips */
+.chip-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; min-height: 1.5rem; }
+.chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    border: 2px solid; border-radius: 14px;
+    padding: 2px 8px 2px 10px; font-size: 0.85rem;
+    background: #fff; white-space: nowrap;
+}
+.chip-close {
+    background: none; border: none; cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 0; color: inherit;
+    opacity: 0.6; margin-left: 2px; font-family: monospace;
+}
+.chip-close:hover { opacity: 1; }
+
+/* Division navigation */
+.division-nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+.division-nav h2 { margin: 0; flex: 1; font-size: 1.1rem; text-align: center; }
+.division-nav button { white-space: nowrap; }
+
+/* HPF calculator */
+.hpf-calc-table { border-collapse: collapse; }
+.hpf-calc-table td { padding: 3px 8px; vertical-align: middle; }
+
+/* Info button (ⓘ) — tooltip on hover, links to docs on click */
+.info-btn {
+    position: relative;
+    display: inline-block;
+    color: #2255aa;
+    text-decoration: none;
+    font-size: 0.78em;
+    cursor: help;
+    margin-left: 0.25em;
+    vertical-align: middle;
+    line-height: 1;
+}
+.info-btn::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    background: #222;
+    color: #fff;
+    padding: 5px 9px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-family: sans-serif;
+    font-weight: normal;
+    white-space: normal;
+    width: 240px;
+    text-align: left;
+    z-index: 1000;
+    display: none;
+    pointer-events: none;
+    line-height: 1.4;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.info-btn:hover::after {
+    display: block;
+}

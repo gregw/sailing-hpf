@@ -32,6 +32,7 @@ Read these files before working in any given area:
 | [id_strategy.md](.claude/id_strategy.md) | How entities are keyed and disambiguated — read before touching IDs |
 | [data_sources_and_formats.md](.claude/data_sources_and_formats.md) | SailSys API, TopYacht HTML, ORC feed — field-level detail |
 | [presentation_layer.md](.claude/presentation_layer.md) | REST API design and browser-based charting frontend |
+| [error_bars.md](.claude/error_bars.md) | Error bar math, sigma_0 calibration, display rules |
 | [handicaps.txt](.claude/handicaps.txt) | Domain knowledge notes on yacht racing handicap systems |
 
 ## Background

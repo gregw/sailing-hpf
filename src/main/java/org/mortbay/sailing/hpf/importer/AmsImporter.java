@@ -150,7 +150,7 @@ public class AmsImporter
 
         if (club.isBlank())
             LOG.error("Missing club for boat={}", boatName);
-        else if (store.findClubByShortName(club, state) == null)
+        else if (store.findClubByShortName(club, state, "AMS boat=" + boatName) == null)
             LOG.error("Unknown club shortName={} state={} for boat={}", club, state, boatName);
 
         Boat boat = store.findOrCreateBoat(sailNo.trim(), boatName.trim(), null);

@@ -14,7 +14,9 @@ each boat from that history.
 The HPF is the back-calculated handicap a boat would have needed, averaged across its racing
 history, to have been equal-time with a hypothetical 1.000 reference boat. It is a measure of
 past performance, anchored where possible to independently verifiable measurement-based handicaps
-(IRC, ORC, AMS).
+(IRC, ORC, AMS).  The HPF is a single number that combines results from multiple sources including 
+different types of races (e.g. inshore and offshore). It is intrinsically wrong and just an analysis 
+tool.
 
 Results and HPF values are presented graphically via a web interface, and are also available
 as open data via a REST JSON API for anyone who wishes to build on them.
@@ -81,7 +83,17 @@ publish any derivative datasets under the same licence.
 
 The analysis is anchored on **measurement-based handicaps** (IRC, ORC, AMS) held by boats in
 the fleet. These serve as reference points — boats with certificates are treated as known
-quantities against which the performance of all other boats is calibrated.
+quantities ("standard candles") against which the performance of all other boats is calibrated.
+
+In summary, the algorithms of this project are:
+ + Measurement certificates are analysed to produce conversion tables that a measurement handicap of any type/year to be converted to an IRC equivalent in the target year.  Older certificates are given less weight as are conversions with a poor linear match.
+ + Boats with measurement certificates are assigned a gen 0 reference factor (RF) based on the time corrected factor of their certificate converted to the equivalent IRC value in the target year.
+ + Boats without an RF are assigned a gen 1 RF based on their median/weighted performance against boats with an RF. This is repeated for gen 2, gen 3, etc. RFs until no more boats can be assigned RFs.
+ + The weighted RFs of finishes in each division of a race are used to computer the Reference Time (RT) of the division, which is the elapsed time a hypothetical boat with a 1.000 time correction factor.
+ + The RT of each division is used to compute the Back Calculated time correction factor (BCF) for each boat.
+ + The median BCF of each boat is used to compute the initial HPF value for that boat.
+ + An optimisation phase is performed to compute the final HPF value for each boat that minimizes the ????.
+
 
 For boats without certificates, reference quality is propagated through the race network: a
 boat that has raced against certificated boats acquires an implied reference, which in turn
@@ -102,6 +114,7 @@ Full technical details are in the project documentation:
 - `.claude/id_strategy.md` — how entities are identified and disambiguated
 - `.claude/data_sources_and_formats.md` — SailSys, TopYacht, ORC and IRC data formats
 - `.claude/presentation_layer.md` — REST API and browser-based admin/charting frontend
+- `.claude/error_bars.md` — statistical basis for ±confidence intervals on factor displays
 
 ---
 

@@ -4,20 +4,33 @@ const DAY_LABELS = {
     FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun'
 };
 const DISPLAY_NAMES = {
-    'sailsys-races': 'Import SailSys Races',
-    'orc': 'Import ORC Certificates',
-    'ams': 'Import AMS Certificates',
-    'topyacht': 'Import TopYacht Races',
-    'bwps': 'Import BWPS Races',
-    'analysis': 'Analyse Certificates',
-    'reference-factors': 'Calculate Reference Factors',
-    'build-indexes': 'Build Indexes'
+    'sailsys-races':    'Import SailSys Races',
+    'orc':              'Import ORC Certificates',
+    'ams':              'Import AMS Certificates',
+    'topyacht':         'Import TopYacht Races',
+    'bwps':             'Import BWPS Races',
+    'analysis':         'Analyse Certificates',
+    'reference-factors':'Calculate Reference Factors',
+    'build-indexes':    'Build Indexes',
+    'hpf-optimise':     'HPF Optimise'
 };
 
 let currentEntries = [];
 let statusPoller = null;
 let prevRunningName = null;
 let prevRunningMode = null;
+
+function isWriteAllowed() { return window.hpfAuth?.authenticated; }
+
+function applyAuthState() {
+    const ok = isWriteAllowed();
+    document.querySelectorAll(
+        '#importers-body button, [onclick="saveSchedule()"], [onclick="stopSchedule()"]'
+    ).forEach(b => {
+        b.disabled = !ok;
+        b.title = ok ? '' : 'Sign in to use this action';
+    });
+}
 
 function displayName(name) {
     return DISPLAY_NAMES[name] || name;
@@ -38,8 +51,20 @@ async function loadImporters() {
     const yearInput = document.getElementById('target-irc-year');
     yearInput.value = data.targetIrcYear != null ? data.targetIrcYear : '';
 
+    if (data.hpfConfig) {
+        document.getElementById('hpf-lambda').value = data.hpfConfig.lambda;
+        document.getElementById('hpf-convergence').value = data.hpfConfig.convergenceThreshold;
+        document.getElementById('hpf-max-inner').value = data.hpfConfig.maxInnerIterations;
+        document.getElementById('hpf-max-outer').value = data.hpfConfig.maxOuterIterations;
+        document.getElementById('hpf-outlier-k').value = data.hpfConfig.outlierK;
+        document.getElementById('hpf-asymmetry').value = data.hpfConfig.asymmetryFactor;
+        document.getElementById('hpf-outer-damping').value = data.hpfConfig.outerDampingFactor;
+        document.getElementById('hpf-outer-convergence').value = data.hpfConfig.outerConvergenceThreshold;
+    }
+
     const anyRunning = currentEntries.some(e => e.status === 'running');
     if (anyRunning) startStatusPoller();
+    applyAuthState();
 }
 
 function buildTable(entries) {
@@ -48,6 +73,21 @@ function buildTable(entries) {
     for (const entry of entries) {
         tbody.appendChild(buildRow(entry));
     }
+}
+
+function taskTip(name) {
+    const tips = {
+        'sailsys-races':      'Fetches race results from the SailSys API (or local file cache).',
+        'orc':                'Downloads ORC certificate data from data.orc.org.',
+        'ams':                'Scrapes AMS certificate data from raceyachts.org.',
+        'topyacht':           'Scrapes race results from TopYacht club result pages.',
+        'bwps':               'Imports BWPS (BlueSail) race results from the CYCA.',
+        'analysis':           'Builds the ConversionGraph from paired handicap observations.',
+        'reference-factors':  'Computes IRC-equivalent reference factors for all boats.',
+        'build-indexes':      'Rebuilds navigation indexes (boat→races, design→boats, etc.).',
+        'hpf-optimise':       'Runs the HPF optimiser to produce Historical Performance Factors.',
+    };
+    return tips[name] || name;
 }
 
 function buildRow(entry) {
@@ -60,29 +100,37 @@ function buildRow(entry) {
     const key = entry.name + '-' + entry.mode;
     const defaultStart = (entry.nextStartId != null) ? entry.nextStartId : 1;
     const startInput = isSailSysApi
-        ? `<input type="number" id="start-${esc(key)}" value="${defaultStart}" min="1" style="width:5em">`
+        ? `<input type="number" id="start-${esc(key)}" value="${defaultStart}" min="1" style="width:5em"
+               title="SailSys race ID to start importing from">`
         : '';
     const runStopBtns = isSailSysApi
         ? `<button id="run-btn-${esc(key)}"
                    onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
+                   title="Run this task now"
                    ${isRunning ? 'style="display:none"' : ''}>Run</button>
            <button id="stop-btn-${esc(key)}"
                    onclick="stopImport()"
+                   title="Request the running task to stop"
                    ${isRunning ? '' : 'style="display:none"'}>Stop</button>`
-        : `<button onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')">Run</button>`;
+        : `<button onclick="runImporter('${esc(entry.name)}','${esc(entry.mode)}')"
+               title="Run this task now">Run</button>`;
     tr.innerHTML = `
       <td class="order-col">
-        <button class="order-btn" title="Move up"
+        <button class="order-btn" title="Move up in run order"
                 onclick="moveRow('${esc(entry.name)}','${esc(entry.mode)}','up')">↑</button>
-        <button class="order-btn" title="Move down"
+        <button class="order-btn" title="Move down in run order"
                 onclick="moveRow('${esc(entry.name)}','${esc(entry.mode)}','down')">↓</button>
       </td>
-      <td>${esc(displayName(entry.name))}</td>
+      <td>${esc(displayName(entry.name))} ${infoBtn('task-' + entry.name, taskTip(entry.name))}</td>
       <td><span class="badge ${isRunning ? 'badge-running' : 'badge-idle'}"
                id="badge-${esc(key)}">${esc(entry.status)}</span></td>
       <td>${startInput}${runStopBtns}</td>
-      <td><input type="checkbox" id="sched-${esc(key)}"
-                 ${entry.includeInSchedule ? 'checked' : ''}></td>`;
+      <td style="text-align:center"><input type="checkbox" id="sched-${esc(key)}"
+               title="Include in the automatic scheduled run"
+               ${entry.includeInSchedule ? 'checked' : ''}></td>
+      <td style="text-align:center"><input type="checkbox" id="start-${esc(key)}-startup"
+               title="Run this task automatically when the server starts"
+               ${entry.runAtStartup ? 'checked' : ''}></td>`;
     return tr;
 }
 
@@ -99,11 +147,15 @@ function moveRow(name, mode, dir) {
 function buildDayPicker(scheduledDays) {
     const container = document.getElementById('schedule-days');
     container.innerHTML = DAYS.map(d =>
-        `<label><input type="checkbox" value="${d}" ${scheduledDays.includes(d) ? 'checked' : ''}> ${DAY_LABELS[d]}</label>`
+        `<label title="Run schedule on ${d.charAt(0) + d.slice(1).toLowerCase()}s">` +
+        `<input type="checkbox" value="${d}" ${scheduledDays.includes(d) ? 'checked' : ''}> ${DAY_LABELS[d]}</label>`
     ).join('');
 }
 
+document.addEventListener('hpf:authready', applyAuthState);
+
 async function runImporter(name, mode) {
+    if (!isWriteAllowed()) return;
     const key = name + '-' + mode;
     const startInput = document.getElementById('start-' + key);
     const startId = startInput ? parseInt(startInput.value, 10) || 1 : 1;
@@ -124,15 +176,18 @@ async function runImporter(name, mode) {
 }
 
 async function stopImport() {
+    if (!isWriteAllowed()) return;
     await fetch('/api/importers/stop', { method: 'POST' });
 }
 
 async function stopSchedule() {
+    if (!isWriteAllowed()) return;
     await fetch('/api/importers/stop', { method: 'POST' });
     setStopScheduleVisible(false);
 }
 
 async function saveSchedule() {
+    if (!isWriteAllowed()) return;
     const days = [...document.querySelectorAll('#schedule-days input:checked')].map(cb => cb.value);
     const time = document.getElementById('schedule-time').value;
     const importers = [...document.querySelectorAll('#importers-body tr')].map(tr => {
@@ -141,15 +196,26 @@ async function saveSchedule() {
         return {
             name,
             mode,
-            includeInSchedule: document.getElementById('sched-' + name + '-' + mode).checked
+            includeInSchedule: document.getElementById('sched-' + name + '-' + mode).checked,
+            runAtStartup: document.getElementById('start-' + name + '-' + mode + '-startup').checked
         };
     });
     const yearVal = parseInt(document.getElementById('target-irc-year').value, 10);
     const targetIrcYear = yearVal > 0 ? yearVal : null;
+    const hpfLambda = parseFloat(document.getElementById('hpf-lambda').value) || null;
+    const hpfConvergenceThreshold = parseFloat(document.getElementById('hpf-convergence').value) || null;
+    const hpfMaxInnerIterations = parseInt(document.getElementById('hpf-max-inner').value, 10) || null;
+    const hpfMaxOuterIterations = parseInt(document.getElementById('hpf-max-outer').value, 10) || null;
+    const hpfOutlierK = parseFloat(document.getElementById('hpf-outlier-k').value) || null;
+    const hpfAsymmetryFactor = parseFloat(document.getElementById('hpf-asymmetry').value) || null;
+    const hpfOuterDampingFactor = parseFloat(document.getElementById('hpf-outer-damping').value) || null;
+    const hpfOuterConvergenceThreshold = parseFloat(document.getElementById('hpf-outer-convergence').value) || null;
     const resp = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days, time, importers, targetIrcYear })
+        body: JSON.stringify({ days, time, importers, targetIrcYear,
+            hpfLambda, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
+            hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold })
     });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'unknown error' }));
@@ -160,8 +226,6 @@ async function saveSchedule() {
 function setAllRunButtonsDisabled(disabled) {
     for (const entry of currentEntries) {
         const key = entry.name + '-' + entry.mode;
-        const runBtn = document.getElementById('run-btn-' + key);
-        // Non-sailsys rows have buttons rendered inline without an id; find by row
         const row = document.getElementById('row-' + key);
         if (row) {
             row.querySelectorAll('button:not([id^="stop-btn"])').forEach(btn => {
@@ -190,12 +254,10 @@ function startStatusPoller() {
             prevRunningName = null;
             prevRunningMode = null;
             setStopScheduleVisible(false);
-            await loadImporters();   // rebuilds table, applying any saved nextStartId values
+            await loadImporters();
         } else {
-            // If task changed, clear the previous task's badge
             if (prevRunningName && (prevRunningName !== data.name || prevRunningMode !== data.mode)) {
                 setBadge(prevRunningName, prevRunningMode, 'idle');
-                // Hide stop btn on previous sailsys row if applicable
                 const prevKey = prevRunningName + '-' + prevRunningMode;
                 const prevRunBtn  = document.getElementById('run-btn-'  + prevKey);
                 const prevStopBtn = document.getElementById('stop-btn-' + prevKey);

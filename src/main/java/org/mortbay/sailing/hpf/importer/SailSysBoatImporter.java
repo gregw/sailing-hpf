@@ -336,8 +336,12 @@ public class SailSysBoatImporter
         // Upsert IRC certificates
         List<Certificate> certs = upsertIrcCerts(existing.certificates(), boat.handicaps);
 
+        // Prefer the SailSys-derived design when one was resolved (make/model provided).
+        // Keep the existing designId only when SailSys has no design info at all.
+        String designId = design != null ? design.id() : existing.designId();
+
         store.putBoat(new Boat(existing.id(), existing.sailNumber(), existing.name(),
-            existing.designId(), clubId, existing.aliases(), existing.altSailNumbers(), List.copyOf(certs),
+            designId, clubId, existing.aliases(), existing.altSailNumbers(), List.copyOf(certs),
             addSource(existing.sources(), SOURCE + (boat.id != null ? "-" + boat.id : "")),
             Instant.now(), null));
     }
@@ -395,7 +399,7 @@ public class SailSysBoatImporter
     {
         if (shortName == null || shortName.isBlank())
             return null;
-        return store.findUniqueClubByShortName(shortName, longName);
+        return store.findUniqueClubByShortName(shortName, longName, "SailSysBoat shortName=" + shortName);
     }
 
     private LocalDate parseExpiry(String raw)

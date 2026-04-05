@@ -5,6 +5,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.eclipse.jetty.client.HttpClient;
+import org.mortbay.sailing.hpf.analysis.HpfConfig;
 import org.mortbay.sailing.hpf.importer.AmsImporter;
 import org.mortbay.sailing.hpf.importer.BwpsImporter;
 import org.mortbay.sailing.hpf.importer.OrcImporter;
@@ -62,7 +63,7 @@ public class ImporterService
 
     public record ImportStatus(String importerName, String mode, Instant startedAt) {}
 
-    public record ImporterEntry(String name, String mode, boolean includeInSchedule) {}
+    public record ImporterEntry(String name, String mode, boolean includeInSchedule, boolean runAtStartup) {}
 
     public record GlobalSchedule(List<DayOfWeek> days, LocalTime time) {}
 
@@ -70,21 +71,38 @@ public class ImporterService
                                Integer nextSailSysRaceId, Integer targetIrcYear,
                                Double outlierSigma, Double mergeCandidateThreshold,
                                Double fuzzyMatchThreshold,
-                               Integer sailsysCacheMaxAgeDays,   // null → default 7
-                               Integer sailsysHttpDelayMs,       // null → default 200
-                               Integer sailsysRecentRaceDays,    // null → default 14
-                               Double clubCertificateWeight)     // null → default 0.9
+                               Integer sailsysYoungCacheMaxAgeDays, // null → default 7
+                               Integer sailsysOldCacheMaxAgeDays,   // null → default 352
+                               Integer sailsysYoungRaceMaxAgeDays,  // null → default 365
+                               Integer sailsysHttpDelayMs,          // null → default 200
+                               Integer sailsysRecentRaceDays,       // null → default 14
+                               Integer sailsysNotFoundThreshold,    // null → default 1000
+                               Double clubCertificateWeight,     // null → default 0.9
+                               Double hpfLambda,                 // null → default 1.0
+                               Double hpfOutlierK,               // null → default 2.0
+                               Double hpfAsymmetryFactor,        // null → default 2.0
+                               Double hpfOuterDampingFactor,           // null → default 0.5
+                               Double hpfOuterConvergenceThreshold,    // null → default 0.01
+                               Double hpfConvergenceThreshold,         // null → default 0.0001
+                               Integer hpfMaxInnerIterations,    // null → default 100
+                               Integer hpfMaxOuterIterations,    // null → default 5
+                               Integer slidingAverageCount,       // null → default 8
+                               String googleClientId,            // null → fall back to env/devMode
+                               String googleClientSecret,        // null → fall back to env
+                               String authBaseUrl,               // null → fall back to env, then localhost
+                               String authAllowedDomain)         // null → no domain restriction
     {}
 
     private static final List<ImporterEntry> DEFAULT_ENTRIES = List.of(
-        new ImporterEntry("sailsys-races",      "run",       false),
-        new ImporterEntry("orc",                "api",       false),
-        new ImporterEntry("ams",                "api",       false),
-        new ImporterEntry("topyacht",           "api",       false),
-        new ImporterEntry("bwps",               "api",       false),
-        new ImporterEntry("analysis",           "run",       false),
-        new ImporterEntry("reference-factors",  "run",       false),
-        new ImporterEntry("build-indexes",      "run",       false)
+        new ImporterEntry("sailsys-races",      "run",  false, false),
+        new ImporterEntry("orc",                "api",  false, false),
+        new ImporterEntry("ams",                "api",  false, false),
+        new ImporterEntry("topyacht",           "api",  false, false),
+        new ImporterEntry("bwps",               "api",  false, false),
+        new ImporterEntry("analysis",           "run",  false, false),
+        new ImporterEntry("reference-factors",  "run",  false, false),
+        new ImporterEntry("build-indexes",      "run",  false, false),
+        new ImporterEntry("hpf-optimise",       "run",  false, false)
     );
 
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
@@ -95,10 +113,26 @@ public class ImporterService
     private volatile Double outlierSigma = null;            // null = use default (2.5)
     private volatile double mergeCandidateThreshold = 0.50; // JW threshold for similar-name merge candidate filter
     private volatile double fuzzyMatchThreshold = 0.90;     // JW threshold for boat/design name matching in DataStore
-    private volatile int sailsysCacheMaxAgeDays = 7;
+    private volatile int sailsysYoungCacheMaxAgeDays = 7;
+    private volatile int sailsysOldCacheMaxAgeDays = 352;
+    private volatile int sailsysYoungRaceMaxAgeDays = 365;
     private volatile int sailsysHttpDelayMs = 200;
     private volatile int sailsysRecentRaceDays = 14;
+    private volatile int sailsysNotFoundThreshold = 1000;
     private volatile double clubCertificateWeight = 0.9;
+    private volatile double hpfLambda = 1.0;
+    private volatile double hpfOutlierK = 2.0;
+    private volatile double hpfAsymmetryFactor = 2.0;
+    private volatile double hpfOuterDampingFactor = 0.5;
+    private volatile double hpfOuterConvergenceThreshold = 0.01;
+    private volatile double hpfConvergenceThreshold = 0.0001;
+    private volatile int hpfMaxInnerIterations = 100;
+    private volatile int hpfMaxOuterIterations = 5;
+    private volatile int slidingAverageCount = 8;
+    private volatile String googleClientId = null;
+    private volatile String googleClientSecret = null;
+    private volatile String authBaseUrl = null;
+    private volatile String authAllowedDomain = null;
 
     public ImporterService(DataStore store, HttpClient httpClient, Path dataRoot)
     {
@@ -141,10 +175,26 @@ public class ImporterService
                 fuzzyMatchThreshold = config.fuzzyMatchThreshold();
                 store.setFuzzyThreshold(fuzzyMatchThreshold);
             }
-            if (config.sailsysCacheMaxAgeDays() != null) sailsysCacheMaxAgeDays = config.sailsysCacheMaxAgeDays();
+            if (config.sailsysYoungCacheMaxAgeDays() != null) sailsysYoungCacheMaxAgeDays = config.sailsysYoungCacheMaxAgeDays();
+            if (config.sailsysOldCacheMaxAgeDays() != null) sailsysOldCacheMaxAgeDays = config.sailsysOldCacheMaxAgeDays();
+            if (config.sailsysYoungRaceMaxAgeDays() != null) sailsysYoungRaceMaxAgeDays = config.sailsysYoungRaceMaxAgeDays();
             if (config.sailsysHttpDelayMs() != null) sailsysHttpDelayMs = config.sailsysHttpDelayMs();
             if (config.sailsysRecentRaceDays() != null) sailsysRecentRaceDays = config.sailsysRecentRaceDays();
+            if (config.sailsysNotFoundThreshold() != null) sailsysNotFoundThreshold = config.sailsysNotFoundThreshold();
             if (config.clubCertificateWeight() != null) clubCertificateWeight = config.clubCertificateWeight();
+            if (config.hpfLambda() != null) hpfLambda = config.hpfLambda();
+            if (config.hpfOutlierK() != null) hpfOutlierK = config.hpfOutlierK();
+            if (config.hpfAsymmetryFactor() != null) hpfAsymmetryFactor = config.hpfAsymmetryFactor();
+            if (config.hpfOuterDampingFactor() != null) hpfOuterDampingFactor = config.hpfOuterDampingFactor();
+            if (config.hpfOuterConvergenceThreshold() != null) hpfOuterConvergenceThreshold = config.hpfOuterConvergenceThreshold();
+            if (config.hpfConvergenceThreshold() != null) hpfConvergenceThreshold = config.hpfConvergenceThreshold();
+            if (config.hpfMaxInnerIterations() != null) hpfMaxInnerIterations = config.hpfMaxInnerIterations();
+            if (config.hpfMaxOuterIterations() != null) hpfMaxOuterIterations = config.hpfMaxOuterIterations();
+            if (config.slidingAverageCount() != null) slidingAverageCount = config.slidingAverageCount();
+            googleClientId     = config.googleClientId();
+            googleClientSecret = config.googleClientSecret();
+            authBaseUrl        = config.authBaseUrl();
+            authAllowedDomain  = config.authAllowedDomain();
             if (globalSchedule != null && !globalSchedule.days().isEmpty())
                 armSchedule();
             LOG.info("Loaded admin config from {}", configFile);
@@ -206,12 +256,24 @@ public void stop()
     }
 
     public synchronized void setConfig(List<ImporterEntry> entries, GlobalSchedule schedule,
-                                       Integer targetIrcYear, Double outlierSigma)
+                                       Integer targetIrcYear, Double outlierSigma,
+                                       Double hpfLambda, Double hpfConvergenceThreshold,
+                                       Integer hpfMaxInnerIterations, Integer hpfMaxOuterIterations,
+                                       Double hpfOutlierK, Double hpfAsymmetryFactor,
+                                       Double hpfOuterDampingFactor, Double hpfOuterConvergenceThreshold)
     {
         importerEntries = new ArrayList<>(entries);
         globalSchedule = schedule;
         this.targetIrcYear = targetIrcYear;
         this.outlierSigma = outlierSigma;
+        if (hpfLambda != null) this.hpfLambda = hpfLambda;
+        if (hpfConvergenceThreshold != null) this.hpfConvergenceThreshold = hpfConvergenceThreshold;
+        if (hpfMaxInnerIterations != null) this.hpfMaxInnerIterations = hpfMaxInnerIterations;
+        if (hpfMaxOuterIterations != null) this.hpfMaxOuterIterations = hpfMaxOuterIterations;
+        if (hpfOutlierK != null) this.hpfOutlierK = hpfOutlierK;
+        if (hpfAsymmetryFactor != null) this.hpfAsymmetryFactor = hpfAsymmetryFactor;
+        if (hpfOuterDampingFactor != null) this.hpfOuterDampingFactor = hpfOuterDampingFactor;
+        if (hpfOuterConvergenceThreshold != null) this.hpfOuterConvergenceThreshold = hpfOuterConvergenceThreshold;
         if (scheduledFuture != null)
         {
             scheduledFuture.cancel(false);
@@ -287,6 +349,33 @@ public void stop()
         return clubCertificateWeight;
     }
 
+    public double hpfLambda() { return hpfLambda; }
+    public double hpfOutlierK() { return hpfOutlierK; }
+    public double hpfAsymmetryFactor() { return hpfAsymmetryFactor; }
+    public double hpfOuterDampingFactor() { return hpfOuterDampingFactor; }
+    public double hpfOuterConvergenceThreshold() { return hpfOuterConvergenceThreshold; }
+    public int slidingAverageCount() { return slidingAverageCount; }
+    public double hpfConvergenceThreshold() { return hpfConvergenceThreshold; }
+    public int hpfMaxInnerIterations() { return hpfMaxInnerIterations; }
+    public int hpfMaxOuterIterations() { return hpfMaxOuterIterations; }
+
+    public AuthConfig authConfig()
+    {
+        String id     = firstNonBlank(System.getenv("GOOGLE_CLIENT_ID"),     googleClientId);
+        String secret = firstNonBlank(System.getenv("GOOGLE_CLIENT_SECRET"), googleClientSecret);
+        String base   = firstNonBlank(System.getenv("AUTH_BASE_URL"),        authBaseUrl,
+                                      "http://localhost:8080");
+        String domain = firstNonBlank(System.getenv("AUTH_ALLOWED_DOMAIN"),  authAllowedDomain);
+        return new AuthConfig(id, secret, base, domain);
+    }
+
+    private static String firstNonBlank(String... candidates)
+    {
+        for (String s : candidates)
+            if (s != null && !s.isBlank()) return s;
+        return null;
+    }
+
     public void submitScheduledRun()
     {
         List<ImporterEntry> toRun = importerEntries.stream()
@@ -336,6 +425,56 @@ public void stop()
         });
     }
 
+    /**
+     * Runs tasks marked {@code runAtStartup=true}, in order, asynchronously.
+     * Called once from HpfServer after the cache and all services are initialised.
+     */
+    public void runStartupTasks()
+    {
+        List<ImporterEntry> toRun = importerEntries.stream()
+            .filter(ImporterEntry::runAtStartup).toList();
+        if (toRun.isEmpty())
+            return;
+        if (!running.compareAndSet(false, true))
+        {
+            LOG.warn("Startup run skipped — import already running");
+            return;
+        }
+        stopRequested.set(false);
+        importExecutor.submit(() ->
+        {
+            try
+            {
+                for (ImporterEntry entry : toRun)
+                {
+                    if (stopRequested.get())
+                    {
+                        LOG.info("Startup run stopped by request before {}", entry.name());
+                        break;
+                    }
+                    currentSailSysId = 0;
+                    currentStatus = new ImportStatus(entry.name(), entry.mode(), Instant.now());
+                    LOG.info("Startup: importer={} mode={}", entry.name(), entry.mode());
+                    int startId = "sailsys-races".equals(entry.name()) && nextSailSysRaceId != null
+                        ? nextSailSysRaceId : 1;
+                    runImporter(entry.name(), entry.mode(), startId);
+                    persistNextSailSysRaceId(entry.name());
+                    store.save();
+                }
+                LOG.info("Startup run complete");
+            }
+            catch (Exception e)
+            {
+                LOG.error("Startup run failed", e);
+            }
+            finally
+            {
+                currentStatus = null;
+                running.set(false);
+            }
+        });
+    }
+
     private void armSchedule()
     {
         Duration delay = delayUntilNextOccurrence(globalSchedule.days(), globalSchedule.time());
@@ -374,8 +513,9 @@ public void stop()
                 Path boatsDir = dataRoot.resolve("sailsys/boats");
                 int minRecentId = new SailSysRaceImporter(store, httpClient).run(
                     startId, id -> currentSailSysId = id, stopRequested::get,
-                    racesDir, boatsDir, sailsysCacheMaxAgeDays, sailsysHttpDelayMs,
-                    sailsysRecentRaceDays);
+                    racesDir, boatsDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
+                    sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs,
+                    sailsysRecentRaceDays, sailsysNotFoundThreshold);
                 if (minRecentId > 0)
                     currentSailSysId = minRecentId - 1;
             }
@@ -404,6 +544,13 @@ public void stop()
                 else
                     LOG.warn("Build indexes requested but cache is not configured");
             }
+            case "hpf-optimise" ->
+            {
+                if (cache != null)
+                    cache.refreshHpf(hpfConfig(), stopRequested::get);
+                else
+                    LOG.warn("HPF optimise requested but cache is not configured");
+            }
             default -> throw new IllegalArgumentException("Unknown importer: " + name);
         }
     }
@@ -417,6 +564,13 @@ public void stop()
         }
     }
 
+    private HpfConfig hpfConfig()
+    {
+        return new HpfConfig(hpfLambda, hpfConvergenceThreshold,
+            hpfMaxInnerIterations, hpfMaxOuterIterations,
+            hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold);
+    }
+
     private void persistConfig()
     {
         try
@@ -426,8 +580,11 @@ public void stop()
                 configFile.toFile(),
                 new AdminConfig(importerEntries, globalSchedule, nextSailSysRaceId,
                     targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold,
-                    sailsysCacheMaxAgeDays, sailsysHttpDelayMs, sailsysRecentRaceDays,
-                    clubCertificateWeight));
+                    sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
+                    sailsysHttpDelayMs, sailsysRecentRaceDays, sailsysNotFoundThreshold,
+                    clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
+                    hpfOuterDampingFactor, hpfOuterConvergenceThreshold, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
+                    slidingAverageCount, googleClientId, googleClientSecret, authBaseUrl, authAllowedDomain));
         }
         catch (IOException e)
         {

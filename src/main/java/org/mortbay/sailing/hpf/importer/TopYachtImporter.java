@@ -352,7 +352,8 @@ public class TopYachtImporter
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null)
             {
-                Club fromClub = store.findUniqueClubByShortName(me.clubCode, null);
+                Club fromClub = store.findUniqueClubByShortName(me.clubCode, null,
+                    "TopYacht boat sailNo=" + sailNo + " name=" + me.boatName);
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
@@ -375,6 +376,11 @@ public class TopYachtImporter
                 }
             }
 
+            if (me.elapsed != null && (me.elapsed.isNegative() || me.elapsed.isZero()))
+            {
+                LOG.warn("TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), me.elapsed);
+                continue;
+            }
             finishers.add(new Finisher(boat.id(), me.elapsed, divNS, certNumber));
         }
 
@@ -713,7 +719,8 @@ public class TopYachtImporter
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null)
             {
-                Club fromClub = store.findUniqueClubByShortName(row.clubCode(), null);
+                Club fromClub = store.findUniqueClubByShortName(row.clubCode(), null,
+                    "TopYacht boat sailNo=" + row.sailNo() + " name=" + row.boatName());
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
@@ -730,6 +737,11 @@ public class TopYachtImporter
                     nonSpinnaker, twoHanded, windwardLeeward);
             }
 
+            if (row.elapsed() != null && (row.elapsed().isNegative() || row.elapsed().isZero()))
+            {
+                LOG.warn("TopYacht: skipping finisher '{}': non-positive elapsed {}", boat.id(), row.elapsed());
+                continue;
+            }
             finishers.add(new Finisher(boat.id(), row.elapsed(), nonSpinnaker, certNumber));
         }
         return finishers;

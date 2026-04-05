@@ -7,7 +7,10 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.mortbay.sailing.hpf.analysis.BoatDerived;
+import org.mortbay.sailing.hpf.analysis.BoatHpf;
 import org.mortbay.sailing.hpf.analysis.DesignDerived;
+import org.mortbay.sailing.hpf.analysis.EntryResidual;
+import org.mortbay.sailing.hpf.analysis.HpfQuality;
 import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Club;
@@ -23,6 +26,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -30,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class AdminApiServlet extends HttpServlet
 {
@@ -62,6 +67,8 @@ public class AdminApiServlet extends HttpServlet
 
         if ("/stats".equals(path))
             handleStats(resp);
+        else if (path.matches("/boats/[^/]+/hpf"))
+            handleBoatHpf(path.replaceAll("^/boats/|/hpf$", ""), resp);
         else if (path.matches("/boats/[^/]+/reference"))
             handleBoatReference(path.replaceAll("^/boats/|/reference$", ""), resp);
         else if (path.startsWith("/boats"))
@@ -72,6 +79,18 @@ public class AdminApiServlet extends HttpServlet
             handleClubs(path.substring("/clubs".length()), req, resp);
         else if (path.startsWith("/races"))
             handleRaces(path.substring("/races".length()), req, resp);
+        else if ("/hpf/quality".equals(path))
+            handleHpfQuality(resp);
+        else if ("/comparison/candidates".equals(path))
+            handleComparisonCandidates(req, resp);
+        else if ("/comparison/chart".equals(path))
+            handleComparisonChart(req, resp);
+        else if ("/comparison/division".equals(path))
+            handleComparisonDivision(req, resp);
+        else if ("/design-comparison/candidates".equals(path))
+            handleDesignComparisonCandidates(req, resp);
+        else if ("/design-comparison/chart".equals(path))
+            handleDesignComparisonChart(req, resp);
         else if ("/importers/status".equals(path))
             handleImporterStatus(resp);
         else if ("/importers".equals(path))
@@ -220,14 +239,17 @@ public class AdminApiServlet extends HttpServlet
             {
                 Comparator<Boat> cmp = switch (sort)
                 {
-                    case "sailNumber" -> Comparator.comparing(Boat::sailNumber, Comparator.nullsLast(Comparator.naturalOrder()));
-                    case "name"       -> Comparator.comparing(Boat::name,       Comparator.nullsLast(Comparator.naturalOrder()));
-                    case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsLast(Comparator.naturalOrder()));
-                    case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "sailNumber" -> Comparator.comparing(Boat::sailNumber, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+                    case "name"       -> Comparator.comparing(Boat::name,       Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+                    case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+                    case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                     case "spinRef"    -> Comparator.comparing(
                                             (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.referenceFactors() != null && bd2.referenceFactors().spin() != null) ? bd2.referenceFactors().spin().value() : 0.0; },
                                             Comparator.<Double>naturalOrder());
-                    default           -> Comparator.comparing(Boat::id,         Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "hpf"        -> Comparator.comparing(
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.hpf() != null && bd2.hpf().spin() != null) ? bd2.hpf().spin().value() : 0.0; },
+                                            Comparator.<Double>naturalOrder());
+                    default           -> Comparator.comparing(Boat::id,         Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
             }
@@ -245,6 +267,9 @@ public class AdminApiServlet extends HttpServlet
                 BoatDerived bd = cache.boatDerived().get(b.id());
                 Factor spin = (bd != null && bd.referenceFactors() != null) ? bd.referenceFactors().spin() : null;
                 row.put("spinRef",    spin != null ? factorMap(spin) : null);
+                BoatHpf hpf = (bd != null) ? bd.hpf() : null;
+                Factor hpfSpin = (hpf != null) ? hpf.spin() : null;
+                row.put("hpf",       hpfSpin != null ? factorMap(hpfSpin) : null);
                 row.put("finishes", bd != null ? bd.raceIds().size() : 0);
                 row.put("excluded",   excl);
                 return row;
@@ -281,6 +306,75 @@ public class AdminApiServlet extends HttpServlet
         result.put("nonSpin",   factors != null ? factorMap(factors.nonSpin(),   factors.nonSpinGeneration())   : null);
         result.put("twoHanded", factors != null ? factorMap(factors.twoHanded(), factors.twoHandedGeneration()) : null);
         writeJson(resp, result);
+    }
+
+    private void handleBoatHpf(String id, HttpServletResponse resp) throws IOException
+    {
+        if (store.boats().get(id) == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        BoatDerived bd = cache.boatDerived().get(id);
+        BoatHpf hpf = bd != null ? bd.hpf() : null;
+        ReferenceFactors rf = bd != null ? bd.referenceFactors() : null;
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("boatId", id);
+        result.put("currentYear", cache.targetYear());
+
+        result.put("spin", hpfVariantMap(hpf != null ? hpf.spin() : null,
+            hpf != null ? hpf.referenceDeltaSpin() : 0.0,
+            hpf != null ? hpf.spinRaceCount() : 0));
+        result.put("nonSpin", hpfVariantMap(hpf != null ? hpf.nonSpin() : null,
+            hpf != null ? hpf.referenceDeltaNonSpin() : 0.0,
+            hpf != null ? hpf.nonSpinRaceCount() : 0));
+        result.put("twoHanded", hpfVariantMap(hpf != null ? hpf.twoHanded() : null,
+            hpf != null ? hpf.referenceDeltaTwoHanded() : 0.0,
+            hpf != null ? hpf.twoHandedRaceCount() : 0));
+
+        // Reference factors for comparison
+        result.put("rfSpin", rf != null ? factorMap(rf.spin()) : null);
+        result.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
+        result.put("rfTwoHanded", rf != null ? factorMap(rf.twoHanded()) : null);
+
+        // Residuals
+        List<EntryResidual> residuals = cache.residualsByBoatId().get(id);
+        if (residuals != null)
+        {
+            List<Map<String, Object>> resList = new ArrayList<>();
+            for (EntryResidual r : residuals)
+            {
+                Map<String, Object> rm = new LinkedHashMap<>();
+                rm.put("raceId", r.raceId());
+                rm.put("division", r.divisionName());
+                rm.put("date", r.raceDate().toString());
+                rm.put("nonSpinnaker", r.nonSpinnaker());
+                rm.put("twoHanded", r.twoHanded());
+                rm.put("residual", r.residual());
+                rm.put("weight", r.weight());
+                resList.add(rm);
+            }
+            result.put("residuals", resList);
+        }
+        else
+        {
+            result.put("residuals", List.of());
+        }
+
+        writeJson(resp, result);
+    }
+
+    private Map<String, Object> hpfVariantMap(Factor f, double referenceDelta, int raceCount)
+    {
+        if (f == null) return null;
+        if (Double.isNaN(f.value()) || Double.isNaN(f.weight())) return null;
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("value", f.value());
+        m.put("weight", f.weight());
+        m.put("referenceDelta", referenceDelta);
+        m.put("raceCount", raceCount);
+        return m;
     }
 
     private void handleClubs(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
@@ -529,9 +623,285 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    private void handleComparisonCandidates(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String boatQ  = req.getParameter("boatQ");
+        String designQ = req.getParameter("designQ");
+        String lowerBoat   = boatQ   != null && !boatQ.isBlank()   ? boatQ.toLowerCase()   : null;
+        String lowerDesign = designQ != null && !designQ.isBlank() ? designQ.toLowerCase() : null;
+        boolean allAvailable = "true".equals(req.getParameter("allAvailable"));
+
+        String boatIdsParam = req.getParameter("boatIds");
+        List<String> selectedBoatIds = (boatIdsParam != null && !boatIdsParam.isBlank())
+            ? Arrays.asList(boatIdsParam.split(","))
+            : List.of();
+
+        // Intersect co-racer sets to find boats that have raced with ALL selected boats
+        Set<String> validBoatIds = null;
+        if (!allAvailable && !selectedBoatIds.isEmpty())
+        {
+            for (String cId : selectedBoatIds)
+            {
+                BoatDerived cbd = cache.boatDerived().get(cId.trim());
+                if (cbd == null) continue;
+                Set<String> coRacers = new HashSet<>();
+                for (String rId : cbd.raceIds())
+                {
+                    var race = store.races().get(rId);
+                    if (race == null || race.divisions() == null) continue;
+                    for (var div : race.divisions())
+                        for (var f : div.finishers())
+                            coRacers.add(f.boatId());
+                }
+                if (validBoatIds == null)
+                    validBoatIds = new HashSet<>(coRacers);
+                else
+                    validBoatIds.retainAll(coRacers);
+            }
+        }
+
+        final Set<String> finalValidBoatIds = validBoatIds;
+        final Set<String> selectedSet = new HashSet<>(selectedBoatIds);
+
+        List<Map<String, Object>> boats = cache.boatDerived().values().stream()
+            .filter(bd -> !store.isBoatExcluded(bd.boat().id())
+                && (bd.boat().designId() == null || !store.isDesignExcluded(bd.boat().designId())))
+            .filter(bd -> !selectedSet.contains(bd.boat().id()))
+            .filter(bd -> finalValidBoatIds == null || finalValidBoatIds.contains(bd.boat().id()))
+            .filter(bd -> lowerBoat == null
+                || bd.boat().id().toLowerCase().contains(lowerBoat)
+                || bd.boat().name().toLowerCase().contains(lowerBoat)
+                || (bd.boat().sailNumber() != null && bd.boat().sailNumber().toLowerCase().contains(lowerBoat)))
+            .sorted(Comparator.comparing(bd -> bd.boat().name(), Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .limit(100)
+            .map(bd ->
+            {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id",         bd.boat().id());
+                m.put("name",       bd.boat().name());
+                m.put("sailNumber", bd.boat().sailNumber());
+                m.put("designId",   bd.boat().designId());
+                return m;
+            })
+            .collect(Collectors.toList());
+
+        // Design candidates: if filtered, only designs whose boats appear in validBoatIds
+        Set<String> validDesignIds = null;
+        if (!allAvailable && finalValidBoatIds != null)
+        {
+            validDesignIds = new HashSet<>();
+            for (String bId : finalValidBoatIds)
+            {
+                BoatDerived bd = cache.boatDerived().get(bId);
+                if (bd != null && bd.boat().designId() != null)
+                    validDesignIds.add(bd.boat().designId());
+            }
+        }
+        final Set<String> finalValidDesignIds = validDesignIds;
+
+        List<Map<String, Object>> designs = cache.designDerived().values().stream()
+            .filter(dd -> !store.isDesignExcluded(dd.design().id()))
+            .filter(dd -> finalValidDesignIds == null || finalValidDesignIds.contains(dd.design().id()))
+            .filter(dd -> lowerDesign == null
+                || dd.design().id().toLowerCase().contains(lowerDesign)
+                || dd.design().canonicalName().toLowerCase().contains(lowerDesign))
+            .sorted(Comparator.comparing(dd -> dd.design().canonicalName(), Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .limit(100)
+            .map(dd ->
+            {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id",            dd.design().id());
+                m.put("canonicalName", dd.design().canonicalName());
+                return m;
+            })
+            .collect(Collectors.toList());
+
+        writeJson(resp, Map.of("boats", boats, "designs", designs));
+    }
+
+    private void handleComparisonChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String boatIdsParam   = req.getParameter("boatIds");
+        String designIdsParam = req.getParameter("designIds");
+        List<String> boatIds   = (boatIdsParam   != null && !boatIdsParam.isBlank())
+            ? Arrays.asList(boatIdsParam.split(","))   : List.of();
+        List<String> designIds = (designIdsParam != null && !designIdsParam.isBlank())
+            ? Arrays.asList(designIdsParam.split(",")) : List.of();
+
+        List<Map<String, Object>> boatData = new ArrayList<>();
+        for (String rawId : boatIds)
+        {
+            String boatId = rawId.trim();
+            if (boatId.isEmpty()) continue;
+            BoatDerived bd = cache.boatDerived().get(boatId);
+            if (bd == null) continue;
+
+            Map<String, Object> bm = new LinkedHashMap<>();
+            bm.put("id",         boatId);
+            bm.put("name",       bd.boat().name());
+            bm.put("sailNumber", bd.boat().sailNumber());
+
+            ReferenceFactors rf = bd.referenceFactors();
+            bm.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
+            bm.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
+
+            BoatHpf hpf = bd.hpf();
+            bm.put("hpfSpin",      hpf != null ? factorMap(hpf.spin())      : null);
+            bm.put("hpfNonSpin",   hpf != null ? factorMap(hpf.nonSpin())   : null);
+            bm.put("hpfTwoHanded", hpf != null ? factorMap(hpf.twoHanded()) : null);
+
+            List<EntryResidual> residuals = cache.residualsByBoatId().get(boatId);
+            List<Map<String, Object>> entries = new ArrayList<>();
+            if (residuals != null && hpf != null)
+            {
+                for (EntryResidual r : residuals)
+                {
+                    Factor hpfVariant = r.twoHanded() ? hpf.twoHanded()
+                        : r.nonSpinnaker() ? hpf.nonSpin() : hpf.spin();
+                    if (hpfVariant == null || Double.isNaN(hpfVariant.value())) continue;
+                    double backCalcFactor = hpfVariant.value() * Math.exp(-r.residual());
+                    // Look up race name and series name for hover text
+                    Race race = store.races().get(r.raceId());
+                    String raceName = race != null ? race.name() : null;
+                    String seriesName = null;
+                    String seriesId   = null;
+                    if (race != null && race.seriesIds() != null && !race.seriesIds().isEmpty())
+                    {
+                        seriesId = race.seriesIds().getFirst();
+                        var club = store.clubs().get(race.clubId());
+                        if (club != null && club.series() != null)
+                            for (var s : club.series())
+                                if (seriesId.equals(s.id())) { seriesName = s.name(); break; }
+                        if (seriesName == null) seriesName = seriesId;
+                    }
+                    Map<String, Object> em = new LinkedHashMap<>();
+                    em.put("date",           r.raceDate().toString());
+                    em.put("raceId",         r.raceId());
+                    em.put("raceName",       raceName);
+                    em.put("seriesName",     seriesName);
+                    em.put("seriesId",       seriesId);
+                    em.put("division",       r.divisionName());
+                    em.put("backCalcFactor", backCalcFactor);
+                    em.put("nonSpinnaker",   r.nonSpinnaker());
+                    em.put("twoHanded",      r.twoHanded());
+                    em.put("weight",         r.weight());
+                    entries.add(em);
+                }
+            }
+            bm.put("entries", entries);
+            boatData.add(bm);
+        }
+
+        List<Map<String, Object>> designData = new ArrayList<>();
+        for (String rawId : designIds)
+        {
+            String designId = rawId.trim();
+            if (designId.isEmpty()) continue;
+            DesignDerived dd = cache.designDerived().get(designId);
+            if (dd == null) continue;
+
+            Map<String, Object> dm = new LinkedHashMap<>();
+            dm.put("id",            designId);
+            dm.put("canonicalName", dd.design().canonicalName());
+            ReferenceFactors rf = dd.referenceFactors();
+            dm.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
+            dm.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
+            designData.add(dm);
+        }
+
+        writeJson(resp, Map.of("boats", boatData, "designs", designData));
+    }
+
+    private void handleComparisonDivision(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String raceId      = req.getParameter("raceId");
+        String divisionName = req.getParameter("divisionName");
+        if (raceId == null || divisionName == null) { resp.sendError(400); return; }
+
+        Race race = store.races().get(raceId);
+        if (race == null) { resp.sendError(404); return; }
+
+        var div = race.divisions() == null ? null
+            : race.divisions().stream().filter(d -> divisionName.equals(d.name())).findFirst().orElse(null);
+        if (div == null) { resp.sendError(404); return; }
+
+        List<Map<String, Object>> finishers = new ArrayList<>();
+        Set<String> variantsUsed = new java.util.LinkedHashSet<>();
+        for (var f : div.finishers())
+        {
+            BoatDerived bd = cache.boatDerived().get(f.boatId());
+            if (bd == null || f.elapsedTime() == null) continue;
+
+            ReferenceFactors rf  = bd.referenceFactors();
+            BoatHpf          hpf = bd.hpf();
+
+            // Use each finisher's own nonSpinnaker flag to pick the correct variant
+            String fVariant = f.nonSpinnaker() ? "nonSpin" : "spin";
+            variantsUsed.add(fVariant);
+
+            Factor hpfFactor = hpf == null ? null : switch (fVariant)
+            {
+                case "nonSpin" -> hpf.nonSpin();
+                default        -> hpf.spin();
+            };
+            Factor rfFactor = rf == null ? null : switch (fVariant)
+            {
+                case "nonSpin" -> rf.nonSpin();
+                default        -> rf.spin();
+            };
+
+            double elapsedSec = f.elapsedTime().toSeconds();
+            Double hpfVal = hpfFactor != null && !Double.isNaN(hpfFactor.value()) ? hpfFactor.value() : null;
+            Double rfVal  = rfFactor  != null && !Double.isNaN(rfFactor.value())  ? rfFactor.value()  : null;
+
+            Map<String, Object> fm = new LinkedHashMap<>();
+            fm.put("boatId",      f.boatId());
+            fm.put("name",        bd.boat().name());
+            fm.put("sailNumber",  bd.boat().sailNumber());
+            fm.put("elapsed",     elapsedSec);
+            fm.put("variant",     fVariant);
+            fm.put("hpf",         hpfVal);
+            fm.put("rf",          rfVal);
+            fm.put("hpfWeight",   hpfFactor != null ? hpfFactor.weight() : null);
+            fm.put("rfWeight",    rfFactor  != null ? rfFactor.weight()  : null);
+            fm.put("hpfCorrected", hpfVal != null && hpfVal > 0 ? elapsedSec * hpfVal : null);
+            fm.put("rfCorrected",  rfVal  != null && rfVal  > 0 ? elapsedSec * rfVal  : null);
+            finishers.add(fm);
+        }
+        String divisionVariant = variantsUsed.size() == 1 ? variantsUsed.iterator().next() : "mixed";
+
+        // Sort by HPF value ascending (nulls last)
+        finishers.sort(Comparator.comparing(
+            m -> (Double) m.get("hpf"), Comparator.nullsLast(Comparator.naturalOrder())));
+
+        // Race metadata
+        String seriesName = null;
+        if (race.seriesIds() != null && !race.seriesIds().isEmpty())
+        {
+            String firstSeriesId = race.seriesIds().getFirst();
+            var club = store.clubs().get(race.clubId());
+            if (club != null && club.series() != null)
+                for (var s : club.series())
+                    if (firstSeriesId.equals(s.id())) { seriesName = s.name(); break; }
+            if (seriesName == null) seriesName = firstSeriesId;
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("raceId",      raceId);
+        result.put("raceName",    race.name());
+        result.put("seriesName",  seriesName);
+        result.put("date",        race.date() != null ? race.date().toString() : null);
+        result.put("divisionName",    divisionName);
+        result.put("divisionVariant", divisionVariant);
+        result.put("finishers",       finishers);
+        writeJson(resp, result);
+    }
+
     private Map<String, Object> factorMap(Factor f)
     {
         if (f == null)
+            return null;
+        if (Double.isNaN(f.value()) || Double.isNaN(f.weight()))
             return null;
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("value",  f.value());
@@ -542,6 +912,8 @@ public class AdminApiServlet extends HttpServlet
     private Map<String, Object> factorMap(Factor f, int generation)
     {
         if (f == null)
+            return null;
+        if (Double.isNaN(f.value()) || Double.isNaN(f.weight()))
             return null;
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("value",      f.value());
@@ -573,11 +945,11 @@ public class AdminApiServlet extends HttpServlet
             {
                 Comparator<Design> cmp = switch (sort)
                 {
-                    case "canonicalName" -> Comparator.comparing(Design::canonicalName, Comparator.nullsLast(Comparator.naturalOrder()));
+                    case "canonicalName" -> Comparator.comparing(Design::canonicalName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                     case "spinRef"       -> Comparator.comparing(
                                                (Design d2) -> { DesignDerived dd2 = cache.designDerived().get(d2.id()); return (dd2 != null && dd2.referenceFactors() != null && dd2.referenceFactors().spin() != null) ? dd2.referenceFactors().spin().value() : 0.0; },
                                                Comparator.<Double>naturalOrder());
-                    default              -> Comparator.comparing(Design::id, Comparator.nullsLast(Comparator.naturalOrder()));
+                    default              -> Comparator.comparing(Design::id, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                 };
                 all.sort(asc ? cmp : cmp.reversed());
             }
@@ -622,13 +994,15 @@ public class AdminApiServlet extends HttpServlet
             boolean asc = !"desc".equals(req.getParameter("dir"));
             String lower = q != null && !q.isBlank() ? q.toLowerCase() : null;
 
-            String filterBoatId = req.getParameter("boatId");
-            String filterClubId = req.getParameter("clubId");
+            String filterBoatId   = req.getParameter("boatId");
+            String filterClubId   = req.getParameter("clubId");
+            String filterSeriesId = req.getParameter("seriesId");
             boolean showExcluded = "true".equals(req.getParameter("showExcluded"));
             // Enrich all filtered rows — needed to allow sort by seriesName or finishers
             List<Map<String, Object>> enriched = store.races().values().stream()
-                .filter(r -> filterBoatId == null || raceContainsBoat(r, filterBoatId))
-                .filter(r -> filterClubId == null || filterClubId.equals(r.clubId()))
+                .filter(r -> filterBoatId   == null || raceContainsBoat(r, filterBoatId))
+                .filter(r -> filterClubId   == null || filterClubId.equals(r.clubId()))
+                .filter(r -> filterSeriesId == null || (r.seriesIds() != null && r.seriesIds().contains(filterSeriesId)))
                 .filter(r -> lower == null
                     || r.id().toLowerCase().contains(lower)
                     || (r.clubId() != null && r.clubId().toLowerCase().contains(lower)))
@@ -712,14 +1086,82 @@ public class AdminApiServlet extends HttpServlet
                     finishers += div.finishers().size();
 
         Map<String, Object> row = new LinkedHashMap<>();
+        String firstSeriesId = (r.seriesIds() != null && !r.seriesIds().isEmpty())
+            ? r.seriesIds().getFirst() : null;
         row.put("id", r.id());
         row.put("clubId", r.clubId());
         row.put("date", r.date());
         row.put("seriesName", seriesName);
+        row.put("seriesId", firstSeriesId);
         row.put("name", r.name());
         row.put("finishers", finishers);
         row.put("excluded", store.isRaceExcluded(r.id()) || isRaceAllExcluded(r));
+
+        var rd = cache.raceDerived().get(r.id());
+        if (rd != null && rd.divisionHpfs() != null && !rd.divisionHpfs().isEmpty())
+        {
+            var divs = rd.divisionHpfs();
+            String refTime = divs.size() == 1
+                ? formatRefTime(divs.getFirst().referenceTimeNanos())
+                : IntStream.range(0, divs.size())
+                    .mapToObj(i -> {
+                        var dh = divs.get(i);
+                        String label = dh.divisionName() != null ? dh.divisionName()
+                            : "Div " + (char)('A' + i);
+                        return label + ": " + formatRefTime(dh.referenceTimeNanos());
+                    })
+                    .collect(Collectors.joining(" / "));
+            row.put("referenceTime", refTime);
+        }
+
         return row;
+    }
+
+    private static String formatRefTime(double nanos)
+    {
+        long seconds = Math.round(nanos / 1_000_000_000.0);
+        long h = seconds / 3600;
+        long m = (seconds % 3600) / 60;
+        long s = seconds % 60;
+        return String.format("%d:%02d:%02d", h, m, s);
+    }
+
+    private void handleHpfQuality(HttpServletResponse resp) throws IOException
+    {
+        HpfQuality q = cache.hpfQuality();
+        if (q == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("boatsWithHpf", q.boatsWithHpf());
+        result.put("totalEntries", q.totalEntries());
+        result.put("divisionsUsed", q.divisionsUsed());
+        result.put("innerIterations", q.innerIterations());
+        result.put("outerIterations", q.outerIterations());
+        result.put("innerConverged", q.innerConverged());
+        result.put("outerConverged", q.outerConverged());
+        result.put("finalMaxDelta", q.finalMaxDelta());
+        result.put("finalMaxWeightChange", q.finalMaxWeightChange());
+        result.put("medianResidual", q.medianResidual());
+        result.put("iqrResidual", q.iqrResidual());
+        result.put("pct95Residual", q.pct95Residual());
+        result.put("downWeightedEntries", q.downWeightedEntries());
+        result.put("highDispersionDivisions", q.highDispersionDivisions());
+        result.put("medianBoatConfidence", q.medianBoatConfidence());
+        result.put("outerDeltaTrace", q.outerDeltaTrace());
+        Map<String, Object> cfg = new LinkedHashMap<>();
+        cfg.put("lambda", q.config().lambda());
+        cfg.put("convergenceThreshold", q.config().convergenceThreshold());
+        cfg.put("maxInnerIterations", q.config().maxInnerIterations());
+        cfg.put("maxOuterIterations", q.config().maxOuterIterations());
+        cfg.put("outlierK", q.config().outlierK());
+        cfg.put("asymmetryFactor", q.config().asymmetryFactor());
+        cfg.put("outerDampingFactor", q.config().outerDampingFactor());
+        cfg.put("outerConvergenceThreshold", q.config().outerConvergenceThreshold());
+        result.put("config", cfg);
+        writeJson(resp, result);
     }
 
     private void handleImporters(HttpServletResponse resp) throws IOException
@@ -736,6 +1178,7 @@ public class AdminApiServlet extends HttpServlet
             row.put("name", e.name());
             row.put("mode", e.mode());
             row.put("includeInSchedule", e.includeInSchedule());
+            row.put("runAtStartup", e.runAtStartup());
             row.put("status", isRunning ? "running" : "idle");
             row.put("nextStartId", "sailsys-races".equals(e.name()) ? nextSailSysRaceId : null);
             entries.add(row);
@@ -745,6 +1188,17 @@ public class AdminApiServlet extends HttpServlet
         result.put("schedule", importerService.globalSchedule());
         result.put("targetIrcYear", importerService.targetIrcYear());
         result.put("outlierSigma", importerService.outlierSigma());
+        Map<String, Object> hpfConfig = new LinkedHashMap<>();
+        hpfConfig.put("lambda", importerService.hpfLambda());
+        hpfConfig.put("convergenceThreshold", importerService.hpfConvergenceThreshold());
+        hpfConfig.put("maxInnerIterations", importerService.hpfMaxInnerIterations());
+        hpfConfig.put("maxOuterIterations", importerService.hpfMaxOuterIterations());
+        hpfConfig.put("outlierK", importerService.hpfOutlierK());
+        hpfConfig.put("asymmetryFactor", importerService.hpfAsymmetryFactor());
+        hpfConfig.put("outerDampingFactor", importerService.hpfOuterDampingFactor());
+        hpfConfig.put("outerConvergenceThreshold", importerService.hpfOuterConvergenceThreshold());
+        result.put("hpfConfig", hpfConfig);
+        result.put("slidingAverageCount", importerService.slidingAverageCount());
         writeJson(resp, result);
     }
 
@@ -804,7 +1258,8 @@ public class AdminApiServlet extends HttpServlet
                 .map(m -> new ImporterService.ImporterEntry(
                     (String) m.get("name"),
                     (String) m.get("mode"),
-                    Boolean.TRUE.equals(m.get("includeInSchedule"))))
+                    Boolean.TRUE.equals(m.get("includeInSchedule")),
+                    Boolean.TRUE.equals(m.get("runAtStartup"))))
                 .toList();
 
             Object rawYear = body.get("targetIrcYear");
@@ -815,8 +1270,36 @@ public class AdminApiServlet extends HttpServlet
             Double outlierSigma = (rawSigma instanceof Number n && n.doubleValue() > 0)
                 ? n.doubleValue() : null;
 
+            // HPF config params
+            Object rawLambda = body.get("hpfLambda");
+            Double hpfLambda = (rawLambda instanceof Number n2 && n2.doubleValue() > 0)
+                ? n2.doubleValue() : null;
+            Object rawThreshold = body.get("hpfConvergenceThreshold");
+            Double hpfConvergenceThreshold = (rawThreshold instanceof Number n3 && n3.doubleValue() > 0)
+                ? n3.doubleValue() : null;
+            Object rawMaxInner = body.get("hpfMaxInnerIterations");
+            Integer hpfMaxInnerIterations = (rawMaxInner instanceof Number n4 && n4.intValue() > 0)
+                ? n4.intValue() : null;
+            Object rawMaxOuter = body.get("hpfMaxOuterIterations");
+            Integer hpfMaxOuterIterations = (rawMaxOuter instanceof Number n5 && n5.intValue() > 0)
+                ? n5.intValue() : null;
+            Object rawOutlierK = body.get("hpfOutlierK");
+            Double hpfOutlierK = (rawOutlierK instanceof Number n6 && n6.doubleValue() > 0)
+                ? n6.doubleValue() : null;
+            Object rawAsymmetry = body.get("hpfAsymmetryFactor");
+            Double hpfAsymmetryFactor = (rawAsymmetry instanceof Number n7 && n7.doubleValue() > 0)
+                ? n7.doubleValue() : null;
+            Object rawDamping = body.get("hpfOuterDampingFactor");
+            Double hpfOuterDampingFactor = (rawDamping instanceof Number n8 && n8.doubleValue() > 0 && n8.doubleValue() <= 1.0)
+                ? n8.doubleValue() : null;
+            Object rawOuterConvergence = body.get("hpfOuterConvergenceThreshold");
+            Double hpfOuterConvergenceThreshold = (rawOuterConvergence instanceof Number n9 && n9.doubleValue() > 0)
+                ? n9.doubleValue() : null;
+
             importerService.setConfig(entries, new ImporterService.GlobalSchedule(days, time),
-                targetIrcYear, outlierSigma);
+                targetIrcYear, outlierSigma,
+                hpfLambda, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
+                hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold);
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }
@@ -837,9 +1320,11 @@ public class AdminApiServlet extends HttpServlet
             if (av == null && bv == null) return 0;
             if (av == null) return 1;   // nulls last
             if (bv == null) return -1;
+            if (av instanceof String as && bv instanceof String bs)
+                return String.CASE_INSENSITIVE_ORDER.compare(as, bs);
             if (av instanceof Comparable && bv instanceof Comparable)
                 return ((Comparable<Object>) av).compareTo(bv);
-            return av.toString().compareTo(bv.toString());
+            return av.toString().compareToIgnoreCase(bv.toString());
         };
         return asc ? cmp : cmp.reversed();
     }
@@ -875,5 +1360,173 @@ public class AdminApiServlet extends HttpServlet
     private void writeJson(HttpServletResponse resp, Object obj) throws IOException
     {
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(resp.getWriter(), obj);
+    }
+
+    private void handleDesignComparisonCandidates(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String designAId = req.getParameter("designAId");
+        String q         = req.getParameter("q");
+        String lowerQ    = q != null && !q.isBlank() ? q.toLowerCase() : null;
+
+        // When designAId is given, restrict to designs that co-raced with any boat of design A
+        Set<String> validDesignIds = null;
+        if (designAId != null && !designAId.isBlank())
+        {
+            DesignDerived dda = cache.designDerived().get(designAId.trim());
+            if (dda != null && dda.boatIds() != null)
+            {
+                validDesignIds = new HashSet<>();
+                for (String boatIdA : dda.boatIds())
+                {
+                    BoatDerived bda = cache.boatDerived().get(boatIdA);
+                    if (bda == null) continue;
+                    for (String raceId : bda.raceIds())
+                    {
+                        Race race = store.races().get(raceId);
+                        if (race == null || race.divisions() == null) continue;
+                        for (var div : race.divisions())
+                        {
+                            boolean hasA = div.finishers().stream()
+                                .anyMatch(f -> dda.boatIds().contains(f.boatId()));
+                            if (!hasA) continue;
+                            for (var f : div.finishers())
+                            {
+                                BoatDerived bd = cache.boatDerived().get(f.boatId());
+                                if (bd != null && bd.boat().designId() != null)
+                                    validDesignIds.add(bd.boat().designId());
+                            }
+                        }
+                    }
+                }
+                validDesignIds.remove(designAId.trim());
+            }
+        }
+
+        final Set<String> finalValid = validDesignIds;
+        List<Map<String, Object>> designs = cache.designDerived().values().stream()
+            .filter(dd -> !store.isDesignExcluded(dd.design().id()))
+            .filter(dd -> finalValid == null || finalValid.contains(dd.design().id()))
+            .filter(dd -> lowerQ == null
+                || dd.design().id().toLowerCase().contains(lowerQ)
+                || dd.design().canonicalName().toLowerCase().contains(lowerQ))
+            .sorted(Comparator.comparing(dd -> dd.design().canonicalName(),
+                Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)))
+            .limit(200)
+            .map(dd ->
+            {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id",            dd.design().id());
+                m.put("canonicalName", dd.design().canonicalName());
+                ReferenceFactors rf = dd.referenceFactors();
+                m.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
+                m.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
+                return m;
+            })
+            .collect(Collectors.toList());
+
+        writeJson(resp, Map.of("designs", designs));
+    }
+
+    private void handleDesignComparisonChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String designAId = req.getParameter("designAId");
+        String designBId = req.getParameter("designBId");
+        if (designAId == null || designBId == null) { resp.sendError(400); return; }
+        designAId = designAId.trim();
+        designBId = designBId.trim();
+
+        DesignDerived dda = cache.designDerived().get(designAId);
+        DesignDerived ddb = cache.designDerived().get(designBId);
+        if (dda == null || ddb == null) { resp.sendError(404); return; }
+
+        Set<String> boatIdsA = dda.boatIds() != null ? dda.boatIds() : Set.of();
+        Set<String> boatIdsB = ddb.boatIds() != null ? ddb.boatIds() : Set.of();
+
+        // Collect races from all boats of design A
+        Set<String> racesToCheck = new HashSet<>();
+        for (String bid : boatIdsA)
+        {
+            BoatDerived bd = cache.boatDerived().get(bid);
+            if (bd != null) racesToCheck.addAll(bd.raceIds());
+        }
+
+        List<Map<String, Object>> points = new ArrayList<>();
+        for (String raceId : racesToCheck)
+        {
+            Race race = store.races().get(raceId);
+            if (race == null || race.divisions() == null) continue;
+
+            for (var div : race.divisions())
+            {
+                List<Double> aElapsed = new ArrayList<>();
+                List<Double> bElapsed = new ArrayList<>();
+                List<String> aNames   = new ArrayList<>();
+                List<String> bNames   = new ArrayList<>();
+
+                for (var f : div.finishers())
+                {
+                    if (f.elapsedTime() == null) continue;
+                    double elapsed = f.elapsedTime().toSeconds();
+                    BoatDerived bd = cache.boatDerived().get(f.boatId());
+                    String name = bd != null ? bd.boat().name() : f.boatId();
+                    if (boatIdsA.contains(f.boatId())) { aElapsed.add(elapsed); aNames.add(name); }
+                    if (boatIdsB.contains(f.boatId())) { bElapsed.add(elapsed); bNames.add(name); }
+                }
+
+                if (aElapsed.isEmpty() || bElapsed.isEmpty()) continue;
+
+                String seriesName = null;
+                if (race.seriesIds() != null && !race.seriesIds().isEmpty())
+                {
+                    String seriesId = race.seriesIds().getFirst();
+                    var club = store.clubs().get(race.clubId());
+                    if (club != null && club.series() != null)
+                        for (var s : club.series())
+                            if (seriesId.equals(s.id())) { seriesName = s.name(); break; }
+                    if (seriesName == null) seriesName = seriesId;
+                }
+
+                Map<String, Object> pt = new LinkedHashMap<>();
+                pt.put("x",          medianOf(bElapsed));
+                pt.put("y",          medianOf(aElapsed));
+                pt.put("date",       race.date() != null ? race.date().toString() : null);
+                pt.put("raceId",     raceId);
+                pt.put("raceName",   race.name());
+                pt.put("seriesName", seriesName);
+                pt.put("division",   div.name());
+                pt.put("aBoats",     aNames);
+                pt.put("bBoats",     bNames);
+                points.add(pt);
+            }
+        }
+
+        points.sort(Comparator.comparing(m -> (String) m.get("date"),
+            Comparator.nullsLast(Comparator.naturalOrder())));
+
+        ReferenceFactors rfA = dda.referenceFactors();
+        ReferenceFactors rfB = ddb.referenceFactors();
+
+        Map<String, Object> designA = new LinkedHashMap<>();
+        designA.put("id",            designAId);
+        designA.put("canonicalName", dda.design().canonicalName());
+        designA.put("rfSpin",    rfA != null ? factorMap(rfA.spin())    : null);
+        designA.put("rfNonSpin", rfA != null ? factorMap(rfA.nonSpin()) : null);
+
+        Map<String, Object> designB = new LinkedHashMap<>();
+        designB.put("id",            designBId);
+        designB.put("canonicalName", ddb.design().canonicalName());
+        designB.put("rfSpin",    rfB != null ? factorMap(rfB.spin())    : null);
+        designB.put("rfNonSpin", rfB != null ? factorMap(rfB.nonSpin()) : null);
+
+        writeJson(resp, Map.of("designA", designA, "designB", designB, "points", points));
+    }
+
+    private double medianOf(List<Double> values)
+    {
+        List<Double> sorted = values.stream().sorted().toList();
+        int n = sorted.size();
+        return n % 2 == 0
+            ? (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2.0
+            : sorted.get(n / 2);
     }
 }

@@ -485,7 +485,7 @@ class DataStoreTest {
                 List.of(), List.of(), List.of(), null);
         store.putClub(club);
 
-        Club found = store.findUniqueClubByShortName("Test Yacht Club", null);
+        Club found = store.findUniqueClubByShortName("Test Yacht Club", null, "test");
 
         assertNotNull(found);
         assertEquals("test.example.com", found.id());
@@ -499,7 +499,7 @@ class DataStoreTest {
                 List.of("TYC/OTHER"), List.of(), List.of(), null);
         store.putClub(club);
 
-        Club found = store.findUniqueClubByShortName("TYC/OTHER", null);
+        Club found = store.findUniqueClubByShortName("TYC/OTHER", null, "test");
 
         assertNotNull(found);
         assertEquals("test.example.com", found.id());
@@ -517,7 +517,7 @@ class DataStoreTest {
         store.putClub(clubA);
         store.putClub(clubB);
 
-        Club found = store.findUniqueClubByShortName("Y", null);
+        Club found = store.findUniqueClubByShortName("Y", null, "test");
 
         assertNotNull(found);
         assertEquals("b.example.com", found.id());
@@ -531,7 +531,7 @@ class DataStoreTest {
                 List.of(), List.of(), List.of(), null);
         store.putClub(club);
 
-        Club found = store.findUniqueClubByShortName("TYC/OTHER", null);
+        Club found = store.findUniqueClubByShortName("TYC/OTHER", null, "test");
 
         assertNotNull(found);
         assertEquals("test.example.com", found.id());
@@ -542,7 +542,7 @@ class DataStoreTest {
         DataStore store = new DataStore(tempDir);
         store.start();
 
-        Club found = store.findUniqueClubByShortName("Nonexistent Club", null);
+        Club found = store.findUniqueClubByShortName("Nonexistent Club", null, "test");
 
         assertNull(found);
     }

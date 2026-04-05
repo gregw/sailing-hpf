@@ -45,7 +45,7 @@ designs:
     - "FIRST 36.7"
     - "first367"
   archambaultgrandsurprise:
-    canonicalName: null
+    canonicalName: "Archambault Grand Surprise"
     aliases:
     - "Archambault 32"
     - "archambault32"
@@ -472,4 +472,55 @@ boats:
     - number: "521"
       from: null
       until: null
+  wild_thing_100-supermaxi:
+    canonicalName: "Wild Thing 100"
+    canonicalSailNumber: "AUS1001"
+    aliases:
+    - name: "Wild Thing 100"
+      from: null
+      until: null
+    altSailNumbers: []
+  wild_oats_x-reichelpugh66:
+    canonicalName: "Wild Oats X"
+    canonicalSailNumber: "7001"
+    aliases:
+    - name: "Wild Oats X"
+      from: null
+      until: null
+    altSailNumbers: []
+  wild_oats_x:
+    canonicalName: "WILD OATS X"
+    canonicalSailNumber: "AUS7001"
+    aliases:
+    - name: "Wild Oats X"
+      from: null
+      until: null
+    altSailNumbers:
+    - number: "7001"
+      from: null
+      until: null
+  esprit-archambaultgrandsurprise:
+    canonicalName: "Esprit"
+    canonicalSailNumber: "MYC32"
+    aliases:
+    - name: "Esprit"
+      from: null
+      until: null
+    altSailNumbers: []
+  bazinga-archambaultgrandsurprise:
+    canonicalName: "Bazinga"
+    canonicalSailNumber: "N16"
+    aliases:
+    - name: "Bazinga"
+      from: null
+      until: null
+    altSailNumbers: []
+  remedy-archambaultgrandsurprise:
+    canonicalName: "Remedy"
+    canonicalSailNumber: "M2"
+    aliases:
+    - name: "Remedy"
+      from: null
+      until: null
+    altSailNumbers: []
 sailNumberRedirects: {}

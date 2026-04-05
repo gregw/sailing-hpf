@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HPF — Boat Comparison</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+</head>
+<body>
+<!-- INCLUDE _nav.html -->
+
+  <h1>Boat Comparison</h1>
+
+  <div class="comparison-controls">
+    <div class="selector-panels">
+      <div class="selector-panel">
+        <h3>Boats</h3>
+        <input type="text" id="boat-search" class="selector-search" placeholder="Search by name or sail number…"
+               title="Search boats by name, sail number, or ID">
+        <div id="boat-list" class="selector-list"></div>
+        <button id="add-boat-btn" disabled>Add Boat</button>
+      </div>
+    </div>
+    <div class="comparison-options-row">
+      <label class="all-available-label">
+        <input type="checkbox" id="all-available"
+               title="When unchecked, selectors only show boats/designs that have raced with every boat in the comparison list">
+        All available
+        <span style="color:#666;font-size:0.85rem;">(uncheck to show only boats that have raced with all comparison boats)</span>
+      </label>
+      <label class="variant-label">
+        Variant:
+        <select id="variant-selector" title="Which handicap variant to display">
+          <option value="spin">Spin</option>
+          <option value="nonSpin">Non-Spin</option>
+          <option value="twoHanded">Two-Handed</option>
+        </select>
+      </label>
+      <label title="Show weighted linear trend line per boat">
+        <input type="checkbox" id="show-trend-linear" checked> Linear trend
+      </label>
+      <label title="Show trailing N-finish weighted average per boat">
+        <input type="checkbox" id="show-trend-sliding" checked> Sliding average
+      </label>
+      <label title="Hide the chart legend">
+        <input type="checkbox" id="hide-legend"> Hide legend
+      </label>
+    </div>
+  </div>
+
+  <div id="chip-list" class="chip-list"></div>
+
+  <div style="font-weight:bold;margin-bottom:0.25rem;">Back Calculated Factor Comparison <a href="docs.html#chart-comparison" class="info-btn" data-tip="Scatter plot of back-calculated factor per race over time for each comparison boat. Each dot is one race result; hover for details." target="_blank">ⓘ</a></div>
+  <div id="comparison-chart" style="width:100%;height:960px;margin-top:0.5rem;"></div>
+
+  <div id="hpf-calc" style="display:none; margin-top:1.25rem;">
+    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="docs.html#table-hpf-calc" class="info-btn" data-tip="Enter a handicap for any boat to scale the others by their HPF ratio." target="_blank">ⓘ</a></h3>
+    <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
+      Enter a handicap for any boat — the others are scaled by HPF ratio.
+    </p>
+    <table class="hpf-calc-table"></table>
+  </div>
+
+
+  <script src="common.js"></script>
+  <script src="comparison.js"></script>
+</body>
+</html>

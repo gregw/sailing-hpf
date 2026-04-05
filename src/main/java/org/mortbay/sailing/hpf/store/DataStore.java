@@ -447,7 +447,7 @@ public class DataStore
      * whose long name matches (case-insensitive) as a tiebreaker.
      * Returns the club if there is exactly one match; null with a log if none or still ambiguous.
      */
-    public Club findUniqueClubByShortName(String shortName, String longName)
+    public Club findUniqueClubByShortName(String shortName, String longName, String context)
     {
         requireStarted();
         List<Club> allClubs = Stream.concat(
@@ -489,7 +489,7 @@ public class DataStore
 
         if (matches.isEmpty())
         {
-            LOG.info("No club found for name={}", shortName);
+            LOG.info("No club found for name={} ({})", shortName, context);
             return null;
         }
         if (matches.size() > 1 && longName != null && !longName.isBlank())
@@ -504,9 +504,10 @@ public class DataStore
         }
         if (matches.size() > 1)
         {
-            LOG.warn("Ambiguous name={} — {} matches ({}); clubId not set",
+            LOG.warn("Ambiguous club name={} — {} matches ({}); clubId not set ({})",
                 shortName, matches.size(),
-                matches.stream().map(c -> c.id() + "/" + c.state()).toList());
+                matches.stream().map(c -> c.id() + "/" + c.state()).toList(),
+                context);
             return null;
         }
         return matches.getFirst();
@@ -518,7 +519,7 @@ public class DataStore
      * State matching is exact (case-insensitive); a blank state matches only clubs
      * whose state is also blank or null.
      */
-    public Club findClubByShortName(String shortName, String state)
+    public Club findClubByShortName(String shortName, String state, String context)
     {
         requireStarted();
         boolean blankState = state == null || state.isBlank();
@@ -533,12 +534,13 @@ public class DataStore
             .toList();
         if (matches.isEmpty())
         {
-            LOG.error("Unknown club shortName={} state={}", shortName, state);
+            LOG.error("Unknown club shortName={} state={} ({})", shortName, state, context);
             return null;
         }
         if (matches.size() > 1)
         {
-            LOG.error("Ambiguous club shortName={} state={} — {} matches", shortName, state, matches.size());
+            LOG.error("Ambiguous club shortName={} state={} — {} matches ({})",
+                shortName, state, matches.size(), context);
             return null;
         }
         return matches.getFirst();
