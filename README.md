@@ -11,12 +11,11 @@ This project collects publicly available race results from Australian sailing cl
 elapsed times of competing boats, and computes a **Historical Performance Factor (HPF)** for
 each boat from that history.
 
-The HPF is the back-calculated handicap a boat would have needed, averaged across its racing
+The HPF is the back-calculated time correction factor a boat would have needed, averaged across its racing
 history, to have been equal-time with a hypothetical 1.000 reference boat. It is a measure of
 past performance, anchored where possible to independently verifiable measurement-based handicaps
 (IRC, ORC, AMS).  The HPF is a single number that combines results from multiple sources including 
-different types of races (e.g. inshore and offshore). It is intrinsically wrong and just an analysis 
-tool.
+different types of races (e.g. inshore and offshore). 
 
 Results and HPF values are presented graphically via a web interface, and are also available
 as open data via a REST JSON API for anyone who wishes to build on them.
