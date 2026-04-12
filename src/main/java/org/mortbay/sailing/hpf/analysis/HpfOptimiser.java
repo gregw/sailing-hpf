@@ -72,6 +72,7 @@ public class HpfOptimiser
         for (Race race : store.races().values())
         {
             if (store.isRaceExcluded(race.id())) continue;
+            if (store.isClubExcluded(race.clubId())) continue;
             if (race.divisions() == null) continue;
 
             // If the race's series name contains NS keywords, all finishers are non-spin
@@ -102,6 +103,8 @@ public class HpfOptimiser
                     if (store.isBoatExcluded(f.boatId())) continue;
 
                     BoatDerived bd = boatDerivedMap.get(f.boatId());
+                    if (bd != null && bd.boat().designId() != null
+                            && store.isDesignExcluded(bd.boat().designId())) continue;
                     if (bd == null || bd.referenceFactors() == null) continue;
 
                     ReferenceFactors rf = bd.referenceFactors();

@@ -109,8 +109,6 @@ Two importers handle SailSys data:
 - Infers certificates from `handicapCreatedFrom` in `calculations[]`
 - Propagates `nonSpinnaker` flag from race entries to inferred certificates
 - Recent race window: `sailsysRecentRaceDays` (default 14) for re-check of recently processed races
-- Fuzzy matching for boat resolution: Jaro-Winkler threshold `fuzzyMatchThreshold` (default 0.90)
-
 ---
 
 ## TopYacht

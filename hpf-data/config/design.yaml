@@ -164,8 +164,6 @@ boatDesignOverrides:
         name: "Remedy"
       - sailNumber: "N16"
         name: "Bazinga"
-      - sailNumber: "6750"
-        name: "Asterix"
       - sailNumber: "1919"
         name: "Lost Horizon"
   - designId: "archambaultsurprise"

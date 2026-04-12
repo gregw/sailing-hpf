@@ -115,8 +115,7 @@ public class TaskService
 
     private record AdminConfig(List<ImporterEntry> importers, GlobalSchedule schedule,
                                Integer nextSailSysRaceId, Integer targetIrcYear,
-                               Double outlierSigma, Double mergeCandidateThreshold,
-                               Double fuzzyMatchThreshold,
+                               Double outlierSigma,
                                Integer recentRaceReimportDays,      // null → default 90
                                Integer sailsysYoungCacheMaxAgeDays, // null → default 7
                                Integer sailsysOldCacheMaxAgeDays,   // null → default 352
@@ -170,8 +169,6 @@ public class TaskService
     private volatile Integer nextSailSysRaceId = null;   // null = start from 1
     private volatile Integer targetIrcYear = null;          // null = auto-detect from data
     private volatile Double outlierSigma = null;            // null = use default (2.5)
-    private volatile double mergeCandidateThreshold = 0.50; // JW threshold for similar-name merge candidate filter
-    private volatile double fuzzyMatchThreshold = 0.90;     // JW threshold for boat/design name matching in DataStore
     private volatile int recentRaceReimportDays = 30;
     private volatile int sailsysYoungCacheMaxAgeDays = 7;
     private volatile int sailsysOldCacheMaxAgeDays = 352;
@@ -239,13 +236,6 @@ public class TaskService
                 nextSailSysRaceId = config.nextSailSysRaceId();
             targetIrcYear = config.targetIrcYear();   // null is valid (auto-detect)
             outlierSigma = config.outlierSigma();    // null is valid (use default 2.5)
-            if (config.mergeCandidateThreshold() != null)
-                mergeCandidateThreshold = config.mergeCandidateThreshold();
-            if (config.fuzzyMatchThreshold() != null)
-            {
-                fuzzyMatchThreshold = config.fuzzyMatchThreshold();
-                store.setFuzzyThreshold(fuzzyMatchThreshold);
-            }
             if (config.recentRaceReimportDays() != null) recentRaceReimportDays = config.recentRaceReimportDays();
             if (config.sailsysYoungCacheMaxAgeDays() != null) sailsysYoungCacheMaxAgeDays = config.sailsysYoungCacheMaxAgeDays();
             if (config.sailsysOldCacheMaxAgeDays() != null) sailsysOldCacheMaxAgeDays = config.sailsysOldCacheMaxAgeDays();
@@ -419,16 +409,6 @@ public void stop()
     public Double outlierSigma()
     {
         return outlierSigma;
-    }
-
-    public double mergeCandidateThreshold()
-    {
-        return mergeCandidateThreshold;
-    }
-
-    public double fuzzyMatchThreshold()
-    {
-        return fuzzyMatchThreshold;
     }
 
     public double minAnalysisR2()
@@ -672,7 +652,7 @@ public void stop()
             Files.createDirectories(configFile.getParent());
             String yaml = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(
                 new AdminConfig(importerEntries, globalSchedule, nextSailSysRaceId,
-                    targetIrcYear, outlierSigma, mergeCandidateThreshold, fuzzyMatchThreshold,
+                    targetIrcYear, outlierSigma,
                     recentRaceReimportDays,
                     sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
                     sailsysHttpDelayMs, sailsysRecentRaceDays, sailsysNotFoundThreshold,

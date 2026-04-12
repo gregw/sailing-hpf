@@ -17,10 +17,11 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.apache.commons.text.similarity.JaroWinklerSimilarity;
+
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Certificate;
 import org.mortbay.sailing.hpf.data.Club;
@@ -53,13 +54,11 @@ import static org.eclipse.jetty.util.StringUtil.isNotBlank;
 public class DataStore
 {
     private static final Logger LOG = LoggerFactory.getLogger(DataStore.class);
-    private static final JaroWinklerSimilarity JARO_WINKLER = new JaroWinklerSimilarity();
-
-    private double fuzzyThreshold = 0.90;
     private static final JsonMapper MAPPER = JsonMapper.builder()
         .addModule(new JavaTimeModule())
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         .disable(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS)
+        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
         .build();
 
     private final Path root;
@@ -77,7 +76,7 @@ public class DataStore
     private Map<String, Club> clubs;      // persisted entities (from disk / putClub)
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
     private Aliases.Loaded aliases; // lookup-only alias data from aliases.yaml; never written to disk
-    private DesignLoader.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
+    private Designs.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
     private List<Maker> makers;
     private boolean makersDirty;
 
@@ -118,55 +117,14 @@ public class DataStore
         this.catalogueDir = root.resolve("catalogue");
     }
 
-    public void setFuzzyThreshold(double threshold)
-    {
-        this.fuzzyThreshold = threshold;
-    }
-
-    private boolean boatNameMatches(Boat candidate, String incomingName, String normIncoming)
-    {
-        if (IdGenerator.normaliseName(candidate.name()).equals(normIncoming))
-            return true;
-        if (candidate.aliases().stream().anyMatch(a -> a.equalsIgnoreCase(incomingName)))
-            return true;
-        if (candidate.aliases().stream().anyMatch(a -> IdGenerator.normaliseName(a).equals(normIncoming)))
-            return true;
-
-        if (JARO_WINKLER.apply(IdGenerator.normaliseName(candidate.name()), normIncoming) >= fuzzyThreshold)
-            return true;
-        return candidate.aliases().stream().anyMatch(a -> JARO_WINKLER.apply(IdGenerator.normaliseName(a), normIncoming) >= fuzzyThreshold);
-    }
-
     private boolean designNameMatches(Design candidate, String normIncoming)
     {
         if (candidate.id().equals(normIncoming))
             return true;
-        if (candidate.aliases().stream().anyMatch(a -> IdGenerator.normaliseDesignName(a).equals(normIncoming)))
-            return true;
-
-        // Fuzzy matching — only for names long enough to avoid short-string false positives.
-        // Digits must match exactly so that "sydney38" never conflates with "sydney39".
-        if (normIncoming.length() >= 6)
-        {
-            String incomingDigits = extractDigits(normIncoming);
-            String candidateNorm = IdGenerator.normaliseDesignName(candidate.canonicalName());
-            if (extractDigits(candidateNorm).equals(incomingDigits) && JARO_WINKLER.apply(candidateNorm, normIncoming) >= fuzzyThreshold)
-                return true;
-            return candidate.aliases().stream().anyMatch(a ->
-            {
-                String aNorm = IdGenerator.normaliseDesignName(a);
-                return extractDigits(aNorm).equals(incomingDigits) && JARO_WINKLER.apply(aNorm, normIncoming) >= fuzzyThreshold;
-            });
-        }
-        return false;
+        return candidate.aliases().stream().anyMatch(a -> IdGenerator.normaliseDesignName(a).equals(normIncoming));
     }
 
     // --- Lifecycle ---
-
-    private static String extractDigits(String s)
-    {
-        return s.replaceAll("[^0-9]", "");
-    }
 
     /**
      * Resolves the data root directory using the standard lookup chain:
@@ -229,10 +187,10 @@ public class DataStore
         return Collections.unmodifiableMap(designs);
     }
 
-    /** Convenience overload for tests — passes rawDesign as a string. */
-    public Boat findOrCreateBoat(String sailNo, String name, String rawDesign, LocalDate date)
+    /** Convenience overload for tests — no date, no source. */
+    public Boat findOrCreateBoat(String sailNo, String name, String rawDesign)
     {
-        return findOrCreateBoat(sailNo, name, rawDesign, date, "test");
+        return findOrCreateBoat(sailNo, name, rawDesign, null, "test");
     }
 
     /**
@@ -265,15 +223,16 @@ public class DataStore
         String sailNo = IdGenerator.normaliseSailNumber(rawSailNo);
         String name = IdGenerator.normaliseName(rawName);
 
-        Aliases.SailNumberName aliased = aliases.lookupBoat(sailNo, name).orElse(null);
+        Aliases.BoatMatch aliased = aliases.lookupBoat(sailNo, name).orElse(null);
         if (aliased != null)
         {
-            sourceDesign += ":" + sailNo + " " +name + "=>" + aliased;
-            sailNo = aliased.sailNumber() != null ? aliased.sailNumber() : sailNo;
-            name = aliased.name() != null ? aliased.name() : name;
+            sourceDesign += ":" + sailNo + " " + name + "=>" + aliased;
+            sailNo = aliased.normSailNumber() != null ? aliased.normSailNumber() : sailNo;
+            name = aliased.normName() != null ? aliased.normName() : name;
+            rawName = aliased.canonicalDisplayName() != null ? aliased.canonicalDisplayName() : rawName;
         }
 
-        String designId = aliases.resolveDesignAlias(IdGenerator.normaliseName(rawDesign));;
+        String designId = aliases.resolveDesignAlias(IdGenerator.normaliseName(rawDesign));
         String overrideDesignId = designCatalogue.resolveDesignOverride(sailNo, name, date);
         if (overrideDesignId != null && !designId.equalsIgnoreCase(overrideDesignId))
         {
@@ -292,7 +251,7 @@ public class DataStore
         {
             if (!normSailNo.equalsIgnoreCase(candidate.sailNumber()))
                 continue;
-            if (!normName.equalsIgnoreCase(candidate.name()))
+            if (!normName.equalsIgnoreCase(IdGenerator.normaliseName(candidate.name())))
                 continue;
 
             // Found a sail+name match, let's consider the designs.
@@ -319,7 +278,7 @@ public class DataStore
             else
             {
                 // We have a design, but the candidate does not, so we need to merge the boats
-                Design design = findOrCreateDesign(designId);
+                Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
                 String boatId = IdGenerator.generateBoatId(normSailNo, normName, design);
 
                 Boat upgraded = new Boat(
@@ -328,8 +287,6 @@ public class DataStore
                     rawName,
                     design.id(),
                     candidate.clubId(),
-                    candidate.aliases(),
-                    candidate.altSailNumbers(),
                     candidate.certificates(),
                     addSource(candidate.sources(), sourceDesign), Instant.now(), candidate.loadedAt());
                 removeBoat(candidate.id());
@@ -344,15 +301,13 @@ public class DataStore
         // If we have no matches, then create the new boat
         if (matches.isEmpty())
         {
-            Design design = findOrCreateDesign(designId);
+            Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
             Boat newBoat = new Boat(
                 IdGenerator.generateBoatId(normSailNo, normName, design),
                 normSailNo,
                 rawName,
-                design.id(),
+                design != null ? design.id() : null,
                 null,
-                null, // TODO we may have been aliased already?
-                null, // TODO we may have been aliased already?
                 List.of(),
                 List.of(sourceDesign),
                 Instant.now(),
@@ -375,61 +330,6 @@ public class DataStore
     {
         if (source == null) return ":" + rawDesign;
         return rawDesign != null && !rawDesign.isBlank() ? source + ":" + rawDesign : source;
-    }
-
-    /** Checks whether a raw design string matches an existing boat's design via ID, fuzzy, or alias. */
-    private boolean rawDesignMatchesBoatDesign(String rawDesign, String boatDesignId)
-    {
-        if (rawDesign == null || rawDesign.isBlank() || boatDesignId == null)
-            return false;
-        String normRaw = IdGenerator.normaliseDesignName(rawDesign);
-        if (boatDesignId.equals(normRaw))
-            return true;
-        Design boatDesign = designs.get(boatDesignId);
-        if (boatDesign != null && designNameMatches(boatDesign, normRaw))
-            return true;
-        String canonicalId = aliases.resolveDesignAlias(normRaw);
-        return canonicalId != null && canonicalId.equals(boatDesignId);
-    }
-
-    /** Resolves a raw design string to a Design, creating if necessary; records source on the design. */
-    private Design resolveDesign(String rawDesign, String sourceEntry)
-    {
-        if (rawDesign == null || rawDesign.isBlank())
-            return null;
-        Design design = findOrCreateDesign(rawDesign);
-        if (design != null && sourceEntry != null && !design.sources().contains(sourceEntry))
-        {
-            Design updated = new Design(design.id(), design.canonicalName(),
-                design.aliases(), addSource(design.sources(), sourceEntry), Instant.now(), null);
-            putDesign(updated);
-            return updated;
-        }
-        return design;
-    }
-
-    /** Upgrades a boat that has no design to include the given design. */
-    private Boat upgradeBoatDesign(Boat existing, Design design, String sourceEntry)
-    {
-        String newBoatId = IdGenerator.generateBoatId(existing.sailNumber(), existing.name(), design);
-        removeBoat(existing.id());
-        Boat upgraded = new Boat(newBoatId, existing.sailNumber(), existing.name(), design.id(),
-            existing.clubId(), existing.aliases(), existing.altSailNumbers(),
-            existing.certificates(), existing.sources(), existing.lastUpdated(), null);
-        putBoat(upgraded);
-        LOG.info("Upgraded boat {} → {}", existing.id(), newBoatId);
-        return addBoatSource(upgraded, sourceEntry);
-    }
-
-    private Boat addBoatSource(Boat boat, String sourceEntry)
-    {
-        if (sourceEntry == null || boat.sources().contains(sourceEntry))
-            return boat;
-        Boat updated = new Boat(boat.id(), boat.sailNumber(), boat.name(), boat.designId(),
-            boat.clubId(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
-            addSource(boat.sources(), sourceEntry), boat.lastUpdated(), null);
-        putBoat(updated);
-        return updated;
     }
 
     /** Finds or creates a design by class name — used internally by findOrCreateBoat. */
@@ -507,7 +407,7 @@ public class DataStore
         {
             matches = allClubs.stream()
                 .filter(c -> shortName.equalsIgnoreCase(c.longName())
-                          || c.aliases().stream().anyMatch(a -> shortName.equalsIgnoreCase(a)))
+                          || c.aliases().stream().anyMatch(shortName::equalsIgnoreCase))
                 .toList();
         }
 
@@ -522,7 +422,7 @@ public class DataStore
                 matches = allClubs.stream()
                     .filter(c -> t.equalsIgnoreCase(c.shortName())
                               || t.equalsIgnoreCase(c.longName())
-                              || c.aliases().stream().anyMatch(a -> t.equalsIgnoreCase(a)))
+                              || c.aliases().stream().anyMatch(t::equalsIgnoreCase))
                     .toList();
                 if (!matches.isEmpty())
                     break;
@@ -588,12 +488,6 @@ public class DataStore
         return matches.getFirst();
     }
 
-    public List<Maker> makers()
-    {
-        requireStarted();
-        return Collections.unmodifiableList(makers);
-    }
-
     // --- Write mutators (require started; loadedAt = null → always written by save()) ---
 
     public void putBoat(Boat boat)
@@ -618,13 +512,6 @@ public class DataStore
         designs.put(design.id(), design);
         InvalidationListener l = invalidationListener;
         if (l != null) l.onDesignChanged(design.id());
-    }
-
-    public void putMakers(List<Maker> makers)
-    {
-        requireStarted();
-        this.makers = new ArrayList<>(makers);
-        makersDirty = true;
     }
 
     public void putRace(Race race)
@@ -746,12 +633,6 @@ public class DataStore
                 if (existingAtNewId != null)
                 {
                     // Collision: merge the renamed boat into the existing one
-                    Set<String> mergedAliases = new LinkedHashSet<>(existingAtNewId.aliases());
-                    if (!boat.name().equalsIgnoreCase(existingAtNewId.name()))
-                        mergedAliases.add(boat.name());
-                    mergedAliases.addAll(boat.aliases());
-                    mergedAliases.removeIf(a -> a.equalsIgnoreCase(existingAtNewId.name()));
-
                     Map<String, Certificate> certMap = new LinkedHashMap<>();
                     for (Certificate c : existingAtNewId.certificates()) certMap.put(certKey(c), c);
                     for (Certificate c : boat.certificates()) certMap.putIfAbsent(certKey(c), c);
@@ -760,23 +641,19 @@ public class DataStore
                     mergedSources.addAll(boat.sources());
 
                     String clubId = existingAtNewId.clubId() != null ? existingAtNewId.clubId() : boat.clubId();
-                    // Merge altSailNumbers from both boats
-                    LinkedHashSet<String> mergedAltSails = new LinkedHashSet<>(existingAtNewId.altSailNumbers());
-                    mergedAltSails.addAll(boat.altSailNumbers());
                     toWrite = new Boat(newId, existingAtNewId.sailNumber(), existingAtNewId.name(), keepId,
-                        clubId, List.copyOf(mergedAliases), List.copyOf(mergedAltSails),
-                        List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
+                        clubId, List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
                 }
                 else
                 {
                     toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                        boat.clubId(), boat.aliases(), boat.altSailNumbers(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                        boat.clubId(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
                 }
             }
             else
             {
                 toWrite = new Boat(newId, boat.sailNumber(), boat.name(), keepId,
-                    boat.clubId(), boat.aliases(), boat.altSailNumbers(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
+                    boat.clubId(), boat.certificates(), boat.sources(), boat.lastUpdated(), null);
             }
             putBoat(toWrite);
             updatedBoats++;
@@ -968,6 +845,15 @@ public class DataStore
     }
 
     /**
+     * Returns the alias list for a boat from the alias seed.
+     */
+    public List<Aliases.SailNumberName> boatAliases(String normSailNumber, String normName)
+    {
+        requireStarted();
+        return aliases.boatAliases(normSailNumber, normName);
+    }
+
+    /**
      * Result of a {@link #mergeBoats} operation.
      */
     public record MergeResult(int updatedRaces, int updatedFinishers) {}
@@ -1009,26 +895,6 @@ public class DataStore
             toMerge.add(b);
         }
 
-        // Build merged aliases — collect all names and existing aliases from merged-away boats (name aliases only)
-        Set<String> allAliases = new LinkedHashSet<>(keepBoat.aliases());
-        for (Boat mb : toMerge)
-        {
-            if (!mb.name().equalsIgnoreCase(keepBoat.name()))
-                allAliases.add(mb.name());
-            allAliases.addAll(mb.aliases());
-        }
-        allAliases.removeIf(a -> a.equalsIgnoreCase(keepBoat.name()));
-
-        // Build merged alternate sail numbers — collect from merged-away boats' canonical and alt sail numbers
-        LinkedHashSet<String> allAltSails = new LinkedHashSet<>(keepBoat.altSailNumbers());
-        for (Boat mb : toMerge)
-        {
-            // Add the merged-away boat's canonical sail number if different from keep boat's
-            if (!mb.sailNumber().equalsIgnoreCase(keepBoat.sailNumber()))
-                allAltSails.add(mb.sailNumber());
-            allAltSails.addAll(mb.altSailNumbers());
-        }
-
         // Merge certificates — deduplicate by system+year+variant; keep boat's certs take priority
         Map<String, Certificate> certMap = new LinkedHashMap<>();
         for (Certificate c : keepBoat.certificates())
@@ -1047,7 +913,7 @@ public class DataStore
         for (Boat mb : toMerge)
             mergedSources.addAll(mb.sources());
         Boat mergedBoat = new Boat(keepBoat.id(), keepBoat.sailNumber(), keepBoat.name(),
-            designId, clubId, List.copyOf(allAliases), List.copyOf(allAltSails),
+            designId, clubId,
             List.copyOf(certMap.values()), List.copyOf(mergedSources), Instant.now(), null);
         putBoat(mergedBoat);
 
@@ -1137,7 +1003,7 @@ public class DataStore
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
         clubSeed = ClubLoader.load(configDir);
         aliases = Aliases.load(configDir);
-        designCatalogue = DesignLoader.load(configDir);
+        designCatalogue = Designs.load(configDir);
         designCatalogue.overrideDesigns().forEach((normId, canonicalName) ->
         {
             Design existing = designs.get(normId);
@@ -1172,20 +1038,22 @@ public class DataStore
                 String normName = IdGenerator.normaliseName(b.name());
                 String ndk = normName + (b.designId() != null ? "-" + b.designId() : "");
                 var match = aliases.lookupBoat(b.sailNumber(), ndk);
-                if (match.isPresent() && match.get().name() != null)
+                if (match.isPresent() && match.get().normName() != null)
                 {
-                    String canonNorm = IdGenerator.normaliseName(match.get().name());
+                    String canonNorm = match.get().normName();
                     if (!canonNorm.equals(normName))
                     {
-                        String canonSail = match.get().sailNumber() != null
-                            ? match.get().sailNumber() : b.sailNumber();
+                        String canonSail = match.get().normSailNumber() != null
+                            ? match.get().normSailNumber() : b.sailNumber();
+                        String displayName = match.get().canonicalDisplayName() != null
+                            ? match.get().canonicalDisplayName() : b.name();
                         Design d = b.designId() != null ? designs.get(b.designId()) : null;
-                        String canonId = IdGenerator.generateBoatId(canonSail, match.get().name(), d);
+                        String canonId = IdGenerator.generateBoatId(canonSail, displayName, d);
                         if (boats.containsKey(canonId))
                             staleBoatPairs.add(Map.entry(b.id(), canonId));
                         else
                             LOG.warn("Stale boat {} (name '{}') should map to canonical '{}' per alias seed but canonical boat {} not found; will be renamed on next import",
-                                b.id(), b.name(), match.get().name(), canonId);
+                                b.id(), b.name(), displayName, canonId);
                     }
                 }
             }
@@ -1275,7 +1143,7 @@ public class DataStore
                         if (entity instanceof Loadable<?>)
                         {
                             Instant modified = Files.getLastModifiedTime(p).toInstant();
-                            @SuppressWarnings("unchecked") T stamped = (T)((Loadable<T>)entity).withLoadedAt(modified);
+                            @SuppressWarnings("unchecked") T stamped = ((Loadable<T>)entity).withLoadedAt(modified);
                             entity = stamped;
                         }
                         return entity;
@@ -1341,7 +1209,7 @@ public class DataStore
                         if (entity instanceof Loadable<?>)
                         {
                             Instant modified = Files.getLastModifiedTime(p).toInstant();
-                            @SuppressWarnings("unchecked") T stamped = (T)((Loadable<T>)entity).withLoadedAt(modified);
+                            @SuppressWarnings("unchecked") T stamped = ((Loadable<T>)entity).withLoadedAt(modified);
                             entity = stamped;
                         }
                         return entity;

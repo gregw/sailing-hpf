@@ -98,8 +98,6 @@ schedule:
 nextSailSysRaceId: 32638     # resume point for SailSys race scanning
 targetIrcYear: 2025           # target year for reference factor DFS
 outlierSigma: null            # outlier trimming threshold (null = default 2.5)
-mergeCandidateThreshold: 0.5  # JW threshold for merge candidate display
-fuzzyMatchThreshold: 0.9      # JW threshold for boat/design name matching
 clubCertificateWeight: 0.9    # weight multiplier for club-level certificates
 sailsysCacheMaxAgeDays: 7
 sailsysHttpDelayMs: 200

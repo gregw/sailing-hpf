@@ -170,6 +170,8 @@ public class ReferenceNetworkBuilder
         Map<String, ReferenceFactors> result = new LinkedHashMap<>();
         for (Boat boat : store.boats().values())
         {
+            if (store.isBoatExcluded(boat.id())) continue;
+            if (boat.designId() != null && store.isDesignExcluded(boat.designId())) continue;
             List<Certificate> validCerts = validCerts(boat, currentYear);
 
             Factor spin    = computeVariantFactor(validCerts, graph, currentYear, false, false, false);
@@ -329,6 +331,8 @@ public class ReferenceNetworkBuilder
         for (Race race : store.races().values())
         {
             if (race.date() == null) continue;
+            if (store.isRaceExcluded(race.id())) continue;
+            if (store.isClubExcluded(race.clubId())) continue;
 
             for (Division div : race.divisions())
             {
@@ -336,10 +340,12 @@ public class ReferenceNetworkBuilder
                 for (Finisher f : finishers)
                 {
                     if (f.elapsedTime() == null) continue;
+                    if (store.isBoatExcluded(f.boatId())) continue;
                     List<Finisher> peers = new ArrayList<>(finishers.size() - 1);
                     for (Finisher peer : finishers)
                     {
-                        if (!peer.boatId().equals(f.boatId()) && peer.elapsedTime() != null)
+                        if (!peer.boatId().equals(f.boatId()) && peer.elapsedTime() != null
+                                && !store.isBoatExcluded(peer.boatId()))
                             peers.add(peer);
                     }
                     index.computeIfAbsent(f.boatId(), k -> new ArrayList<>())

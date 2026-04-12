@@ -351,7 +351,7 @@ public class TopYachtImporter
             String sailNo = e.getKey();
             MergeEntry me = e.getValue();
 
-            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, SOURCE);
+            Boat boat = store.findOrCreateBoat(sailNo, me.boatName, me.designName, date, SOURCE);
 
             if (me.clubCode != null && !me.clubCode.isBlank() && boat.clubId() == null)
             {
@@ -360,7 +360,7 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
+                        boat.designId(), fromClub.id(), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -716,7 +716,7 @@ public class TopYachtImporter
         List<Finisher> finishers = new ArrayList<>();
         for (ParsedRow row : rows)
         {
-            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), SOURCE);
+            Boat boat = store.findOrCreateBoat(row.sailNo(), row.boatName(), row.designName(), null, SOURCE);
 
             if (row.clubCode() != null && !row.clubCode().isBlank() && boat.clubId() == null)
             {
@@ -725,7 +725,7 @@ public class TopYachtImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
+                        boat.designId(), fromClub.id(), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -791,7 +791,7 @@ public class TopYachtImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(), List.copyOf(certs),
+            boat.designId(), boat.clubId(), List.copyOf(certs),
             addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("TopYacht: inferred {} cert {} (TCF={}) for boat {}", system, certNumber, tcf, boat.id());
         return certNumber;

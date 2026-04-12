@@ -51,8 +51,6 @@ schedule:
 nextSailSysRaceId: 32640
 targetIrcYear: 2025
 outlierSigma: null
-mergeCandidateThreshold: 0.5
-fuzzyMatchThreshold: 0.9
 recentRaceReimportDays: 30
 
 # --- SailSys importer ---

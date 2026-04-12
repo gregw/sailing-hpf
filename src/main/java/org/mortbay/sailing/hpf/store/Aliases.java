@@ -111,6 +111,12 @@ public class Aliases
     public record SailNumberName(String sailNumber, String name)
     {}
 
+    /** Result of a boat alias lookup: normalised canonical sail/name pair plus display name. */
+    public record BoatMatch(String normSailNumber, String normName, String canonicalDisplayName) {}
+
+    /** A BoatEntry paired with its canonical sail/name for index lookups. */
+    private record IndexedBoat(SailNumberName canonical, BoatEntry entry) {}
+
     /**
      * Loaded alias data. Immutable after construction; all lookups are O(1).
      */
@@ -123,8 +129,10 @@ public class Aliases
         /** canonical design ID → canonical display name */
         private final Map<String, String> designId2Name;
 
-        private final Map<String, List<BoatEntry>> sailNo2Aliases;
-        private final Map<String, List<BoatEntry>> name2Aliases;
+        private final Map<String, List<IndexedBoat>> sailNo2Aliases;
+        private final Map<String, List<IndexedBoat>> name2Aliases;
+        /** canonical key (normSail-normName) → BoatEntry with all aliases */
+        private final Map<String, BoatEntry> canonicalBoatIndex;
 
         private Loaded(Yaml yaml)
         {
@@ -134,7 +142,9 @@ public class Aliases
                 designId2Name = Map.of();
                 sailNo2Aliases = Map.of();
                 name2Aliases = Map.of();
+                canonicalBoatIndex = Map.of();
                 return;
+
             }
 
             // Build design indexes
@@ -166,8 +176,9 @@ public class Aliases
             designId2Name = Collections.unmodifiableMap(designId2NameMutable);
 
             // Build boat indexes
-            Map<String, List<BoatEntry>> sailNo2AliasesMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            Map<String, List<BoatEntry>> name2AliasesMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            Map<String, List<IndexedBoat>> sailNo2AliasesMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            Map<String, List<IndexedBoat>> name2AliasesMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+            Map<String, BoatEntry> canonicalBoatIndexMutable = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             if (yaml.boats != null && !yaml.boats.isEmpty())
             {
                 for (Map.Entry<String, BoatEntry> e : yaml.boats.entrySet())
@@ -208,7 +219,10 @@ public class Aliases
                         }
                     }
 
-                    final BoatEntry aliased = new BoatEntry(entry.canonicalName, aliases);
+                    final SailNumberName canonical = new SailNumberName(canonicalSail, normName);
+                    final BoatEntry normalised = new BoatEntry(entry.canonicalName, aliases);
+                    final IndexedBoat indexed = new IndexedBoat(canonical, normalised);
+                    canonicalBoatIndexMutable.put(sailNumName, normalised);
 
                     for (SailNumberName snn : aliases)
                     {
@@ -217,9 +231,9 @@ public class Aliases
                             sailNo2AliasesMutable.compute(snn.sailNumber, (k, v) ->
                             {
                                 if (v == null || v.isEmpty())
-                                    return List.of(aliased);
-                                List<BoatEntry> list = new ArrayList<>(v);
-                                list.add(aliased);
+                                    return List.of(indexed);
+                                List<IndexedBoat> list = new ArrayList<>(v);
+                                list.add(indexed);
                                 return Collections.unmodifiableList(list);
                             });
                         }
@@ -228,9 +242,9 @@ public class Aliases
                             name2AliasesMutable.compute(snn.name, (k, v) ->
                             {
                                 if (v == null || v.isEmpty())
-                                    return List.of(aliased);
-                                List<BoatEntry> list = new ArrayList<>(v);
-                                list.add(aliased);
+                                    return List.of(indexed);
+                                List<IndexedBoat> list = new ArrayList<>(v);
+                                list.add(indexed);
                                 return Collections.unmodifiableList(list);
                             });
                         }
@@ -239,6 +253,7 @@ public class Aliases
             }
             sailNo2Aliases = Collections.unmodifiableMap(sailNo2AliasesMutable);
             name2Aliases = Collections.unmodifiableMap(name2AliasesMutable);
+            canonicalBoatIndex = Collections.unmodifiableMap(canonicalBoatIndexMutable);
             LOG.debug("Boat alias sailNumberIndex keys: {}", sailNo2Aliases);
             LOG.debug("Boat alias nameIndex keys: {}", name2Aliases);
         }
@@ -265,20 +280,21 @@ public class Aliases
          * Looks up a boat entry by sail number or by normalised name.
          * Returns a BoatMatch if found, empty if not.
          */
-        Optional<SailNumberName> lookupBoat(String normSailNumber, String normName)
+        Optional<BoatMatch> lookupBoat(String normSailNumber, String normName)
         {
             // Look up sail number first then check the names
-            List<BoatEntry> entries = sailNo2Aliases.get(normSailNumber);
+            List<IndexedBoat> entries = sailNo2Aliases.get(normSailNumber);
             if (entries == null || entries.isEmpty())
                 entries = sailNo2Aliases.get(stripPrefix(normSailNumber));
             if (entries != null && !entries.isEmpty())
             {
-                for (BoatEntry boat : entries)
+                for (IndexedBoat ib : entries)
                 {
-                    for (SailNumberName alias : boat.aliases)
+                    for (SailNumberName alias : ib.entry.aliases())
                     {
                         if (alias.name != null && alias.name.equalsIgnoreCase(normName))
-                            return Optional.of(alias);
+                            return Optional.of(new BoatMatch(
+                                ib.canonical.sailNumber(), ib.canonical.name(), ib.entry.canonicalName()));
                     }
                 }
             }
@@ -287,17 +303,29 @@ public class Aliases
             entries = name2Aliases.get(normName);
             if (entries != null && !entries.isEmpty())
             {
-                for (BoatEntry boat : entries)
+                for (IndexedBoat ib : entries)
                 {
-                    for (SailNumberName alias : boat.aliases)
+                    for (SailNumberName alias : ib.entry.aliases())
                     {
                         if (alias.sailNumber != null && alias.sailNumber.equalsIgnoreCase(normSailNumber))
-                            return Optional.of(alias);
+                            return Optional.of(new BoatMatch(
+                                ib.canonical.sailNumber(), ib.canonical.name(), ib.entry.canonicalName()));
                     }
                 }
             }
 
             return Optional.empty();
+        }
+
+        /**
+         * Returns the alias list for a boat identified by its canonical sail number and normalised name.
+         * Returns an empty list if no aliases are configured for this boat.
+         */
+        List<SailNumberName> boatAliases(String normSailNumber, String normName)
+        {
+            String key = normSailNumber + "-" + normName;
+            BoatEntry entry = canonicalBoatIndex.get(key);
+            return entry != null ? entry.aliases() : List.of();
         }
     }
 
@@ -381,6 +409,22 @@ public class Aliases
             yaml = new Yaml();
         if (yaml.boats == null)
             yaml.boats = new LinkedHashMap<>();
+
+        // Insert aliases under the canonical boat key
+        String key = normSailNo + "-" + IdGenerator.normaliseName(canonicalName);
+        BoatEntry entry = yaml.boats.get(key);
+        List<SailNumberName> existing = entry != null && entry.aliases() != null
+            ? new ArrayList<>(entry.aliases()) : new ArrayList<>();
+        for (SailNumberName snn : aliases)
+        {
+            boolean duplicate = existing.stream().anyMatch(e ->
+                Objects.equals(e.sailNumber(), snn.sailNumber()) && Objects.equals(e.name(), snn.name()));
+            if (!duplicate)
+                existing.add(snn);
+        }
+        yaml.boats.put(key, new BoatEntry(
+            entry != null ? entry.canonicalName() : canonicalName,
+            existing));
 
         try
         {

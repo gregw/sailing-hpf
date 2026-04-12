@@ -292,7 +292,7 @@ public class OrcImporter
         }
 
         // Find-or-create Boat (design resolved inside findOrCreateBoat)
-        Boat boat = store.findOrCreateBoat(sailNo, yachtName.trim(), className, SOURCE);
+        Boat boat = store.findOrCreateBoat(sailNo, yachtName.trim(), className, null, SOURCE);
 
         // Upsert certificate: remove old cert with same dxtId first, then add new one
         final String finalDxtId = dxtId;
@@ -307,7 +307,7 @@ public class OrcImporter
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(),
+            boat.designId(), boat.clubId(),
             List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
     }
 

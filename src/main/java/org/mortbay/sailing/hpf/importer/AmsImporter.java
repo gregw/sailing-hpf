@@ -181,7 +181,7 @@ public class AmsImporter
         updatedCerts.sort(Comparator.comparingInt(Certificate::year).reversed());
 
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(),
+                boat.designId(), boat.clubId(),
                 List.copyOf(updatedCerts), addSource(boat.sources(), SOURCE), Instant.now(), null));
     }
 

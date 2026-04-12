@@ -244,7 +244,7 @@ public class BwpsImporter
                 if (fromClub != null)
                 {
                     store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                        boat.designId(), fromClub.id(), boat.aliases(), boat.altSailNumbers(), boat.certificates(),
+                        boat.designId(), fromClub.id(), boat.certificates(),
                         addSource(boat.sources(), SOURCE), Instant.now(), null));
                 }
             }
@@ -620,7 +620,7 @@ public class BwpsImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(), List.copyOf(certs),
+            boat.designId(), boat.clubId(), List.copyOf(certs),
             addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("BWPS: inferred {} cert {} (TCF={} twoHanded={}) for boat {}", system, certNumber, tcf, twoHanded, boat.id());
         return certNumber;

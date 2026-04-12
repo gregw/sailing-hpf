@@ -24,9 +24,9 @@ import java.util.Set;
  * Reads {@code design.yaml} from the config directory (or classpath fallback) and returns
  * a {@link DesignCatalogue} that can answer whether a normalised design ID is excluded.
  */
-class DesignLoader
+class Designs
 {
-    private static final Logger LOG = LoggerFactory.getLogger(DesignLoader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(Designs.class);
     private static final String FILENAME = "design.yaml";
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
             new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
@@ -68,7 +68,7 @@ class DesignLoader
             }
         }
         // Fallback to classpath (test resources)
-        return DesignLoader.class.getResourceAsStream("/" + filename);
+        return Designs.class.getResourceAsStream("/" + filename);
     }
 
     // ---- YAML binding ----

@@ -385,6 +385,11 @@ async function loadDetail(entity, id) {
         hpfDiv.innerHTML = '<em>Loading…</em>';
         const hpfData = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/hpf');
         hpfDiv.innerHTML = hpfData ? renderBoatHpf(hpfData) : '<em>No HPF data available</em>';
+
+        const aliasDiv = document.getElementById('aliases-boats');
+        const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
+        aliasDiv.innerHTML = aliases && aliases.length > 0 ? renderBoatAliases(aliases) : '';
+
         updateBoatNav();
     }
 
@@ -397,6 +402,20 @@ async function loadDetail(entity, id) {
     } else {
         panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+}
+
+function renderBoatAliases(aliases) {
+    if (!aliases || aliases.length === 0) return '';
+    const rows = aliases.map(a => {
+        const sail = a.sailNumber ? esc(a.sailNumber) : '';
+        const name = a.name ? esc(a.name) : '';
+        return `<tr><td>${sail}</td><td>${name}</td></tr>`;
+    }).join('');
+    return `<strong>Aliases</strong>
+      <table style="width:auto;margin-top:0.4rem;">
+        <thead><tr><th>Sail #</th><th>Name</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
 }
 
 function renderBoatHpf(data) {

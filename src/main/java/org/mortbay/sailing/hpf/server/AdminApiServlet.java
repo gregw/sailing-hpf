@@ -72,6 +72,8 @@ public class AdminApiServlet extends HttpServlet
             handleBoatHpf(path.replaceAll("^/boats/|/hpf$", ""), resp);
         else if (path.matches("/boats/[^/]+/reference"))
             handleBoatReference(path.replaceAll("^/boats/|/reference$", ""), resp);
+        else if (path.matches("/boats/[^/]+/aliases"))
+            handleBoatAliases(path.replaceAll("^/boats/|/aliases$", ""), resp);
         else if (path.startsWith("/boats"))
             handleBoats(path.substring("/boats".length()), req, resp);
         else if (path.startsWith("/designs"))
@@ -152,6 +154,14 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * POST /api/{boats|designs|races}/exclude — toggles the excluded flag for a single entity.
+     * <p>
+     * Reads a JSON body with {@code id} (String) and {@code excluded} (boolean). Delegates to
+     * {@code store.setBoatExcluded}, {@code setDesignExcluded}, or {@code setRaceExcluded}
+     * depending on the entity argument, then persists the change to {@code exclusions.json}.
+     * Responds 400 if {@code id} is missing or the entity is unrecognised, 500 on store error.
+     */
     @SuppressWarnings("unchecked")
     private void handleSetExcluded(String entity, HttpServletRequest req,
                                    HttpServletResponse resp) throws IOException
@@ -183,6 +193,13 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * GET /api/stats — returns aggregate entity counts for the dashboard header.
+     * <p>
+     * Merges the club seed with persisted club records to obtain the total club count,
+     * then returns JSON with keys {@code races}, {@code boats}, {@code designs}, {@code clubs},
+     * and {@code series} (non-catch-all series only).
+     */
     private void handleStats(HttpServletResponse resp) throws IOException
     {
         // Merge seed + persisted to get total club count
@@ -202,6 +219,23 @@ public class AdminApiServlet extends HttpServlet
         ));
     }
 
+    /**
+     * GET /api/boats[/{id}] — boat listing or single-boat detail.
+     * <p>
+     * <b>List</b> (sub is empty or "/"): supports pagination ({@code page}, {@code size}),
+     * free-text search ({@code q} matches id or name), optional filters by {@code designId} or
+     * {@code clubId}, and sort by {@code sailNumber}, {@code name}, {@code designId},
+     * {@code clubId}, {@code spinRef}, {@code hpf}, {@code finishes}, or {@code profile}.
+     * The {@code dupeSails} flag restricts results to boats sharing a sail number with at least
+     * one other boat. The {@code showExcluded} flag (default false) hides boats that are
+     * individually excluded or whose design is excluded. The {@code excludeNulls} flag removes
+     * rows where the sort column is null.
+     * Each row includes the boat's spin RF, HPF, finish count, performance profile score, and
+     * excluded status from the analysis cache.
+     * <p>
+     * <b>Detail</b> (sub is "/{id}"): returns the raw {@link org.mortbay.sailing.hpf.data.Boat}
+     * record as JSON; 404 if not found.
+     */
     private void handleBoats(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (sub.isEmpty() || "/".equals(sub))
@@ -311,6 +345,14 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * GET /api/boats/{id}/reference — returns the three-variant reference factors for a boat.
+     * <p>
+     * Reads the {@link org.mortbay.sailing.hpf.analysis.ReferenceFactors} from the analysis
+     * cache and serialises spin, nonSpin, and twoHanded factors (value, weight, generation) along
+     * with the current target IRC year. Returns 404 if the boat ID is not in the store.
+     * If no RF has been computed yet all factor fields are null.
+     */
     private void handleBoatReference(String id, HttpServletResponse resp) throws IOException
     {
         if (store.boats().get(id) == null)
@@ -329,6 +371,21 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, result);
     }
 
+    /**
+     * GET /api/boats/{id}/hpf — returns the full HPF detail panel for a boat.
+     * <p>
+     * Assembles a response containing:
+     * <ul>
+     *   <li>Spin, nonSpin, and twoHanded HPF factors (value, weight, referenceDelta, raceCount)</li>
+     *   <li>The corresponding RF factors for side-by-side comparison in the UI</li>
+     *   <li>All per-race residuals from the last HPF run (raceId, division, date, variant,
+     *       residual, weight) for the boat's performance history chart</li>
+     *   <li>The fleet-relative performance profile (diversity, consistency, overall score)
+     *       if one has been computed</li>
+     * </ul>
+     * Returns 404 if the boat ID is unknown. All factor and profile fields are null if the
+     * HPF optimiser has not yet run.
+     */
     private void handleBoatHpf(String id, HttpServletResponse resp) throws IOException
     {
         Boat boat = store.boats().get(id);
@@ -393,6 +450,35 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, result);
     }
 
+    /**
+     * GET /api/boats/{id}/aliases — returns the alias list for a boat from the alias seed.
+     * <p>
+     * Looks up the boat's normalised sail number and name in {@code aliases.yaml} via
+     * {@link org.mortbay.sailing.hpf.store.DataStore#boatAliases} and returns a JSON array
+     * of objects with optional {@code sailNumber} and {@code name} fields. Returns an empty
+     * array if no aliases are configured. Returns 404 if the boat ID is not in the store.
+     */
+    private void handleBoatAliases(String id, HttpServletResponse resp) throws IOException
+    {
+        Boat boat = store.boats().get(id);
+        if (boat == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        String normName = IdGenerator.normaliseName(boat.name());
+        List<Aliases.SailNumberName> aliases = store.boatAliases(boat.sailNumber(), normName);
+        List<Map<String, String>> result = new ArrayList<>();
+        for (Aliases.SailNumberName snn : aliases)
+        {
+            Map<String, String> entry = new LinkedHashMap<>();
+            if (snn.sailNumber() != null) entry.put("sailNumber", snn.sailNumber());
+            if (snn.name() != null) entry.put("name", snn.name());
+            result.add(entry);
+        }
+        writeJson(resp, result);
+    }
+
     private Map<String, Object> hpfVariantMap(Factor f, double referenceDelta, int raceCount)
     {
         if (f == null) return null;
@@ -417,6 +503,17 @@ public class AdminApiServlet extends HttpServlet
         return m;
     }
 
+    /**
+     * GET /api/clubs[/{id}] — club listing or single-club detail.
+     * <p>
+     * <b>List</b>: merges the in-memory club seed with persisted club records (persisted wins on
+     * conflict), then filters and paginates. Supports free-text search ({@code q} matches id,
+     * shortName, or longName), {@code showExcluded} (default false hides excluded clubs), and
+     * {@code excludeNulls}. Each row includes race count, boat count, non-catch-all series count,
+     * and the excluded flag.
+     * <p>
+     * <b>Detail</b>: returns the raw club record as JSON; 404 if not found.
+     */
     private void handleClubs(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (sub.isEmpty() || "/".equals(sub))
@@ -489,6 +586,15 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * POST /api/clubs/exclude — toggles the excluded flag on a club.
+     * <p>
+     * Reads a JSON body with {@code id} and {@code excluded}. Unlike boats/designs/races,
+     * club exclusion is stored on the club record itself (not in {@code exclusions.json}) and
+     * persisted via {@link org.mortbay.sailing.hpf.store.DataStore#setClubExcluded}. Excluded
+     * clubs are hidden from the data browser by default and their races are skipped during
+     * RF and HPF computation. Responds 400 if {@code id} is missing.
+     */
     @SuppressWarnings("unchecked")
     private void handleSetClubExcluded(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
@@ -513,6 +619,19 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * POST /api/boats/merge — merges two or more duplicate boat records into one.
+     * <p>
+     * Reads a JSON body with {@code keepId} (the canonical boat to retain) and
+     * {@code mergeIds} (list of boat IDs to fold in). Before merging, collects alias entries
+     * for any merged boat whose normalised sail number or name differs from the keep boat.
+     * Calls {@link org.mortbay.sailing.hpf.store.DataStore#mergeBoats} to rewrite all race
+     * finisher references from merged IDs to {@code keepId} and delete the merged boat records.
+     * Saves the store, then appends the new alias entries to {@code aliases.yaml} and reloads
+     * the alias seed so future imports honour the merge automatically.
+     * Returns 400 for validation errors, 404 if any ID is not found, 500 on unexpected error.
+     * On success returns {@code updatedRaces} and {@code updatedFinishers} counts.
+     */
     @SuppressWarnings("unchecked")
     private void handleMergeBoats(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
@@ -549,7 +668,9 @@ public class AdminApiServlet extends HttpServlet
                 writeJson(resp, Map.of("error", "Keep boat not found: " + keepId));
                 return;
             }
-            List<Aliases.SailNumberName> aliases = new ArrayList<>();
+            // Build alias entries from merged boats before merging (while we still have all boat records)
+            String keepNormSail = IdGenerator.normaliseSailNumber(keepBoat.sailNumber());
+            List<Aliases.SailNumberName> newAliases = new ArrayList<>();
             for (String mergeId : mergeIds)
             {
                 Boat mb = store.boats().get(mergeId);
@@ -559,24 +680,25 @@ public class AdminApiServlet extends HttpServlet
                     writeJson(resp, Map.of("error", "Merge boat not found: " + mergeId));
                     return;
                 }
-                List<String> names = new ArrayList<>();
-                // Always record the merged boat's name (even if it equals the canonical, for completeness)
-                names.add(mb.name());
-                names.addAll(mb.aliases());
-                aliasSpecs.add(new Aliases.MergeAliasSpec(
-                    IdGenerator.normaliseSailNumber(mb.sailNumber()),
-                    IdGenerator.normaliseSailNumber(keepBoat.sailNumber()),
-                    keepBoat.name(),
-                    names
-                ));
+                String mbNormSail = IdGenerator.normaliseSailNumber(mb.sailNumber());
+                String mbNormName = IdGenerator.normaliseName(mb.name());
+                // Record alias entry if sail number or name differs from the keep boat
+                if (!mbNormSail.equalsIgnoreCase(keepNormSail)
+                    || !mbNormName.equalsIgnoreCase(IdGenerator.normaliseName(keepBoat.name())))
+                {
+                    newAliases.add(new Aliases.SailNumberName(mbNormSail, mbNormName));
+                }
             }
 
             DataStore.MergeResult result = store.mergeBoats(keepId, mergeIds);
             store.save();
 
             // Update aliases.yaml and reload the alias seed so future imports honour the merge
-            Aliases.appendMergeAliases(store.configDir(), aliasSpecs);
-            store.reloadAliases();
+            if (!newAliases.isEmpty())
+            {
+                Aliases.addAliases(store.configDir(), keepNormSail, keepBoat.name(), newAliases);
+                store.reloadAliases();
+            }
 
             writeJson(resp, Map.of(
                 "ok", true,
@@ -596,6 +718,18 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * POST /api/designs/merge — merges two or more duplicate design records into one.
+     * <p>
+     * Reads a JSON body with {@code keepId} and {@code mergeIds}. Before merging, collects
+     * the canonical name, normalised ID, and existing aliases of each merged-away design to
+     * use as alias entries. Calls {@link org.mortbay.sailing.hpf.store.DataStore#mergeDesigns}
+     * to rewrite all boat {@code designId} references and delete the merged design records.
+     * Saves the store, then appends design aliases to {@code aliases.yaml} via
+     * {@link org.mortbay.sailing.hpf.store.Aliases#appendDesignMergeAliases} and reloads
+     * the alias seed. Returns {@code updatedBoats}, {@code updatedRaces}, and
+     * {@code updatedFinishers} counts on success.
+     */
     @SuppressWarnings("unchecked")
     private void handleMergeDesigns(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
@@ -671,6 +805,16 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * GET /api/comparison/candidates — returns candidate boats and designs for the HPF comparison chart.
+     * <p>
+     * Accepts optional {@code boatQ} / {@code designQ} text filters and a comma-separated
+     * {@code boatIds} list of already-selected boats. When selected boats are provided and
+     * {@code allAvailable} is not {@code true}, the boat list is narrowed to boats that have
+     * co-raced (in any division) with <em>all</em> currently selected boats; the design list is
+     * similarly restricted to designs represented among those co-racers. Excluded boats and
+     * designs are always omitted. Results are capped at 100 boats and 100 designs.
+     */
     private void handleComparisonCandidates(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String boatQ  = req.getParameter("boatQ");
@@ -767,6 +911,15 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, Map.of("boats", boats, "designs", designs));
     }
 
+    /**
+     * GET /api/comparison/chart — returns RF and HPF data for the multi-boat comparison chart.
+     * <p>
+     * Accepts comma-separated {@code boatIds} and {@code designIds}. For each boat returns its
+     * spin/nonSpin RF and HPF factors plus a chronological list of per-race residual points
+     * (back-calculated factor, date, race/series name, division, variant, weight) derived from
+     * the last HPF run. For each design returns its spin/nonSpin RF. Used to render the
+     * performance-over-time scatter chart in the analysis panel.
+     */
     private void handleComparisonChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String boatIdsParam   = req.getParameter("boatIds");
@@ -860,6 +1013,16 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, Map.of("boats", boatData, "designs", designData));
     }
 
+    /**
+     * GET /api/comparison/division — returns elapsed and corrected times for a single race division.
+     * <p>
+     * Required query params: {@code raceId} and {@code divisionName} (empty string matches
+     * legacy null-named divisions). For each finisher with a recorded elapsed time, emits the
+     * elapsed seconds, applicable variant (spin/nonSpin), HPF and RF values and weights, and
+     * HPF/RF corrected times. Finishers are sorted by HPF value ascending (nulls last). Also
+     * returns race metadata (date, series name) and the division's overall variant (spin, nonSpin,
+     * or mixed). Used to render the division bar chart in the races tab.
+     */
     private void handleComparisonDivision(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String raceId      = req.getParameter("raceId");
@@ -975,6 +1138,18 @@ public class AdminApiServlet extends HttpServlet
         return m;
     }
 
+    /**
+     * GET /api/designs[/{id}] — design listing or single-design detail.
+     * <p>
+     * <b>List</b>: supports pagination, free-text search ({@code q} matches id or canonicalName),
+     * {@code showExcluded} flag, and sort by {@code canonicalName}, {@code spinRef}, or
+     * {@code boats} (number of boats assigned to the design). Each row includes the design's spin
+     * RF from the cache, boat count, and excluded status. The {@code excludeNulls} flag removes
+     * rows where the sort column is null.
+     * <p>
+     * <b>Detail</b>: returns the raw {@link org.mortbay.sailing.hpf.data.Design} record; 404 if
+     * not found.
+     */
     private void handleDesigns(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (sub.isEmpty() || "/".equals(sub))
@@ -1041,6 +1216,19 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * GET /api/races[/{id}] — race listing or single-race detail.
+     * <p>
+     * <b>List</b>: filters by optional {@code boatId}, {@code clubId}, or {@code seriesId},
+     * supports free-text search ({@code q} matches race id or clubId), pagination, and sort.
+     * The {@code showExcluded} flag (default false) hides individually excluded races and races
+     * where every finisher belongs to an excluded design. The {@code excludeNulls} flag removes
+     * races with zero finishers. Each row includes series name, finisher count, excluded status,
+     * and the HPF reference time(s) if available from the cache.
+     * <p>
+     * <b>Detail</b>: returns the raw {@link org.mortbay.sailing.hpf.data.Race} record; 404 if
+     * not found.
+     */
     private void handleRaces(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (sub.isEmpty() || "/".equals(sub))
@@ -1092,6 +1280,15 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * GET /api/series — series listing (no single-series detail endpoint exists).
+     * <p>
+     * Iterates all persisted clubs and their non-catch-all series, joining each series with its
+     * races via an in-memory index keyed by series ID. Supports free-text search ({@code q}
+     * matches series name, club short name, or club id), optional {@code clubId} filter, and
+     * {@code excludeEmpty} flag (default false) to hide series with no imported races.
+     * Each row includes first/last race date and race count. Supports pagination and sort.
+     */
     private void handleSeries(String sub, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         if (!sub.isEmpty() && !"/".equals(sub)) { resp.sendError(404); return; }
@@ -1251,6 +1448,15 @@ public class AdminApiServlet extends HttpServlet
         return String.format("%d:%02d:%02d", h, m, s);
     }
 
+    /**
+     * GET /api/hpf/quality — returns convergence and quality metrics from the last HPF run.
+     * <p>
+     * Serialises the {@link org.mortbay.sailing.hpf.analysis.HpfQuality} snapshot held in the
+     * cache: boat count, total entries, iterations (inner/outer, converged flags), final deltas,
+     * residual distribution (median, IQR, 95th percentile), down-weighted entry count,
+     * high-dispersion division count, median boat confidence, outer-loop delta trace, and
+     * the full HPF configuration used. Returns 404 if no HPF run has completed yet.
+     */
     private void handleHpfQuality(HttpServletResponse resp) throws IOException
     {
         HpfQuality q = cache.hpfQuality();
@@ -1289,6 +1495,15 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, result);
     }
 
+    /**
+     * GET /api/importers — returns the current importer configuration and global schedule.
+     * <p>
+     * For each configured importer entry emits its name, mode, schedule/startup flags, and
+     * current running status. Also includes the global schedule (days and time), key analysis
+     * parameters ({@code targetIrcYear}, {@code outlierSigma}, {@code minAnalysisR2}), the full
+     * HPF optimiser configuration, and sliding-average settings. Used to populate the admin
+     * schedule/settings panel.
+     */
     private void handleImporters(HttpServletResponse resp) throws IOException
     {
         TaskService.ImportStatus status = _taskService.currentStatus();
@@ -1329,6 +1544,13 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, result);
     }
 
+    /**
+     * GET /api/importers/status — returns the live status of any currently-running import task.
+     * <p>
+     * If no import is running, returns {@code {"running": false}}. Otherwise returns the
+     * importer name, mode, start timestamp, whether the run was scheduler-triggered, and
+     * (for the SailSys race importer) the current race ID being fetched.
+     */
     private void handleImporterStatus(HttpServletResponse resp) throws IOException
     {
         TaskService.ImportStatus status = _taskService.currentStatus();
@@ -1351,6 +1573,14 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * POST /api/importers/{name}/run — submits an import task for asynchronous execution.
+     * <p>
+     * Accepts {@code mode} (query param, e.g. "api" or "cache") and optional {@code startId}
+     * (for the SailSys importer, the race ID to resume from). Delegates to
+     * {@link TaskService#submit}; returns 202 Accepted if the task was enqueued, or 409 Conflict
+     * if another import is already running.
+     */
     private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         int startId = parseIntParam(req, "startId", 1);
@@ -1367,6 +1597,17 @@ public class AdminApiServlet extends HttpServlet
         }
     }
 
+    /**
+     * POST /api/schedule — updates the global import schedule and all tunable analysis parameters.
+     * <p>
+     * Reads a JSON body containing the importer list (name, mode, includeInSchedule, runAtStartup
+     * flags), schedule days and time, and optional overrides for {@code targetIrcYear},
+     * {@code outlierSigma}, and all HPF optimiser parameters (lambda, convergence thresholds,
+     * iteration limits, outlier-K, asymmetry factor, damping factor, cross-variant lambda).
+     * Delegates to {@link TaskService#setConfig}, which persists the new config to
+     * {@code admin.yaml} and reschedules the next automatic run. Responds 400 if any parameter
+     * cannot be parsed.
+     */
     @SuppressWarnings("unchecked")
     private void handleSetSchedule(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
@@ -1502,6 +1743,15 @@ public class AdminApiServlet extends HttpServlet
         MAPPER.writerWithDefaultPrettyPrinter().writeValue(resp.getWriter(), obj);
     }
 
+    /**
+     * GET /api/comparison/design-candidates — returns candidate designs for the design-vs-design
+     * comparison chart.
+     * <p>
+     * Accepts an optional {@code designAId} to restrict candidates to designs that have
+     * co-raced (in the same division) with any boat of design A, and an optional {@code q}
+     * text filter. Excluded designs are always omitted. Results are sorted by canonical name
+     * and capped at 200. Each entry includes the design's spin and nonSpin RF.
+     */
     private void handleDesignComparisonCandidates(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String designAId = req.getParameter("designAId");
@@ -1567,6 +1817,16 @@ public class AdminApiServlet extends HttpServlet
         writeJson(resp, Map.of("designs", designs));
     }
 
+    /**
+     * GET /api/comparison/design-chart — returns elapsed-time ratio data for a design-vs-design
+     * scatter chart.
+     * <p>
+     * Required params: {@code designAId} and {@code designBId}. For every race division where
+     * at least one boat of each design finished, computes the median elapsed time of design-A
+     * boats (y-axis) and design-B boats (x-axis), along with race/series metadata for hover
+     * tooltips. Points are sorted by date. Also returns the spin/nonSpin RF for each design.
+     * Returns 404 if either design ID is not in the cache.
+     */
     private void handleDesignComparisonChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
         String designAId = req.getParameter("designAId");

@@ -20,12 +20,10 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  */
 public record Boat(
     String id,           // e.g. "aus1234-raging-3f9a"
-    String sailNumber,   // normalised sail number, e.g. "aus1234"
+    String sailNumber,   // normalised sail number, e.g. "AUS1234"
     String name,         // canonical name
     String designId,     // normalised design ID, nullable
     String clubId,       // primary home club domain, nullable
-    List<String> aliases,           // alternate names seen for this boat across sources
-    List<String> altSailNumbers,    // alternate sail numbers (previous sail numbers after a change)
     List<Certificate> certificates, // measurement certificates held by this boat
     List<String> sources, // short importer names that have contributed to this record, e.g. ["SailSys", "ORC"]
     Instant lastUpdated,  // when this record was last written by an importer; nullable
@@ -39,15 +37,13 @@ public record Boat(
             certificates = List.of();
         if (sources == null)
             sources = List.of();
-        if (altSailNumbers == null)
-            altSailNumbers = List.of();
     }
 
     @Override
     public Boat withLoadedAt(Instant t)
     {
-        return new Boat(id, sailNumber, name, designId, clubId, aliases,
-            altSailNumbers, certificates, sources, lastUpdated, t);
+        return new Boat(id, sailNumber, name, designId, clubId,
+            certificates, sources, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -60,8 +56,7 @@ public record Boat(
             return false;
         return Objects.equals(id, b.id) && Objects.equals(sailNumber, b.sailNumber)
             && Objects.equals(name, b.name) && Objects.equals(designId, b.designId)
-            && Objects.equals(clubId, b.clubId) && Objects.equals(aliases, b.aliases)
-            && Objects.equals(altSailNumbers, b.altSailNumbers)
+            && Objects.equals(clubId, b.clubId)
             && Objects.equals(certificates, b.certificates)
             && Objects.equals(sources, b.sources) && Objects.equals(lastUpdated, b.lastUpdated);
     }
@@ -69,7 +64,7 @@ public record Boat(
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, sailNumber, name, designId, clubId, aliases, altSailNumbers, certificates, sources, lastUpdated);
+        return Objects.hash(id, sailNumber, name, designId, clubId, certificates, sources, lastUpdated);
     }
 
     @Override
@@ -81,8 +76,6 @@ public record Boat(
             ", name='" + name + '\'' +
             ", designId='" + designId + '\'' +
             ", clubId='" + clubId + '\'' +
-            ", aliases=" + aliases +
-            ", altSailNumbers=" + altSailNumbers +
             ", certificates=" + certificates +
             ", sources=" + sources +
             ", lastUpdated=" + lastUpdated +

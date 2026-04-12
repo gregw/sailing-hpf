@@ -108,6 +108,8 @@ public class HandicapAnalyser
 
         for (Boat boat : store.boats().values())
         {
+            if (store.isBoatExcluded(boat.id())) continue;
+            if (boat.designId() != null && store.isDesignExcluded(boat.designId())) continue;
             if (boat.certificates().isEmpty())
                 continue;
 

@@ -564,7 +564,7 @@ public class RshyrImporter
         List<Certificate> certs = new ArrayList<>(boat.certificates());
         certs.add(inferred);
         store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-            boat.designId(), boat.clubId(), boat.aliases(), boat.altSailNumbers(),
+            boat.designId(), boat.clubId(),
             List.copyOf(certs), addSource(boat.sources(), SOURCE), Instant.now(), null));
         LOG.debug("RSHYR: inferred {} cert {} (tcf={}) for boat {}", system, certNum, tcf, boat.id());
         return certNum;

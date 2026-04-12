@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -26,10 +27,11 @@ class SailNumberNameLoaderTest
     }
 
     @Test
-    void unknownDesignAliasReturnsNull()
+    void unknownDesignAliasReturnsInput()
     {
         Aliases.Loaded seed = Aliases.load(Path.of("nonexistent"));
-        assertNull(seed.resolveDesignAlias("unknowndesign99"));
+        // Unknown aliases pass through unchanged
+        assertEquals("unknowndesign99", seed.resolveDesignAlias("unknowndesign99"));
     }
 
     @Test
@@ -47,35 +49,33 @@ class SailNumberNameLoaderTest
     }
 
     @Test
-    void boatAliasesReturnedForKnownSailNumber()
+    void lookupBoatByAlternateName()
     {
         Aliases.Loaded seed = Aliases.load(Path.of("nonexistent"));
-        // MYC7 is in aliases.yaml with aliases "1060" and "TenSixty"
-        List<String> aliases = seed.boatAliases("MYC7");
-        assertFalse(aliases.isEmpty());
-        assertTrue(aliases.contains("1060"));
-        assertTrue(aliases.contains("TenSixty"));
+        // MYC7-daydreaming has aliases "1060" and "TenSixty"
+        // lookupBoat returns the canonical sail/name pair plus display name
+        Optional<Aliases.BoatMatch> result = seed.lookupBoat("MYC7", "1060");
+        assertTrue(result.isPresent());
+        assertEquals("MYC7", result.get().normSailNumber());
+        assertEquals("daydreaming", result.get().normName());
+        assertEquals("Day Dreaming", result.get().canonicalDisplayName());
     }
 
     @Test
-    void unknownSailNumberReturnsEmptyList()
+    void lookupBoatByTenSixtyAlias()
     {
         Aliases.Loaded seed = Aliases.load(Path.of("nonexistent"));
-        assertTrue(seed.boatAliases("NOSUCHSAIL999").isEmpty());
+        Optional<Aliases.BoatMatch> result = seed.lookupBoat("MYC7", "tensixty");
+        assertTrue(result.isPresent());
+        assertEquals("MYC7", result.get().normSailNumber());
+        assertEquals("daydreaming", result.get().normName());
     }
 
     @Test
-    void boatCanonicalNameReturned()
+    void unknownBoatReturnsEmpty()
     {
         Aliases.Loaded seed = Aliases.load(Path.of("nonexistent"));
-        assertEquals("Day Dreaming", seed.boatCanonicalName("MYC7"));
-    }
-
-    @Test
-    void unknownBoatCanonicalNameReturnsNull()
-    {
-        Aliases.Loaded seed = Aliases.load(Path.of("nonexistent"));
-        assertNull(seed.boatCanonicalName("NOSUCHSAIL999"));
+        assertTrue(seed.lookupBoat("NOSUCHSAIL999", "noname").isEmpty());
     }
 
     @Test
@@ -83,10 +83,10 @@ class SailNumberNameLoaderTest
     {
         // The EMPTY sentinel should return nulls/empty lists without throwing
         Aliases.Loaded empty = Aliases.Loaded.EMPTY;
-        assertNull(empty.resolveDesignAlias("anything"));
+        // EMPTY resolveDesignAlias passes through the input
+        assertEquals("anything", empty.resolveDesignAlias("anything"));
         assertNull(empty.designCanonicalName("anything"));
-        assertTrue(empty.boatAliases("anything").isEmpty());
-        assertNull(empty.boatCanonicalName("anything"));
+        assertTrue(empty.lookupBoat("anything", "anything").isEmpty());
     }
 
     @Test

@@ -581,7 +581,7 @@ public class SailSysImporter
         if (boatClub != null && boat.clubId() == null)
         {
             store.putBoat(new Boat(boat.id(), boat.sailNumber(), boat.name(),
-                boat.designId(), boatClub.id(), boat.aliases(), boat.altSailNumbers(),
+                boat.designId(), boatClub.id(),
                 boat.certificates(), addSource(boat.sources(), SOURCE), Instant.now(), null));
             boat = store.boats().get(boat.id());
         }
@@ -661,7 +661,7 @@ public class SailSysImporter
         List<Certificate> certs = new ArrayList<>(current.certificates());
         certs.add(cert);
         store.putBoat(new Boat(current.id(), current.sailNumber(), current.name(),
-            current.designId(), current.clubId(), current.aliases(), current.altSailNumbers(),
+            current.designId(), current.clubId(),
             List.copyOf(certs),
             addSource(current.sources(), SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "")),
             Instant.now(), null));

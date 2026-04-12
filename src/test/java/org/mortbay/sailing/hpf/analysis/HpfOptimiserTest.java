@@ -129,7 +129,7 @@ class HpfOptimiserTest
         Scenario s = buildScenario(5, 10, 42, 0.01, false);
         // Add a 6th boat with RF but no race entries
         Boat noRaceBoat = new Boat("b6-foxtrot-design", "AUS6", "Foxtrot", "design", null,
-            List.of(), List.of(), List.of(), List.of(), null, null);
+            List.of(), List.of(), null, null);
         s.store.putBoat(noRaceBoat);
         Factor rfSpin = new Factor(0.95, 0.8);
         ReferenceFactors rf6 = new ReferenceFactors(rfSpin, null, null, 0, 0, 0);
@@ -197,7 +197,7 @@ class HpfOptimiserTest
         for (int i = 0; i < nBoats; i++)
         {
             Boat boat = new Boat(BOAT_IDS[i], "AUS" + (i + 1), "Boat" + (i + 1), "design", null,
-                List.of(), List.of(), List.of(), List.of(), null, null);
+                List.of(), List.of(), null, null);
             store.putBoat(boat);
             Factor rfSpin = new Factor(TRUE_TCFS[i], 0.9);
             ReferenceFactors rf = new ReferenceFactors(rfSpin, null, null, 0, 0, 0);
@@ -239,7 +239,7 @@ class HpfOptimiserTest
         for (int i = 0; i < 5; i++)
         {
             Boat boat = new Boat(BOAT_IDS[i], "AUS" + (i + 1), "Boat" + (i + 1), "design", null,
-                List.of(), List.of(), List.of(), List.of(), null, null);
+                List.of(), List.of(), null, null);
             store.putBoat(boat);
             Factor rfSpin = new Factor(TRUE_TCFS[i], 1.0);
             ReferenceFactors rf = new ReferenceFactors(rfSpin, null, null, 0, 0, 0);
@@ -282,14 +282,14 @@ class HpfOptimiserTest
 
         // 2 boats: b1 races as spin, b2 as nonSpin
         Boat b1 = new Boat("b1-alpha-design", "AUS1", "Alpha", "design", null,
-            List.of(), List.of(), List.of(), List.of(), null, null);
+            List.of(), List.of(), null, null);
         Boat b2 = new Boat("b2-bravo-design", "AUS2", "Bravo", "design", null,
-            List.of(), List.of(), List.of(), List.of(), null, null);
+            List.of(), List.of(), null, null);
         // Add 2 more boats so divisions have enough entries
         Boat b3 = new Boat("b3-charlie-design", "AUS3", "Charlie", "design", null,
-            List.of(), List.of(), List.of(), List.of(), null, null);
+            List.of(), List.of(), null, null);
         Boat b4 = new Boat("b4-delta-design", "AUS4", "Delta", "design", null,
-            List.of(), List.of(), List.of(), List.of(), null, null);
+            List.of(), List.of(), null, null);
         store.putBoat(b1);
         store.putBoat(b2);
         store.putBoat(b3);
