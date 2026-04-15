@@ -199,6 +199,11 @@ designs:
     canonicalName: "Sydney 36 mkII"
     aliases:
     - "Sydney36mk2"
+  adams10cruiser:
+    canonicalName: "Adams 10 Cruiser"
+    aliases:
+    - "Adams Ten Cruising"
+    - "adamstencruising"
 boats:
   MYC7-daydreaming:
     canonicalName: "Day Dreaming"
@@ -413,3 +418,23 @@ boats:
     aliases:
     - sailNumber: "6295"
       name: "rattytoohey"
+  MYC8-crux:
+    canonicalName: "Crux"
+    aliases:
+    - sailNumber: "177"
+      name: "crux"
+  "3878-younggeneration":
+    canonicalName: "Young Generation"
+    aliases:
+    - sailNumber: "3878"
+      name: "youngergeneration"
+  MYC7-daydreamin:
+    canonicalName: "Daydreamin’"
+    aliases:
+    - sailNumber: "MYC7"
+      name: "daydreaming"
+  "4860-trinity":
+    canonicalName: "Trinity"
+    aliases:
+    - sailNumber: "4806"
+      name: "trinity"

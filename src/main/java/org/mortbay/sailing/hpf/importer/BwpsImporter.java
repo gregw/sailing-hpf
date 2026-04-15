@@ -54,7 +54,7 @@ public class BwpsImporter
 
     static final String SOURCE = "BWPS";
     static final String BASE_URL = "https://bwps.cycaracing.com";
-    static final int MIN_YEAR = 2020;
+    public static final int DEFAULT_MIN_YEAR = 2020;
     static final String CLUB_ID = "cyca.com.au";
 
     /** Formatter for BWPS finish time strings: e.g. "29 Dec 2025 02:39:32 PM". */
@@ -64,6 +64,7 @@ public class BwpsImporter
     private final DataStore store;
     private final HttpClient httpClient;
     private int recentRaceReimportDays = 30;
+    private int minYear = DEFAULT_MIN_YEAR;
 
     public BwpsImporter(DataStore store, HttpClient httpClient)
     {
@@ -92,11 +93,14 @@ public class BwpsImporter
 
     // --- Entry point ---
 
-    public void run() throws Exception { run(30); }
+    public void run() throws Exception { run(30, DEFAULT_MIN_YEAR); }
 
-    public void run(int recentRaceReimportDays) throws Exception
+    public void run(int recentRaceReimportDays) throws Exception { run(recentRaceReimportDays, DEFAULT_MIN_YEAR); }
+
+    public void run(int recentRaceReimportDays, int minYear) throws Exception
     {
         this.recentRaceReimportDays = recentRaceReimportDays;
+        this.minYear = minYear;
         LOG.info("BWPS: fetching race list from {}/standings/", BASE_URL);
         String mainHtml = fetchHtml(BASE_URL + "/standings/");
         List<RaceOption> races = parseRaceSelector(mainHtml);
@@ -119,7 +123,7 @@ public class BwpsImporter
             List<YearOption> years = parseYearSelector(raceHtml);
             for (YearOption year : years)
             {
-                if (year.year() < MIN_YEAR)
+                if (year.year() < minYear)
                     continue;
                 LOG.info("BWPS: processing race='{}' year={}", race.name(), year.yearLabel());
                 try
@@ -182,9 +186,11 @@ public class BwpsImporter
         String seriesId = IdGenerator.generateSeriesId(CLUB_ID, raceName);
         String raceId   = IdGenerator.generateRaceId(CLUB_ID, raceDate, 1);
 
-        if (store.races().containsKey(raceId) && !isRecentRace(raceDate))
+        Race existingRace = store.races().get(raceId);
+        if (existingRace != null && !isRecentRace(raceDate)
+            && SOURCE.equals(existingRace.source()))
         {
-            LOG.debug("BWPS: race {} already imported, updating series membership only", raceId);
+            LOG.debug("BWPS: race {} already imported by BWPS, updating series membership only", raceId);
             updateClubSeries(CLUB_ID, seriesId, raceName, raceId);
             return;
         }
@@ -275,15 +281,10 @@ public class BwpsImporter
             .map(e -> new Division(e.getKey(), List.copyOf(e.getValue())))
             .toList();
 
-        // Derive handicap system label from the systems present
-        boolean hasIrc = standingsRows.stream().anyMatch(r -> "IRC".equals(r.system()));
-        boolean hasOrc = standingsRows.stream().anyMatch(r -> "ORC".equals(r.system()));
-        String handicapSystem = hasIrc && hasOrc ? "IRC/ORC" : hasIrc ? "IRC" : "ORC";
-
         store.putRace(new Race(raceId, CLUB_ID, List.of(seriesId), raceDate, 1,
-            raceName, handicapSystem, false, divisions, SOURCE, Instant.now(), null));
-        LOG.info("BWPS: imported race {} '{}' {} ({} finishers, {} division(s), system={})",
-            raceId, raceName, year, finisherCount, divisions.size(), handicapSystem);
+            raceName, divisions, SOURCE, Instant.now(), null));
+        LOG.info("BWPS: imported race {} '{}' {} ({} finishers, {} division(s))",
+            raceId, raceName, year, finisherCount, divisions.size());
 
         updateClubSeries(CLUB_ID, seriesId, raceName, raceId);
     }

@@ -188,32 +188,30 @@ function renderChart(data) {
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
     const xPad = (xMax - xMin) * 0.05 || xMin * 0.05;
 
-    // Best-fit line (OLS: Y on X)
+    // Best-fit line through origin
     const fit = linearFit(xs, ys);
+    const x1 = xMax + xPad;
     if (fit) {
-        const x0 = xMin - xPad, x1 = xMax + xPad;
         traces.push({
-            x: [x0, x1],
-            y: [fit.slope * x0 + fit.intercept, fit.slope * x1 + fit.intercept],
+            x: [0, x1],
+            y: [0, fit.slope * x1],
             type: 'scatter', mode: 'lines',
             name: `Best fit (slope ${fit.slope.toFixed(4)})`,
             line: { color: '#2255aa', width: 2 }
         });
     }
 
-    // Expected line from reference factors: slope = rfB / rfA (through data centroid)
+    // Expected RF ratio line through origin: slope = rfA / rfB
+    // (y = design-A elapsed, x = design-B elapsed; faster boat has lower elapsed → rfA/rfB)
     const rfA = selectedVariant === 'nonSpin' ? data.designA.rfNonSpin : data.designA.rfSpin;
     const rfB = selectedVariant === 'nonSpin' ? data.designB.rfNonSpin : data.designB.rfSpin;
     if (rfA && rfB && rfA.value && rfB.value) {
-        const slope = rfB.value / rfA.value;
-        const meanX = xs.reduce((s, v) => s + v, 0) / xs.length;
-        const meanY = ys.reduce((s, v) => s + v, 0) / ys.length;
-        const x0 = xMin - xPad, x1 = xMax + xPad;
+        const slope = rfA.value / rfB.value;
         traces.push({
-            x: [x0, x1],
-            y: [meanY + slope * (x0 - meanX), meanY + slope * (x1 - meanX)],
+            x: [0, x1],
+            y: [0, slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `Expected RF (${rfA.value.toFixed(4)} / ${rfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            name: `RF ratio (${rfA.value.toFixed(4)} / ${rfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: '#c47900', width: 2, dash: 'dot' }
         });
     }
@@ -223,9 +221,9 @@ function renderChart(data) {
 
     const layout = {
         xaxis: { title: `${esc(data.designB.canonicalName)} elapsed (h)`,
-                 range: [xMax + xPad, xMin - xPad] },
+                 range: [xMax + xPad, 0] },
         yaxis: { title: `${esc(data.designA.canonicalName)} elapsed (h)`,
-                 range: [yMax + yPad, yMin - yPad] },
+                 range: [yMax + yPad, 0] },
         legend: { orientation: 'v', xanchor: 'right', x: 1 },
         margin: { t: 20, b: 70, l: 80, r: 20 },
         hovermode: 'closest'
@@ -311,18 +309,17 @@ function onCalcInput(source) {
 // ---- Helpers ----
 
 function linearFit(xs, ys) {
+    // Constrained through origin: elapsed times are proportional (y = k·x), so intercept = 0.
+    // Slope = Σ(xi·yi) / Σ(xi²)
     const n = xs.length;
     if (n < 2) return null;
-    const meanX = xs.reduce((s, v) => s + v, 0) / n;
-    const meanY = ys.reduce((s, v) => s + v, 0) / n;
     let num = 0, den = 0;
     for (let i = 0; i < n; i++) {
-        num += (xs[i] - meanX) * (ys[i] - meanY);
-        den += (xs[i] - meanX) ** 2;
+        num += xs[i] * ys[i];
+        den += xs[i] * xs[i];
     }
     if (den === 0) return null;
-    const slope = num / den;
-    return { slope, intercept: meanY - slope * meanX };
+    return { slope: num / den, intercept: 0 };
 }
 
 function fmtTime(secs) {

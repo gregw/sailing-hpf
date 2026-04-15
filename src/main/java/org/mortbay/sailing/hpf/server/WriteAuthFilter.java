@@ -11,10 +11,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
+import java.util.Set;
 
 class WriteAuthFilter implements Filter
 {
     private static final String CLAIMS_ATTR = "org.eclipse.jetty.security.openid.claims";
+    /** POST endpoints that are open to unauthenticated users (read-only request logging). */
+    private static final Set<String> OPEN_POST_PATHS = Set.of(
+        "/api/boats/merge-request", "/api/designs/merge-request", "/api/boats/edit-request");
     private final AuthConfig authConfig;
 
     WriteAuthFilter(AuthConfig authConfig)
@@ -36,6 +40,13 @@ class WriteAuthFilter implements Filter
             return;
         }
         if (!"POST".equalsIgnoreCase(request.getMethod()))
+        {
+            chain.doFilter(req, res);
+            return;
+        }
+        // Allow specific POST paths for unauthenticated users (read-only request logging)
+        String pathInfo = request.getServletPath() + (request.getPathInfo() != null ? request.getPathInfo() : "");
+        if (OPEN_POST_PATHS.contains(pathInfo))
         {
             chain.doFilter(req, res);
             return;

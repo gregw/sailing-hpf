@@ -26,7 +26,7 @@ function isWriteAllowed() { return window.hpfAuth?.authenticated; }
 function applyAuthState() {
     const ok = isWriteAllowed();
     document.querySelectorAll(
-        '#importers-body button, [onclick="saveSchedule()"], [onclick="stopSchedule()"]'
+        '#importers-body button, [onclick="saveSchedule()"], [onclick="stopSchedule()"], [onclick="runScheduleNow()"]'
     ).forEach(b => {
         b.disabled = !ok;
         b.title = ok ? '' : 'Sign in to use this action';
@@ -51,6 +51,11 @@ async function loadImporters() {
     }
     const yearInput = document.getElementById('target-irc-year');
     yearInput.value = data.targetIrcYear != null ? data.targetIrcYear : '';
+
+    if (data.sailsysStartId != null)
+        document.getElementById('sailsys-start-id').value = data.sailsysStartId;
+    if (data.sailsysEndId != null)
+        document.getElementById('sailsys-end-id').value = data.sailsysEndId;
 
     if (data.hpfConfig) {
         document.getElementById('hpf-lambda').value = data.hpfConfig.lambda;
@@ -99,10 +104,8 @@ function buildRow(entry) {
     const isRunning = entry.status === 'running';
     const isSailSysApi = entry.name === 'sailsys-races';
     const key = entry.name + '-' + entry.mode;
-    const defaultStart = (entry.nextStartId != null) ? entry.nextStartId : 1;
-    const startInput = isSailSysApi
-        ? `<input type="number" id="start-${esc(key)}" value="${defaultStart}" min="1" style="width:5em"
-               title="SailSys race ID to start importing from">`
+    const progressField = isSailSysApi
+        ? `<span id="progress-${esc(key)}" style="font-family:monospace;font-size:0.9em;color:#666;margin-right:0.4em;"></span>`
         : '';
     const runStopBtns = isSailSysApi
         ? `<button id="run-btn-${esc(key)}"
@@ -125,7 +128,7 @@ function buildRow(entry) {
       <td>${esc(displayName(entry.name))} ${infoBtn('task-' + entry.name, taskTip(entry.name))}</td>
       <td><span class="badge ${isRunning ? 'badge-running' : 'badge-idle'}"
                id="badge-${esc(key)}">${esc(entry.status)}</span></td>
-      <td>${startInput}${runStopBtns}</td>
+      <td>${progressField}${runStopBtns}</td>
       <td style="text-align:center"><input type="checkbox" id="sched-${esc(key)}"
                title="Include in the automatic scheduled run"
                ${entry.includeInSchedule ? 'checked' : ''}></td>
@@ -157,11 +160,8 @@ document.addEventListener('hpf:authready', applyAuthState);
 
 async function runImporter(name, mode) {
     if (!isWriteAllowed()) return;
-    const key = name + '-' + mode;
-    const startInput = document.getElementById('start-' + key);
-    const startId = startInput ? parseInt(startInput.value, 10) || 1 : 1;
     const resp = await fetch(
-        '/api/importers/' + name + '/run?mode=' + encodeURIComponent(mode) + '&startId=' + startId,
+        '/api/importers/' + name + '/run?mode=' + encodeURIComponent(mode),
         { method: 'POST' }
     );
     const data = await resp.json().catch(() => ({}));
@@ -187,6 +187,20 @@ async function stopSchedule() {
     setStopScheduleVisible(false);
 }
 
+async function runScheduleNow() {
+    if (!isWriteAllowed()) return;
+    const resp = await fetch('/api/importers/run-schedule', { method: 'POST' });
+    if (resp.status === 409) {
+        alert('An import is already running');
+    } else if (resp.status === 202) {
+        setAllRunButtonsDisabled(true);
+        setStopScheduleVisible(true);
+        startStatusPoller();
+    } else {
+        alert('Unexpected response: ' + resp.status);
+    }
+}
+
 async function saveSchedule() {
     if (!isWriteAllowed()) return;
     const days = [...document.querySelectorAll('#schedule-days input:checked')].map(cb => cb.value);
@@ -201,6 +215,10 @@ async function saveSchedule() {
             runAtStartup: document.getElementById('start-' + name + '-' + mode + '-startup').checked
         };
     });
+    const sailsysStartVal = parseInt(document.getElementById('sailsys-start-id').value, 10);
+    const sailsysStartId = sailsysStartVal > 0 ? sailsysStartVal : null;
+    const sailsysEndVal = parseInt(document.getElementById('sailsys-end-id').value, 10);
+    const sailsysEndId = sailsysEndVal > 0 ? sailsysEndVal : null;
     const yearVal = parseInt(document.getElementById('target-irc-year').value, 10);
     const targetIrcYear = yearVal > 0 ? yearVal : null;
     const hpfLambda = parseFloat(document.getElementById('hpf-lambda').value) || null;
@@ -214,7 +232,7 @@ async function saveSchedule() {
     const resp = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days, time, importers, targetIrcYear,
+        body: JSON.stringify({ days, time, importers, sailsysStartId, sailsysEndId, targetIrcYear,
             hpfLambda, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
             hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold })
     });
@@ -252,6 +270,8 @@ function startStatusPoller() {
         if (!data.running) {
             clearInterval(statusPoller);
             statusPoller = null;
+            // Clear any progress display
+            document.querySelectorAll('[id^="progress-"]').forEach(el => el.textContent = '');
             prevRunningName = null;
             prevRunningMode = null;
             setStopScheduleVisible(false);
@@ -274,8 +294,8 @@ function startStatusPoller() {
 
             if (data.currentId != null) {
                 const key = data.name + '-' + data.mode;
-                const startInput = document.getElementById('start-' + key);
-                if (startInput) startInput.value = data.currentId + 1;
+                const progressEl = document.getElementById('progress-' + key);
+                if (progressEl) progressEl.textContent = 'id ' + data.currentId;
                 const runBtn  = document.getElementById('run-btn-'  + key);
                 const stopBtn = document.getElementById('stop-btn-' + key);
                 if (runBtn)  runBtn.style.display  = 'none';

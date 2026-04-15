@@ -53,7 +53,7 @@ The raw layer captures data exactly as ingested from source systems. It is persi
 
 **Top-level records** (one JSON file each):
 - `Boat` — id, sailNumber, name, designId, clubId, aliases (List\<TimedAlias\>), altSailNumbers, certificates (List\<Certificate\>), sources, lastUpdated
-- `Race` — id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions (List\<Division\>), source, lastUpdated
+- `Race` — id, clubId, seriesIds, date, number, name, divisions (List\<Division\>), source, lastUpdated
 - `Club` — id, shortName, longName, state, aliases, topyachtUrls, series (List\<Series\>)
 - `Design` — id, canonicalName, makerIds, aliases, sources, lastUpdated
 

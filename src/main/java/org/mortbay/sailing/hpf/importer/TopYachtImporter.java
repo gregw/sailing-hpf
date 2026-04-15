@@ -265,9 +265,9 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, handicapSystem, false, List.copyOf(divisions), SOURCE, Instant.now(), null));
-        LOG.info("TopYacht: imported race {} ({} finishers, {} division(s), system={})",
-            raceId, totalFinishers, divisions.size(), handicapSystem);
+            null, List.copyOf(divisions), SOURCE, Instant.now(), null));
+        LOG.info("TopYacht: imported race {} ({} finishers, {} division(s))",
+            raceId, totalFinishers, divisions.size());
 
         updateClubSeries(club.id(), seriesId, seriesName, raceId);
     }
@@ -388,9 +388,9 @@ public class TopYachtImporter
         }
 
         store.putRace(new Race(raceId, club.id(), List.of(seriesId), date, raceNumber,
-            null, handicapSystem, false, List.of(new Division(handicapSystem, List.copyOf(finishers))), SOURCE, Instant.now(), null));
-        LOG.info("TopYacht: imported race {} ({} finishers, system={})",
-            raceId, finishers.size(), handicapSystem);
+            null, List.of(new Division(handicapSystem, List.copyOf(finishers))), SOURCE, Instant.now(), null));
+        LOG.info("TopYacht: imported race {} ({} finishers)",
+            raceId, finishers.size());
 
         updateClubSeries(club.id(), seriesId, seriesName, raceId);
     }

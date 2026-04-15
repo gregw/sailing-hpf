@@ -22,7 +22,7 @@ importers:
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "topyacht"
   mode: "api"
@@ -46,9 +46,10 @@ importers:
   runAtStartup: true
 schedule:
   days:
-  - "MONDAY"
-  time: "16:01:00"
-nextSailSysRaceId: 32640
+  - "TUESDAY"
+  time: "08:08:00"
+nextSailSysRaceId: 32414
+sailsysEndRaceId: 41036
 targetIrcYear: 2025
 outlierSigma: null
 recentRaceReimportDays: 30
@@ -59,7 +60,7 @@ sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
 sailsysHttpDelayMs: 200
 sailsysRecentRaceDays: 14
-sailsysNotFoundThreshold: 1000
+bwpsMinYear: 2021
 
 # --- ORC importer ---
 orcListMaxAgeDays: 1
@@ -76,7 +77,7 @@ hpfOuterDampingFactor: 0.3
 hpfOuterConvergenceThreshold: 0.27
 hpfConvergenceThreshold: 1.0E-4
 hpfMaxInnerIterations: 100
-hpfMaxOuterIterations: 100
+hpfMaxOuterIterations: 50
 hpfCrossVariantLambda: 0.0
 
 # --- Sliding average / consistency ---

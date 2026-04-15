@@ -82,6 +82,8 @@ tr.excluded td:last-child { color: inherit; }
 .tab-panel.active { display: block; }
 .search-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
 .search-row input[type="text"] { font-family: monospace; padding: 4px; width: 300px; max-width: 600px; flex: 1 1 300px; }
+.search-clear-btn { padding: 2px 6px; font-size: 0.8rem; line-height: 1; background: none; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; color: #666; margin-left: -0.25rem; }
+.search-clear-btn:hover { background: #f0f0f0; color: #333; }
 .search-row label { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th { text-align: left; padding: 4px 8px; background: #f0f0f0; border-bottom: 2px solid #ccc; }

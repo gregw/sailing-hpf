@@ -342,7 +342,6 @@ class TopYachtImporterTest
         assertEquals(1, store.races().size());
         Race race = store.races().values().iterator().next();
         assertEquals("bsyc.com.au-2024-08-15-0007", race.id());
-        assertEquals("PHS", race.handicapSystem());
         assertEquals(LocalDate.of(2024, 8, 15), race.date());
         assertEquals(7, race.number());
 
@@ -441,7 +440,6 @@ class TopYachtImporterTest
 
         assertEquals(1, store.races().size());
         Race race = store.races().values().iterator().next();
-        assertEquals("IRC/ORC", race.handicapSystem());
         assertEquals(1, race.divisions().size());
         assertEquals(1, race.divisions().get(0).finishers().size()); // deduped to one finisher
     }

@@ -399,14 +399,34 @@ function renderHandicapCalc(data) {
     const section = document.getElementById('hpf-calc');
     const table   = section.querySelector('table');
 
+    const showBestFit = data.boats.length <= 3;
+
     const calcBoats = data.boats.map(b => {
         const item  = selectedItems.find(i => i.type === 'boat' && i.id === b.id);
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name);
-        const hpf   = selectedVariant === 'nonSpin'    ? b.hpfNonSpin
-                    : selectedVariant === 'twoHanded'  ? b.hpfTwoHanded
-                    : b.hpfSpin;
-        return { id: b.id, name, color, hpf: hpf ? hpf.value : null };
+
+        const hpfFactor = selectedVariant === 'nonSpin'   ? b.hpfNonSpin
+                        : selectedVariant === 'twoHanded' ? b.hpfTwoHanded
+                        : b.hpfSpin;
+        const rfFactor  = selectedVariant === 'nonSpin'   ? b.rfNonSpin
+                        : selectedVariant === 'twoHanded' ? null
+                        : b.rfSpin;
+
+        // Best fit: latest endpoint of the weighted OLS trend through filtered back-calc factors
+        let bestFit = null;
+        if (showBestFit) {
+            const entries = filterEntries(b.entries || []);
+            const trend = weightedOlsTrend(entries);
+            if (trend) bestFit = trend.y[1];
+        }
+
+        return {
+            id: b.id, name, color,
+            hpf:     hpfFactor ? hpfFactor.value : null,
+            rf:      rfFactor  ? rfFactor.value  : null,
+            bestFit
+        };
     }).filter(b => b.hpf != null).sort((a, b) => b.hpf - a.hpf);
 
     if (calcBoats.length === 0) {
@@ -417,19 +437,47 @@ function renderHandicapCalc(data) {
     section.style.display = '';
     table.innerHTML = '';
 
+    const factorTypes = showBestFit ? ['hpf', 'rf', 'bestFit'] : ['hpf', 'rf'];
+
+    // Header row
+    const thead = document.createElement('thead');
+    const hdrTr = document.createElement('tr');
+    ['', 'HPF', 'RF', ...(showBestFit ? ['Best Fit'] : []), 'Enter handicap'].forEach((text, i) => {
+        const th = document.createElement('th');
+        th.textContent = text;
+        th.style.cssText = 'padding:2px 8px;font-size:0.8rem;color:#555;text-align:' + (i === 0 ? 'left' : 'center') + ';';
+        hdrTr.appendChild(th);
+    });
+    thead.appendChild(hdrTr);
+    table.appendChild(thead);
+
+    // Data rows — one input drives all three value columns via per-column ratio
+    const tbody = document.createElement('tbody');
     calcBoats.forEach(b => {
         const tr = document.createElement('tr');
+
+        // Boat name
         const tdName = document.createElement('td');
-        tdName.style.color = b.color;
-        tdName.style.fontWeight = 'bold';
+        tdName.style.cssText = `color:${b.color};font-weight:bold;`;
         tdName.textContent = b.name;
+        tr.appendChild(tdName);
 
-        const tdHpf = document.createElement('td');
-        tdHpf.style.fontFamily = 'monospace';
-        tdHpf.style.paddingRight = '0.5rem';
-        tdHpf.textContent = b.hpf.toFixed(4);
+        // Value cells: HPF, RF, [Best Fit]
+        factorTypes.forEach(ft => {
+            const td = document.createElement('td');
+            td.className = 'hpf-calc-value';
+            td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
+            const v = b[ft];
+            td.textContent = v != null ? v.toFixed(4) : '—';
+            td.dataset.boatId = b.id;
+            td.dataset.factorType = ft;
+            td.dataset.origValue = v != null ? String(v) : '';
+            tr.appendChild(td);
+        });
 
+        // Single input cell
         const tdInput = document.createElement('td');
+        tdInput.style.cssText = 'padding:2px 4px;text-align:center;';
         const input = document.createElement('input');
         input.type = 'number';
         input.step = '0.0001';
@@ -441,29 +489,49 @@ function renderHandicapCalc(data) {
         input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
         input.addEventListener('input', () => onCalcInput(input, calcBoats));
         tdInput.appendChild(input);
-
-        tr.appendChild(tdName);
-        tr.appendChild(tdHpf);
         tr.appendChild(tdInput);
-        table.appendChild(tr);
+
+        tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
 }
 
 function onCalcInput(changedInput, calcBoats) {
-    const raw = changedInput.value.trim();
-    const val = parseFloat(raw);
+    const raw     = changedInput.value.trim();
+    const val     = parseFloat(raw);
     const srcBoat = calcBoats.find(b => b.id === changedInput.dataset.boatId);
     if (!srcBoat) return;
 
-    document.querySelectorAll('.hpf-calc-input').forEach(input => {
-        if (input === changedInput) return;
+    // Clear other inputs so only one drives the calculation at a time
+    document.querySelectorAll('.hpf-calc-input').forEach(inp => {
+        if (inp !== changedInput) inp.value = '';
+    });
+
+    // Update all value cells — each column uses its own per-boat ratio
+    document.querySelectorAll('.hpf-calc-value').forEach(td => {
+        const ft      = td.dataset.factorType;
+        const origStr = td.dataset.origValue;
+        if (!origStr) return;
+        const origVal = parseFloat(origStr);
+        if (isNaN(origVal)) return;
+
         if (!raw || isNaN(val)) {
-            input.value = '';
-        } else {
-            const otherBoat = calcBoats.find(b => b.id === input.dataset.boatId);
-            if (!otherBoat) return;
-            input.value = (otherBoat.hpf * (val / srcBoat.hpf)).toFixed(4);
+            // Restore original displayed value
+            td.textContent = origVal.toFixed(4);
+            td.style.color = '';
+            return;
         }
+
+        const srcFactor = srcBoat[ft];
+        if (srcFactor == null) {
+            // Column not available for the anchor boat — can't scale
+            td.textContent = origVal.toFixed(4);
+            td.style.color = '';
+            return;
+        }
+
+        td.textContent = (origVal * (val / srcFactor)).toFixed(4);
+        td.style.color = '#c05000';
     });
 }
 
@@ -566,35 +634,48 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const xMin = Math.min(...xs), xMax = Math.max(...xs);
     const xPad = (xMax - xMin) * 0.05 || xMin * 0.05;
 
-    // Best-fit line
+    // Best-fit line through origin
     const fit = linearFitElapsed(xs, ys);
     if (fit) {
-        const x0 = xMin - xPad, x1 = xMax + xPad;
+        const x0 = 0, x1 = xMax + xPad;
         traces.push({
             x: [x0, x1],
-            y: [fit.slope * x0 + fit.intercept, fit.slope * x1 + fit.intercept],
+            y: [0, fit.slope * x1],
             type: 'scatter', mode: 'lines',
             name: `Best fit (slope ${fit.slope.toFixed(4)})`,
             line: { color: colorA, width: 2 }
         });
     }
 
-    // Expected HPF reference line
+    const x0 = 0, x1 = xMax + xPad;
+
+    // Expected RF ratio line (through origin)
+    const rfA = selectedVariant === 'nonSpin' ? data.boatA.rfNonSpin : data.boatA.rfSpin;
+    const rfB = selectedVariant === 'nonSpin' ? data.boatB.rfNonSpin : data.boatB.rfSpin;
+    if (rfA && rfB && rfA.value && rfB.value) {
+        const slope = rfA.value / rfB.value;
+        traces.push({
+            x: [x0, x1],
+            y: [0, slope * x1],
+            type: 'scatter', mode: 'lines',
+            name: `RF ratio (${rfA.value.toFixed(4)} / ${rfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            line: { color: '#c47900', width: 2, dash: 'dot' }
+        });
+    }
+
+    // Expected HPF ratio line (through origin)
     const hpfA = selectedVariant === 'nonSpin' ? data.boatA.hpfNonSpin
                : selectedVariant === 'twoHanded' ? data.boatA.hpfTwoHanded : data.boatA.hpfSpin;
     const hpfB = selectedVariant === 'nonSpin' ? data.boatB.hpfNonSpin
                : selectedVariant === 'twoHanded' ? data.boatB.hpfTwoHanded : data.boatB.hpfSpin;
     if (hpfA && hpfB && hpfA.value && hpfB.value) {
         const slope = hpfA.value / hpfB.value;
-        const meanX = xs.reduce((s, v) => s + v, 0) / xs.length;
-        const meanY = ys.reduce((s, v) => s + v, 0) / ys.length;
-        const x0 = xMin - xPad, x1 = xMax + xPad;
         traces.push({
             x: [x0, x1],
-            y: [meanY + slope * (x0 - meanX), meanY + slope * (x1 - meanX)],
+            y: [0, slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `Expected HPF (${hpfA.value.toFixed(4)} / ${hpfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
-            line: { color: colorB, width: 2, dash: 'dot' }
+            name: `HPF ratio (${hpfA.value.toFixed(4)} / ${hpfB.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            line: { color: colorB, width: 2, dash: 'dash' }
         });
     }
 
@@ -602,8 +683,8 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const yPad = (yMax - yMin) * 0.05 || yMin * 0.05;
 
     const layout = {
-        xaxis: { title: `${esc(nameB)} elapsed (h)`, range: [xMax + xPad, xMin - xPad] },
-        yaxis: { title: `${esc(nameA)} elapsed (h)`, range: [yMax + yPad, yMin - yPad] },
+        xaxis: { title: `${esc(nameB)} elapsed (h)`, range: [xMax + xPad, 0] },
+        yaxis: { title: `${esc(nameA)} elapsed (h)`, range: [yMax + yPad, 0] },
         legend: { orientation: 'v', xanchor: 'right', x: 1 },
         margin: { t: 20, b: 70, l: 80, r: 20 },
         hovermode: 'closest'
@@ -622,18 +703,17 @@ function renderElapsedChart(divId, data, colorA, colorB) {
 }
 
 function linearFitElapsed(xs, ys) {
+    // Constrained through origin: elapsed times are proportional (y = k·x), so intercept = 0.
+    // Slope = Σ(xi·yi) / Σ(xi²)
     const n = xs.length;
     if (n < 2) return null;
-    const meanX = xs.reduce((s, v) => s + v, 0) / n;
-    const meanY = ys.reduce((s, v) => s + v, 0) / n;
     let num = 0, den = 0;
     for (let i = 0; i < n; i++) {
-        num += (xs[i] - meanX) * (ys[i] - meanY);
-        den += (xs[i] - meanX) ** 2;
+        num += xs[i] * ys[i];
+        den += xs[i] * xs[i];
     }
     if (den === 0) return null;
-    const slope = num / den;
-    return { slope, intercept: meanY - slope * meanX };
+    return { slope: num / den, intercept: 0 };
 }
 
 function fmtTime(secs) {

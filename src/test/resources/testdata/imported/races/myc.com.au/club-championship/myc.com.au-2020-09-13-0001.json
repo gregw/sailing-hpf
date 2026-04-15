@@ -5,8 +5,6 @@
   "date" : "2020-09-13",
   "number" : 1,
   "name" : null,
-  "handicapSystem" : "PHS",
-  "offsetPursuit" : false,
   "divisions" : [ {
     "name" : "Division 1",
     "finishers" : [ {

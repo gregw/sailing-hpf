@@ -16,13 +16,17 @@ import org.mortbay.sailing.hpf.analysis.ReferenceFactors;
 import org.mortbay.sailing.hpf.data.Boat;
 import org.mortbay.sailing.hpf.data.Club;
 import org.mortbay.sailing.hpf.data.Design;
+import org.mortbay.sailing.hpf.data.Division;
 import org.mortbay.sailing.hpf.data.Factor;
+import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Race;
+import org.mortbay.sailing.hpf.data.Series;
 import org.mortbay.sailing.hpf.importer.IdGenerator;
 import org.mortbay.sailing.hpf.store.Aliases;
 import org.mortbay.sailing.hpf.store.DataStore;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -33,6 +37,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -82,6 +87,8 @@ public class AdminApiServlet extends HttpServlet
             handleClubs(path.substring("/clubs".length()), req, resp);
         else if (path.startsWith("/races"))
             handleRaces(path.substring("/races".length()), req, resp);
+        else if ("/series/chart".equals(path))
+            handleSeriesChart(req, resp);
         else if (path.startsWith("/series"))
             handleSeries(path.substring("/series".length()), req, resp);
         else if ("/hpf/quality".equals(path))
@@ -138,6 +145,19 @@ public class AdminApiServlet extends HttpServlet
             resp.setStatus(200);
             writeJson(resp, Map.of("ok", true));
         }
+        else if ("/importers/run-schedule".equals(path))
+        {
+            if (_taskService.submitScheduledRun())
+            {
+                resp.setStatus(202);
+                writeJson(resp, Map.of("accepted", true));
+            }
+            else
+            {
+                resp.setStatus(409);
+                writeJson(resp, Map.of("error", "An import is already running or no tasks are scheduled"));
+            }
+        }
         else if ("/schedule".equals(path))
         {
             handleSetSchedule(req, resp);
@@ -149,6 +169,15 @@ public class AdminApiServlet extends HttpServlet
         else if ("/designs/merge".equals(path))
         {
             handleMergeDesigns(req, resp);
+        }
+        else if ("/boats/edit".equals(path))
+        {
+            handleEditBoat(req, resp);
+        }
+        else if ("/boats/merge-request".equals(path) || "/designs/merge-request".equals(path)
+            || "/boats/edit-request".equals(path))
+        {
+            handleUserRequest(path, req, resp);
         }
         else
         {
@@ -427,14 +456,28 @@ public class AdminApiServlet extends HttpServlet
             List<Map<String, Object>> resList = new ArrayList<>();
             for (EntryResidual r : residuals)
             {
+                Race race = store.races().get(r.raceId());
+                String rName = raceName(race);
+                String sName = null;
+                if (race != null && race.seriesIds() != null && !race.seriesIds().isEmpty())
+                {
+                    String sid = race.seriesIds().getFirst();
+                    var club = store.clubs().get(race.clubId());
+                    if (club != null && club.series() != null)
+                        for (var s : club.series())
+                            if (sid.equals(s.id())) { sName = s.name(); break; }
+                    if (sName == null) sName = sid;
+                }
                 Map<String, Object> rm = new LinkedHashMap<>();
-                rm.put("raceId", r.raceId());
-                rm.put("division", r.divisionName());
-                rm.put("date", r.raceDate().toString());
+                rm.put("raceId",       r.raceId());
+                rm.put("raceName",     rName);
+                rm.put("seriesName",   sName);
+                rm.put("division",     r.divisionName());
+                rm.put("date",         r.raceDate().toString());
                 rm.put("nonSpinnaker", r.nonSpinnaker());
-                rm.put("twoHanded", r.twoHanded());
-                rm.put("residual", r.residual());
-                rm.put("weight", r.weight());
+                rm.put("twoHanded",    r.twoHanded());
+                rm.put("residual",     r.residual());
+                rm.put("weight",       r.weight());
                 resList.add(rm);
             }
             result.put("residuals", resList);
@@ -812,6 +855,177 @@ public class AdminApiServlet extends HttpServlet
     }
 
     /**
+     * POST /api/boats/edit — edits a boat's sail number, name, design, or club.
+     * <p>
+     * If the new sail number or name changes the normalised boat ID, the boat is re-keyed:
+     * the old record is removed, a new one is created under the new ID, all race finisher
+     * references are repointed, and an alias is created so future imports of the old
+     * identity resolve to the new one.  Indexes are rebuilt after the edit.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleEditBoat(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String boatId = (String) body.get("boatId");
+            String newSailNumber = (String) body.get("sailNumber");
+            String newName = (String) body.get("name");
+            String newDesignId = body.containsKey("designId") ? (String) body.get("designId") : null;
+            String newClubId = body.containsKey("clubId") ? (String) body.get("clubId") : null;
+
+            if (boatId == null || boatId.isBlank())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "boatId is required"));
+                return;
+            }
+            Boat boat = store.boats().get(boatId);
+            if (boat == null)
+            {
+                resp.setStatus(404);
+                writeJson(resp, Map.of("error", "Boat not found: " + boatId));
+                return;
+            }
+
+            // Apply edits — use existing values where not provided
+            String sail = (newSailNumber != null && !newSailNumber.isBlank()) ? newSailNumber.trim() : boat.sailNumber();
+            String name = (newName != null && !newName.isBlank()) ? newName.trim() : boat.name();
+            String designId = body.containsKey("designId") ? (newDesignId != null && !newDesignId.isBlank() ? newDesignId.trim() : null) : boat.designId();
+            String clubId = body.containsKey("clubId") ? (newClubId != null && !newClubId.isBlank() ? newClubId.trim() : null) : boat.clubId();
+
+            // Compute the new boat ID
+            Design design = designId != null ? store.designs().get(designId) : null;
+            String newBoatId = IdGenerator.generateBoatId(sail, name, design);
+            boolean idChanged = !newBoatId.equals(boatId);
+
+            // Check for collision with an existing different boat
+            if (idChanged && store.boats().containsKey(newBoatId))
+            {
+                resp.setStatus(409);
+                writeJson(resp, Map.of("error", "A boat with ID " + newBoatId + " already exists. Merge first, then edit."));
+                return;
+            }
+
+            // Create updated boat record
+            Boat updated = new Boat(newBoatId, sail, name, designId, clubId,
+                boat.certificates(), boat.sources(), java.time.Instant.now(), null);
+            store.putBoat(updated);
+
+            int updatedRaces = 0;
+            int updatedFinishers = 0;
+            if (idChanged)
+            {
+                // Remove old boat record
+                store.removeBoat(boatId);
+
+                // Repoint all race finisher references
+                for (Race race : List.copyOf(store.races().values()))
+                {
+                    boolean changed = false;
+                    List<Division> newDivisions = new ArrayList<>();
+                    for (Division div : race.divisions())
+                    {
+                        List<Finisher> newFinishers = new ArrayList<>();
+                        for (Finisher f : div.finishers())
+                        {
+                            if (f.boatId().equals(boatId))
+                            {
+                                newFinishers.add(new Finisher(newBoatId, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                                changed = true;
+                                updatedFinishers++;
+                            }
+                            else
+                            {
+                                newFinishers.add(f);
+                            }
+                        }
+                        newDivisions.add(new Division(div.name(), List.copyOf(newFinishers)));
+                    }
+                    if (changed)
+                    {
+                        store.putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
+                            race.number(), race.name(), List.copyOf(newDivisions),
+                            race.source(), race.lastUpdated(), null));
+                        updatedRaces++;
+                    }
+                }
+
+                // Create alias so future imports of the old identity resolve to the new
+                String oldNormSail = IdGenerator.normaliseSailNumber(boat.sailNumber());
+                String oldNormName = IdGenerator.normaliseName(boat.name());
+                String newNormSail = IdGenerator.normaliseSailNumber(sail);
+                String newNormName = IdGenerator.normaliseName(name);
+                if (!oldNormSail.equalsIgnoreCase(newNormSail) || !oldNormName.equalsIgnoreCase(newNormName))
+                {
+                    List<Aliases.SailNumberName> aliasEntries = List.of(
+                        new Aliases.SailNumberName(oldNormSail, oldNormName));
+                    Aliases.addAliases(store.configDir(), newNormSail, name, aliasEntries);
+                    store.reloadAliases();
+                }
+            }
+
+            // Write design override to design.yaml if design was changed
+            if (body.containsKey("designId") && !Objects.equals(designId, boat.designId()))
+            {
+                if (designId != null)
+                {
+                    Design d = store.designs().get(designId);
+                    String canonicalName = d != null ? d.canonicalName() : designId;
+                    store.addDesignOverride(sail, name, designId, canonicalName);
+                }
+            }
+
+            // Write club override to clubs.yaml if club was changed
+            if (body.containsKey("clubId") && !Objects.equals(clubId, boat.clubId()))
+            {
+                if (clubId != null)
+                    store.addClubOverride(sail, name, clubId);
+            }
+
+            store.save();
+            cache.refreshIndexes();
+
+            writeJson(resp, Map.of("ok", true, "newBoatId", newBoatId,
+                "idChanged", idChanged, "updatedRaces", updatedRaces,
+                "updatedFinishers", updatedFinishers));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/boats/merge-request, /api/designs/merge-request, /api/boats/edit-request
+     * — records a user request to a log file in {@code hpf-data/log/} for later admin review.
+     * These endpoints are open to unauthenticated (read-only) users.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleUserRequest(String path, HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            String type = path.replaceAll("^/", "").replace('/', '-'); // e.g. "boats-merge-request"
+            Path logDir = store.dataRoot().resolve("log");
+            java.nio.file.Files.createDirectories(logDir);
+            Path logFile = logDir.resolve("user-requests.log");
+            String timestamp = java.time.Instant.now().toString();
+            String line = timestamp + " " + type + " " + MAPPER.writeValueAsString(body) + "\n";
+            java.nio.file.Files.writeString(logFile, line,
+                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+            writeJson(resp, Map.of("ok", true, "message", "Request recorded for admin review"));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * GET /api/comparison/candidates — returns candidate boats and designs for the HPF comparison chart.
      * <p>
      * Accepts optional {@code boatQ} / {@code designQ} text filters and a comma-separated
@@ -1047,6 +1261,7 @@ public class AdminApiServlet extends HttpServlet
                 .findFirst().orElse(null);
         if (div == null) { resp.sendError(404); return; }
 
+        int totalFinishers = div.finishers() != null ? div.finishers().size() : 0;
         List<Map<String, Object>> finishers = new ArrayList<>();
         Set<String> variantsUsed = new java.util.LinkedHashSet<>();
         for (var f : div.finishers())
@@ -1115,6 +1330,7 @@ public class AdminApiServlet extends HttpServlet
         result.put("date",        race.date() != null ? race.date().toString() : null);
         result.put("divisionName",    divisionName);
         result.put("divisionVariant", divisionVariant);
+        result.put("totalFinishers",  totalFinishers);
         result.put("finishers",       finishers);
         writeJson(resp, result);
     }
@@ -1284,6 +1500,106 @@ public class AdminApiServlet extends HttpServlet
             }
             writeJson(resp, race);
         }
+    }
+
+    /**
+     * GET /api/series/chart — returns HPF-corrected time data for all races in a series,
+     * grouped by race and division. Used by the series chart in the data browser.
+     */
+    private void handleSeriesChart(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String seriesId = req.getParameter("seriesId");
+        if (seriesId == null || seriesId.isBlank()) { resp.sendError(400); return; }
+
+        // Find the series and its races
+        Series series = null;
+        Club owningClub = null;
+        for (Club club : store.clubs().values())
+        {
+            if (club.series() == null) continue;
+            for (Series s : club.series())
+            {
+                if (seriesId.equals(s.id()))
+                {
+                    series = s;
+                    owningClub = club;
+                    break;
+                }
+            }
+            if (series != null) break;
+        }
+        if (series == null || series.raceIds() == null) { resp.sendError(404); return; }
+
+        // Build chart data: one entry per race, each containing divisions with finisher data
+        List<Map<String, Object>> racesData = new ArrayList<>();
+        for (String raceId : series.raceIds())
+        {
+            Race race = store.races().get(raceId);
+            if (race == null || race.divisions() == null) continue;
+
+            List<Map<String, Object>> divisionsData = new ArrayList<>();
+            for (Division div : race.divisions())
+            {
+                List<Map<String, Object>> finishers = new ArrayList<>();
+                for (Finisher f : div.finishers())
+                {
+                    BoatDerived bd = cache.boatDerived().get(f.boatId());
+                    if (bd == null || f.elapsedTime() == null) continue;
+
+                    BoatHpf hpf = bd.hpf();
+                    String variant = f.nonSpinnaker() ? "nonSpin" : "spin";
+                    Factor hpfFactor = hpf == null ? null : switch (variant)
+                    {
+                        case "nonSpin" -> hpf.nonSpin();
+                        default -> hpf.spin();
+                    };
+
+                    double elapsedSec = f.elapsedTime().toSeconds();
+                    Double hpfVal = hpfFactor != null && !Double.isNaN(hpfFactor.value()) ? hpfFactor.value() : null;
+
+                    Map<String, Object> fm = new LinkedHashMap<>();
+                    fm.put("boatId", f.boatId());
+                    fm.put("name", bd.boat().name());
+                    fm.put("sailNumber", bd.boat().sailNumber());
+                    fm.put("hpf", hpfVal);
+                    fm.put("hpfCorrected", hpfVal != null && hpfVal > 0 ? elapsedSec * hpfVal : null);
+                    finishers.add(fm);
+                }
+
+                // Sort by HPF ascending, nulls last
+                finishers.sort(Comparator.comparing(
+                    m -> (Double) m.get("hpf"), Comparator.nullsLast(Comparator.naturalOrder())));
+
+                if (!finishers.isEmpty())
+                {
+                    Map<String, Object> divMap = new LinkedHashMap<>();
+                    divMap.put("name", div.name());
+                    divMap.put("finishers", finishers);
+                    divisionsData.add(divMap);
+                }
+            }
+
+            if (!divisionsData.isEmpty())
+            {
+                Map<String, Object> raceMap = new LinkedHashMap<>();
+                raceMap.put("raceId", raceId);
+                raceMap.put("raceName", raceName(race));
+                raceMap.put("date", race.date() != null ? race.date().toString() : null);
+                raceMap.put("divisions", divisionsData);
+                racesData.add(raceMap);
+            }
+        }
+
+        // Sort races by date
+        racesData.sort(Comparator.comparing(
+            m -> (String) m.get("date"), Comparator.nullsLast(Comparator.naturalOrder())));
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("seriesId", seriesId);
+        result.put("seriesName", series.name());
+        result.put("club", owningClub.shortName() != null ? owningClub.shortName() : owningClub.id());
+        result.put("races", racesData);
+        writeJson(resp, result);
     }
 
     /**
@@ -1531,6 +1847,8 @@ public class AdminApiServlet extends HttpServlet
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("entries", entries);
+        result.put("sailsysStartId", _taskService.nextSailSysRaceId());
+        result.put("sailsysEndId", _taskService.sailsysEndRaceId());
         result.put("schedule", _taskService.globalSchedule());
         result.put("targetIrcYear", _taskService.targetIrcYear());
         result.put("outlierSigma", _taskService.outlierSigma());
@@ -1589,7 +1907,8 @@ public class AdminApiServlet extends HttpServlet
      */
     private void handleImporterRun(String name, String mode, HttpServletRequest req, HttpServletResponse resp) throws IOException
     {
-        int startId = parseIntParam(req, "startId", 1);
+        // Start ID is now configured in the SailSys config section; use 1 as fallback
+        int startId = _taskService.nextSailSysRaceId() != null ? _taskService.nextSailSysRaceId() : 1;
         boolean accepted = _taskService.submit(name, mode, startId);
         if (accepted)
         {
@@ -1636,6 +1955,13 @@ public class AdminApiServlet extends HttpServlet
                     Boolean.TRUE.equals(m.get("runAtStartup"))))
                 .toList();
 
+            Object rawSailsysStart = body.get("sailsysStartId");
+            Integer sailsysStartRaceId = (rawSailsysStart instanceof Number n && n.intValue() > 0)
+                ? n.intValue() : null;
+            Object rawSailsysEnd = body.get("sailsysEndId");
+            Integer sailsysEndRaceId = (rawSailsysEnd instanceof Number n && n.intValue() > 0)
+                ? n.intValue() : null;
+
             Object rawYear = body.get("targetIrcYear");
             Integer targetIrcYear = (rawYear instanceof Number n && n.intValue() > 0)
                 ? n.intValue() : null;
@@ -1674,6 +2000,7 @@ public class AdminApiServlet extends HttpServlet
                 ? n10.doubleValue() : null;
 
             _taskService.setConfig(entries, new TaskService.GlobalSchedule(days, time),
+                sailsysStartRaceId, sailsysEndRaceId,
                 targetIrcYear, outlierSigma,
                 hpfLambda, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
                 hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold,

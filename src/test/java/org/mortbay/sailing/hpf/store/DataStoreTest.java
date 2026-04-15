@@ -34,7 +34,6 @@ class DataStoreTest {
 
         assertEquals("myc.com.au", race.clubId());
         assertEquals(LocalDate.of(2020, 9, 13), race.date());
-        assertEquals("PHS", race.handicapSystem());
         assertEquals(2, race.divisions().size());
 
         Division div1 = race.divisions().getFirst();
@@ -146,7 +145,7 @@ class DataStoreTest {
         Race race1 = buildRace();
         Race race2 = new Race("myc.com.au-2020-09-20-0002", "myc.com.au",
                 List.of("myc.com.au/club-championship"),
-                LocalDate.of(2020, 9, 20), 2, null, "PHS", false,
+                LocalDate.of(2020, 9, 20), 2, null,
                 List.of(new Division("Division 1", List.of(
                         new Finisher("MYC7-tensixty-radford1060", Duration.ofMinutes(72).plusSeconds(5), false, null)
                 ))), null, null, null);
@@ -506,7 +505,7 @@ class DataStoreTest {
 
         // Race with a finisher referencing the old boat ID
         Race race = new Race("club-2024-01-01-0001", "club", List.of("club/series"),
-                LocalDate.of(2024, 1, 1), 1, null, "IRC", false,
+                LocalDate.of(2024, 1, 1), 1, null,
                 List.of(new Division("A", List.of(
                         new Finisher("AUS1-foo-old", Duration.ofMinutes(60), false, null)
                 ))), null, null, null);
@@ -549,7 +548,7 @@ class DataStoreTest {
 
         // Race with finisher referencing boatA
         Race race = new Race("club-2024-01-01-0001", "club", List.of("club/s"),
-                LocalDate.of(2024, 1, 1), 1, null, "IRC", false,
+                LocalDate.of(2024, 1, 1), 1, null,
                 List.of(new Division("A", List.of(
                         new Finisher("AUS1-foo-old", Duration.ofMinutes(60), false, null)
                 ))), null, null, null);
@@ -601,6 +600,48 @@ class DataStoreTest {
         return new DataStore(testData);
     }
 
+    /**
+     * When findOrCreateBoat upgrades a design-less boat to one with a design,
+     * all existing race finisher references to the old ID must be rewritten.
+     */
+    @Test
+    void upgradeBoatDesignRewritesFinisherReferences(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        // Create a boat without design (as RSHYR would)
+        Boat noDesign = store.findOrCreateBoat("8108", "Highly Sprung", null);
+        assertEquals("8108-highlysprung", noDesign.id());
+
+        // Create a race with this boat as a finisher
+        Race race = new Race("cyca.com.au-2025-12-26-0001", "cyca.com.au",
+            List.of(), LocalDate.of(2025, 12, 26), 1, "Sydney Hobart",
+            List.of(new Division("IRC Div 1", List.of(
+                new Finisher("8108-highlysprung", Duration.ofHours(3), false, null),
+                new Finisher("other-boat", Duration.ofHours(4), false, null)
+            ))),
+            "RSHYR", null, null);
+        store.putRace(race);
+
+        // Now another importer provides the design (as ORC/SailSys would)
+        Boat withDesign = store.findOrCreateBoat("8108", "Highly Sprung", "TP 52");
+        assertEquals("8108-highlysprung-tp52", withDesign.id());
+
+        // The old boat should be gone
+        assertNull(store.boats().get("8108-highlysprung"));
+        assertNotNull(store.boats().get("8108-highlysprung-tp52"));
+
+        // The finisher reference in the race should be updated
+        Race updated = store.races().get("cyca.com.au-2025-12-26-0001");
+        Finisher f0 = updated.divisions().getFirst().finishers().get(0);
+        assertEquals("8108-highlysprung-tp52", f0.boatId(),
+            "Finisher boatId should be rewritten to the upgraded boat ID");
+
+        // Other finishers should be unchanged
+        Finisher f1 = updated.divisions().getFirst().finishers().get(1);
+        assertEquals("other-boat", f1.boatId());
+    }
+
     private Race buildRace() {
         return new Race(
                 "myc.com.au-2020-09-13-0001",
@@ -609,8 +650,6 @@ class DataStoreTest {
                 LocalDate.of(2020, 9, 13),
                 1,
                 null,
-                "PHS",
-                false,
                 List.of(
                         new Division("Division 1", List.of(
                                 new Finisher("MYC100-shearmagic-adams10", Duration.ofMinutes(69).plusSeconds(42), false, null),

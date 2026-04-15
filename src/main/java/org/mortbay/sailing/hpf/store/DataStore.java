@@ -77,6 +77,7 @@ public class DataStore
     private Map<String, Club> clubSeed;   // lookup-only stubs from clubs.yaml; never written to disk
     private Aliases.Loaded aliases; // lookup-only alias data from aliases.yaml; never written to disk
     private Designs.DesignCatalogue designCatalogue; // lookup-only exclusion list from design.yaml
+    private ClubLoader.ClubCatalogue clubCatalogue;  // lookup-only club overrides from clubs.yaml
     private List<Maker> makers;
     private boolean makersDirty;
 
@@ -290,9 +291,11 @@ public class DataStore
                     candidate.clubId(),
                     candidate.certificates(),
                     addSource(candidate.sources(), sourceDesign), Instant.now(), candidate.loadedAt());
-                removeBoat(candidate.id());
+                String oldId = candidate.id();
+                removeBoat(oldId);
                 putBoat(upgraded);
-                LOG.info("Upgraded boat (via alias seed legacy) {} → {}", candidate.id(), boatId);
+                rewriteFinisherBoatId(oldId, boatId);
+                LOG.info("Upgraded boat {} → {} (updated finisher references)", oldId, boatId);
 
                 // return the merged boat because there cannot be two candidates without a design.
                 return upgraded;
@@ -303,12 +306,15 @@ public class DataStore
         if (matches.isEmpty())
         {
             Design design = isNotBlank(rawDesign) ? findOrCreateDesign(rawDesign) : findOrCreateDesign(designId);
+            String newClubId = clubCatalogue.resolveClubOverride(normSailNo, rawName);
+            if (newClubId != null)
+                LOG.info("Boat {}/{}: club override → {}", normSailNo, rawName, newClubId);
             Boat newBoat = new Boat(
                 IdGenerator.generateBoatId(normSailNo, normName, design),
                 normSailNo,
                 rawName,
                 design != null ? design.id() : null,
-                null,
+                newClubId,
                 List.of(),
                 List.of(sourceDesign),
                 Instant.now(),
@@ -689,7 +695,7 @@ public class DataStore
                 if (changed)
                 {
                     putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
-                        race.number(), race.name(), race.handicapSystem(), race.offsetPursuit(),
+                        race.number(), race.name(),
                         newDivisions, race.source(), race.lastUpdated(), null));
                     updatedRaces++;
                 }
@@ -846,6 +852,44 @@ public class DataStore
     }
 
     /**
+     * Writes a boat design override to design.yaml and reloads the design catalogue.
+     */
+    public void addDesignOverride(String sailNumber, String name, String designId, String canonicalName)
+    {
+        requireStarted();
+        Designs.addDesignOverride(configDir, sailNumber, name, designId, canonicalName);
+        reloadDesignCatalogue();
+    }
+
+    /**
+     * Reloads the design catalogue from disk.
+     */
+    public void reloadDesignCatalogue()
+    {
+        requireStarted();
+        designCatalogue = Designs.load(configDir);
+    }
+
+    /**
+     * Writes a boat club override to clubs.yaml and reloads the club catalogue.
+     */
+    public void addClubOverride(String sailNumber, String name, String clubId)
+    {
+        requireStarted();
+        ClubLoader.addClubOverride(configDir, sailNumber, name, clubId);
+        reloadClubCatalogue();
+    }
+
+    /**
+     * Reloads the club catalogue from disk.
+     */
+    public void reloadClubCatalogue()
+    {
+        requireStarted();
+        clubCatalogue = ClubLoader.loadCatalogue(configDir);
+    }
+
+    /**
      * Returns the alias list for a boat from the alias seed.
      */
     public List<Aliases.SailNumberName> boatAliases(String normSailNumber, String normName)
@@ -947,7 +991,7 @@ public class DataStore
             if (changed)
             {
                 putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
-                    race.number(), race.name(), race.handicapSystem(), race.offsetPursuit(),
+                    race.number(), race.name(),
                     newDivisions, race.source(), race.lastUpdated(), null));
                 updatedRaces++;
             }
@@ -967,6 +1011,51 @@ public class DataStore
     private static String certKey(Certificate c)
     {
         return c.system() + "|" + c.year() + "|" + c.nonSpinnaker() + "|" + c.twoHanded();
+    }
+
+    /**
+     * Rewrite all finisher references from oldBoatId to newBoatId across all races.
+     * Called when a boat is upgraded (e.g. design added to ID) so that existing race
+     * finisher records continue to point to the correct boat.
+     */
+    private void rewriteFinisherBoatId(String oldBoatId, String newBoatId)
+    {
+        int updatedRaces = 0;
+        int updatedFinishers = 0;
+        for (Race race : List.copyOf(races.values()))
+        {
+            if (race.divisions() == null) continue;
+            boolean changed = false;
+            List<Division> newDivisions = new ArrayList<>();
+            for (Division div : race.divisions())
+            {
+                List<Finisher> newFinishers = new ArrayList<>();
+                for (Finisher f : div.finishers())
+                {
+                    if (oldBoatId.equals(f.boatId()))
+                    {
+                        newFinishers.add(new Finisher(newBoatId, f.elapsedTime(), f.nonSpinnaker(), f.certificateNumber()));
+                        changed = true;
+                        updatedFinishers++;
+                    }
+                    else
+                    {
+                        newFinishers.add(f);
+                    }
+                }
+                newDivisions.add(new Division(div.name(), newFinishers));
+            }
+            if (changed)
+            {
+                putRace(new Race(race.id(), race.clubId(), race.seriesIds(), race.date(),
+                    race.number(), race.name(),
+                    newDivisions, race.source(), race.lastUpdated(), null));
+                updatedRaces++;
+            }
+        }
+        if (updatedFinishers > 0)
+            LOG.info("Rewritten {} finisher reference(s) in {} race(s): {} → {}",
+                updatedFinishers, updatedRaces, oldBoatId, newBoatId);
     }
 
     /**
@@ -1003,6 +1092,7 @@ public class DataStore
         designs = new LinkedHashMap<>();
         loadDir(designsDir, Design.class).forEach(d -> designs.put(d.id(), d));
         clubSeed = ClubLoader.load(configDir);
+        clubCatalogue = ClubLoader.loadCatalogue(configDir);
         aliases = Aliases.load(configDir);
         designCatalogue = Designs.load(configDir);
         designCatalogue.overrideDesigns().forEach((normId, canonicalName) ->
@@ -1118,6 +1208,7 @@ public class DataStore
         designs = null;
         clubs = null;
         clubSeed = null;
+        clubCatalogue = null;
         aliases = null;
         designCatalogue = null;
         makers = null;

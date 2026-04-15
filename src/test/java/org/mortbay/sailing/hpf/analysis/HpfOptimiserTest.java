@@ -221,7 +221,7 @@ class HpfOptimiserTest
             }
             Division div = new Division("Div 1", finishers);
             Race race = new Race("club-" + LocalDate.of(2024, 1, 1 + d).toString() + "-" + String.format("%04d", d + 1),
-                "club", List.of("series"), LocalDate.of(2024, 1, 1 + d), d + 1, null, "IRC", false,
+                "club", List.of("series"), LocalDate.of(2024, 1, 1 + d), d + 1, null,
                 List.of(div), "test", null, null);
             store.putRace(race);
         }
@@ -261,7 +261,7 @@ class HpfOptimiserTest
             }
             Division div = new Division("Div 1", finishers);
             Race race = new Race("club-" + LocalDate.of(2024, 2, 1 + d) + "-" + String.format("%04d", d + 1),
-                "club", List.of("series"), LocalDate.of(2024, 2, 1 + d), d + 1, null, "IRC", false,
+                "club", List.of("series"), LocalDate.of(2024, 2, 1 + d), d + 1, null,
                 List.of(div), "test", null, null);
             store.putRace(race);
         }
@@ -326,7 +326,7 @@ class HpfOptimiserTest
 
             Division div = new Division("Div 1", finishers);
             Race race = new Race("club-" + LocalDate.of(2024, 3, 1 + d) + "-" + String.format("%04d", d + 1),
-                "club", List.of("series"), LocalDate.of(2024, 3, 1 + d), d + 1, null, "IRC", false,
+                "club", List.of("series"), LocalDate.of(2024, 3, 1 + d), d + 1, null,
                 List.of(div), "test", null, null);
             store.putRace(race);
         }

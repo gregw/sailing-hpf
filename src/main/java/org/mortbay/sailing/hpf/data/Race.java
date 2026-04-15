@@ -11,21 +11,16 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 /**
  * A single race. Raw layer — immutable, no derived fields.
  * <p>
- * The ID is a generated slug: clubDomain-isoDate-hex, e.g. "myc.com.au-2024-11-06-4a1f".
+ * The ID is a generated slug: clubDomain-isoDate-number, e.g. "myc.com.au-2024-11-06-0001".
  * A race may belong to more than one series; seriesIds holds all of them.
- * <p>
- * handicapSystem is the primary system under which results were scored.
- * offsetPursuit is true for pursuit-format races.
  */
 public record Race(
-    String id,                       // e.g. "myc.com.au-2024-11-06-4a1f"
+    String id,                       // e.g. "myc.com.au-2024-11-06-0001"
     String clubId,                   // organising club website domain
     List<String> seriesIds,          // series this race contributes to (at least one)
     LocalDate date,
     int number,                      // race number within its primary series
     String name,                     // named race title, e.g. "Flinders Race"; null if unnamed
-    String handicapSystem,           // primary scoring system, e.g. "PHS", "IRC", "ORC", "AMS"
-    boolean offsetPursuit,           // true if pursuit-format race
     List<Division> divisions,
     String source,                   // short importer name that created this record, e.g. "TopYacht"; nullable
     Instant lastUpdated,             // when this record was last written by an importer; nullable
@@ -36,7 +31,7 @@ public record Race(
     @Override
     public Race withLoadedAt(Instant t)
     {
-        return new Race(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions, source, lastUpdated, t);
+        return new Race(id, clubId, seriesIds, date, number, name, divisions, source, lastUpdated, t);
     }
 
     // loadedAt is loading metadata, not domain data — exclude from equality
@@ -47,10 +42,10 @@ public record Race(
             return true;
         if (!(o instanceof Race r))
             return false;
-        return number == r.number && offsetPursuit == r.offsetPursuit
+        return number == r.number
             && Objects.equals(id, r.id) && Objects.equals(clubId, r.clubId)
             && Objects.equals(seriesIds, r.seriesIds) && Objects.equals(date, r.date)
-            && Objects.equals(name, r.name) && Objects.equals(handicapSystem, r.handicapSystem)
+            && Objects.equals(name, r.name)
             && Objects.equals(divisions, r.divisions)
             && Objects.equals(source, r.source) && Objects.equals(lastUpdated, r.lastUpdated);
     }
@@ -58,7 +53,7 @@ public record Race(
     @Override
     public int hashCode()
     {
-        return Objects.hash(id, clubId, seriesIds, date, number, name, handicapSystem, offsetPursuit, divisions, source, lastUpdated);
+        return Objects.hash(id, clubId, seriesIds, date, number, name, divisions, source, lastUpdated);
     }
 
     @Override
@@ -71,8 +66,6 @@ public record Race(
             ", date=" + date +
             ", number=" + number +
             ", name='" + name + '\'' +
-            ", handicapSystem='" + handicapSystem + '\'' +
-            ", offsetPursuit=" + offsetPursuit +
             ", divisions=" + divisions +
             ", source='" + source + '\'' +
             ", lastUpdated=" + lastUpdated +

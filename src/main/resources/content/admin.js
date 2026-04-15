@@ -187,7 +187,7 @@ function renderTable(entity, items) {
         } else if (entity === 'designs') {
             tr.innerHTML = `<td>${esc(item.id)}</td><td>${esc(item.canonicalName)}</td><td>${esc((item.makerIds || []).join(', '))}</td>`;
         } else if (entity === 'races') {
-            tr.innerHTML = `<td>${esc(item.id)}</td><td>${esc(item.clubId)}</td><td>${esc(item.date)}</td><td>${esc(item.handicapSystem)}</td>`;
+            tr.innerHTML = `<td>${esc(item.id)}</td><td>${esc(item.clubId)}</td><td>${esc(item.date)}</td><td>${item.divisions ? item.divisions.length : 0} div(s)</td>`;
         }
         tbody.appendChild(tr);
     }

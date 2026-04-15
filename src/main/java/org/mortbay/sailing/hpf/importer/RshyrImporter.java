@@ -256,11 +256,8 @@ public class RshyrImporter
             .map(e -> new Division(e.getKey(), List.copyOf(e.getValue())))
             .toList();
 
-        boolean hasOrc = cats.orcCategoryId() != null;
-        String handicapSystem = hasOrc ? "IRC/ORC" : "IRC";
-
         store.putRace(new Race(raceId_, CLUB_ID, List.of(seriesId), raceDate, 1,
-            SERIES_NAME, handicapSystem, false, divisions, SOURCE, Instant.now(), null));
+            SERIES_NAME, divisions, SOURCE, Instant.now(), null));
         LOG.info("RSHYR: year {} saved — {} finishers across {} division(s) [{}]",
             year, count, divisions.size(),
             divisions.stream().map(Division::name).toList());

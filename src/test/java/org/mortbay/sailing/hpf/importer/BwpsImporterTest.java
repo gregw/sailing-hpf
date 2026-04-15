@@ -342,7 +342,6 @@ class BwpsImporterTest
         assertEquals(1, store.races().size());
         Race race = store.races().values().iterator().next();
         assertEquals(BwpsImporter.CLUB_ID, race.clubId());
-        assertEquals("IRC", race.handicapSystem());
         assertEquals(LocalDate.of(2025, 9, 20), race.date());
         assertFalse(race.divisions().isEmpty());
 

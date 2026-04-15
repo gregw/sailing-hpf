@@ -266,9 +266,9 @@ public class OrcImporter
             ImporterLog.warn(LOG,"Skipping cert dxtID={}: GPH not found in cert HTML", dxtId);
             return;
         }
-        if (gph < 400 || gph > 900)
+        if (gph < 250 || gph > 950)
         {
-            ImporterLog.warn(LOG,"Skipping cert dxtID={}: implausible GPH={} (expected 400-900, regex mismatch?)", dxtId, gph);
+            ImporterLog.warn(LOG,"Skipping cert dxtID={}: implausible GPH={} (expected 250-950, regex mismatch?)", dxtId, gph);
             return;
         }
         double tcf = 600.0 / gph;

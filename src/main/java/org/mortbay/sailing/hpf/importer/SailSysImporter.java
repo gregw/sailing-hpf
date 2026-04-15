@@ -9,7 +9,11 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
 
@@ -66,6 +70,10 @@ public class SailSysImporter
     private static final Logger LOG = LoggerFactory.getLogger(SailSysImporter.class);
 
     static final String SOURCE = "SailSys";
+
+    /** Sources from dedicated importers whose races SailSys should not overwrite with empty results. */
+    private static final Set<String> DEDICATED_SOURCES = Set.of(
+        BwpsImporter.SOURCE, RshyrImporter.SOURCE);
 
     private static final String API_BASE   = "https://api.sailsys.com.au/api/v1/races/";
     private static final String API_SUFFIX = "/resultsentrants/display";
@@ -240,18 +248,31 @@ public class SailSysImporter
         LOG.info("Done. Last id={}, processed={}.", id, processed);
     }
 
+    /** Result of a SailSys import run. */
+    public record RunResult(int minRecentId, int maxFoundId) {}
+
     /**
      * Unified run method: reads from local cache when fresh; fetches from network when
-     * absent or stale; always re-fetches recent races so results are picked up promptly.
+     * absent or stale; always re-fetches recent successful races so results are picked up promptly.
+     * Iterates race IDs from {@code startId} to {@code endId} (inclusive).
      *
-     * @return the minimum SailSys race ID whose date fell within the recent window,
-     *         or 0 if no races were in the recent window.
+     * <p>Cache staleness rules:
+     * <ul>
+     *   <li>Successful responses: re-fetch if recent (within {@code recentRaceDays}); otherwise
+     *       use file last-modified vs {@code youngCacheMaxAgeDays} (young race) or
+     *       {@code oldCacheMaxAgeDays} (old race).</li>
+     *   <li>Error responses (series locked / not yet published): use file last-modified
+     *       vs {@code youngCacheMaxAgeDays}, never force-refetch based on race date.</li>
+     * </ul>
+     *
+     * @return a {@link RunResult} containing the minimum recent race ID and the highest
+     *         race ID that returned a valid (non-error) API response.
      */
-    public int run(int startId, IntConsumer onId, BooleanSupplier stop,
+    public RunResult run(int startId, int endId, IntConsumer onId, BooleanSupplier stop,
                    Path racesDir,
                    int youngCacheMaxAgeDays, int oldCacheMaxAgeDays,
                    int youngRaceMaxAgeDays, int httpDelayMs,
-                   int recentRaceDays, int notFoundThreshold)
+                   int recentRaceDays)
         throws Exception
     {
         this.youngCacheMaxAgeDays = youngCacheMaxAgeDays;
@@ -260,16 +281,20 @@ public class SailSysImporter
         this.httpDelayMs          = httpDelayMs;
         this.recentRaceDays       = recentRaceDays;
 
-        LOG.info("Importing SailSys races starting at id={}, notFoundThreshold={}",
-            startId, notFoundThreshold);
-        int id = startId;
-        int consecutiveNotFound = 0;
+        LOG.info("Importing SailSys races id={} to id={}", startId, endId);
         int processed = 0;
         int minRecentId = Integer.MAX_VALUE;
+        int maxFoundId = 0;
 
-        while (consecutiveNotFound < notFoundThreshold)
+        for (int id = startId; id <= endId; id++)
         {
-            LOG.info("Fetching race id={}", id);
+            if (stop.getAsBoolean())
+            {
+                LOG.info("Stop requested after id={}", id - 1);
+                break;
+            }
+
+            LOG.debug("Fetching race id={}", id);
             Path cachedFile = racesDir != null
                 ? racesDir.resolve(String.format("race-%06d.json", id)) : null;
 
@@ -280,11 +305,22 @@ public class SailSysImporter
             boolean useCache = false;
             if (cachedJson != null)
             {
-                LocalDate raceDate = peekRaceDate(cachedJson);
-                if (!isRecent(raceDate))
+                if (isApiFound(cachedJson))
                 {
-                    int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
-                    useCache = !isStale(cachedFile, maxAge);
+                    // Successful cached response: re-fetch if recent, otherwise check file age
+                    LocalDate raceDate = peekRaceDate(cachedJson);
+                    if (!isRecent(raceDate))
+                    {
+                        int maxAge = isYoung(raceDate) ? youngCacheMaxAgeDays : oldCacheMaxAgeDays;
+                        useCache = !isStale(cachedFile, maxAge);
+                    }
+                    // recent success → always refetch so live results are picked up
+                }
+                else
+                {
+                    // Error response (series locked / not yet published / not found):
+                    // use file last-modified date — never force-refetch based on race date
+                    useCache = !isStale(cachedFile, youngCacheMaxAgeDays);
                 }
             }
 
@@ -315,8 +351,7 @@ public class SailSysImporter
                     }
                     else
                     {
-                        ImporterLog.warn(LOG,"Error fetching race id={}: {}", id, e.getMessage());
-                        id++;
+                        ImporterLog.warn(LOG, "Error fetching race id={}: {}", id, e.getMessage());
                         continue;
                     }
                 }
@@ -327,10 +362,11 @@ public class SailSysImporter
                 minRecentId = Math.min(minRecentId, id);
 
             onId.accept(id);
-            boolean apiFound = isApiFound(json);
-            if (apiFound) consecutiveNotFound = 0;
-            else consecutiveNotFound++;
-            if (apiFound) processRaceJson(json);
+            if (isApiFound(json))
+            {
+                processRaceJson(json);
+                maxFoundId = id;
+            }
 
             processed++;
             if (processed % SAVE_INTERVAL == 0)
@@ -338,17 +374,12 @@ public class SailSysImporter
                 LOG.info("Fetched {} races (id={}) — saving", processed, id);
                 store.save();
             }
-            if (stop.getAsBoolean())
-            {
-                LOG.info("Stop requested after id={}", id);
-                break;
-            }
-            id++;
         }
 
         store.save();
-        LOG.info("Done. Last id={}, processed={}.", id, processed);
-        return (minRecentId == Integer.MAX_VALUE) ? 0 : minRecentId;
+        LOG.info("Done. Last id={}, processed={}, maxFoundId={}.", endId, processed, maxFoundId);
+        int recentId = (minRecentId == Integer.MAX_VALUE) ? 0 : minRecentId;
+        return new RunResult(recentId, maxFoundId);
     }
 
     // --- Parse / import layer (package-private for testing) ---
@@ -436,27 +467,46 @@ public class SailSysImporter
             ? IdGenerator.generateRaceId(clubId, raceDate, number)
             : "unknown-" + raceDate + String.format("-%04d", number);
 
-        // Find all measurement systems.  Races commonly list PHS first then IRC/ORC;
-        // we process every measurement system independently, creating separate divisions.
+        // Find measurement systems that actually have calculation data on competitors
         List<HandicappingSummary> measurementSystems = resolveMeasurementSystems(data.handicappings);
-        String handicapSystem = measurementSystems.isEmpty()
-            ? "PHS"
-            : normalizeSystem(measurementSystems.get(0).shortName);
-        if (measurementSystems.size() > 1)
-            handicapSystem = String.join("/", measurementSystems.stream()
-                .map(h -> normalizeSystem(h.shortName)).distinct().toList());
+        List<HandicappingSummary> actualSystems = resolveActualSystems(data.competitors, measurementSystems);
 
         List<Division> divisions = buildDivisions(
-            data.competitors, measurementSystems, raceDate, organizingClub);
+            data.competitors, actualSystems, raceDate, organizingClub);
 
-        store.putRace(new Race(
-            raceId, clubId,
-            seriesId != null ? List.of(seriesId) : List.of(),
-            raceDate, number, data.name, handicapSystem,
-            data.offsetPursuitRace != null && data.offsetPursuitRace,
-            divisions,
-            SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : ""),
-            Instant.now(), null));
+        // If SailSys produced no finishers and a race for the same club + date already
+        // exists from BWPS or RSHYR, don't create/merge — just extract certificates.
+        // This avoids creating empty duplicates of races whose results come from
+        // dedicated importers (BWPS blue water pointscore, RSHYR Sydney Hobart).
+        if (divisions.isEmpty() && hasDedicatedImporterRace(clubId, raceDate))
+        {
+            extractCertificatesOnly(data.competitors, actualSystems, raceDate, organizingClub);
+            return;
+        }
+
+        String source = SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "");
+        List<String> newSeriesIds = seriesId != null ? List.of(seriesId) : List.of();
+
+        // If a race with this ID already exists (e.g. same physical race imported from
+        // both a PHS series and an ORC series), merge rather than overwrite.
+        Race existing = store.races().get(raceId);
+        if (existing != null)
+        {
+            List<String> mergedSeriesIds = mergeSeriesIds(existing.seriesIds(), newSeriesIds);
+            List<Division> mergedDivisions = mergeDivisions(existing.divisions(), divisions);
+            String mergedSource = existing.source().contains(source) ? existing.source()
+                : existing.source() + "," + source;
+
+            store.putRace(new Race(
+                raceId, clubId, mergedSeriesIds, raceDate, number, data.name,
+                mergedDivisions, mergedSource, Instant.now(), null));
+        }
+        else
+        {
+            store.putRace(new Race(
+                raceId, clubId, newSeriesIds, raceDate, number, data.name,
+                divisions, source, Instant.now(), null));
+        }
 
         if (clubId != null && seriesId != null && seriesName != null)
             updateClubSeries(clubId, seriesId, seriesName, raceId);
@@ -471,44 +521,24 @@ public class SailSysImporter
         if (competitors == null)
             return List.of();
 
-        boolean multiSystem = measurementSystems.size() > 1;
         List<Division> divisions = new ArrayList<>();
-
         for (DivisionData divData : competitors)
         {
-            String baseName = divData.parent != null ? divData.parent.name : "Unknown";
-
-            if (measurementSystems.isEmpty())
-            {
-                // PHS-only race: create the division without cert links
-                List<Finisher> finishers = buildFinishers(divData.items, null, raceDate, organizingClub);
-                if (!finishers.isEmpty())
-                    divisions.add(new Division(baseName, finishers));
-            }
-            else
-            {
-                for (HandicappingSummary sys : measurementSystems)
-                {
-                    String divName = multiSystem
-                        ? baseName + " " + normalizeSystem(sys.shortName)
-                        : baseName;
-                    List<Finisher> finishers = buildFinishers(divData.items, sys, raceDate, organizingClub);
-                    if (!finishers.isEmpty())
-                        divisions.add(new Division(divName, finishers));
-                }
-            }
+            String name = divData.parent != null ? divData.parent.name : "Unknown";
+            List<Finisher> finishers = buildFinishers(divData.items, measurementSystems, raceDate, organizingClub);
+            if (!finishers.isEmpty())
+                divisions.add(new Division(name, finishers));
         }
         return List.copyOf(divisions);
     }
 
     /**
-     * Builds finishers for one measurement system (or null for PHS-only).
-     * For each entrant, the cert value is taken from the {@code calculations[]} entry
-     * whose {@code handicapDefinitionId} matches the system's id — this is the handicap
-     * actually used for scoring in this race, not the current stored certificate value.
+     * Builds finishers from a division's entries, attaching the first matching measurement
+     * certificate when available.  Boats are never excluded for lacking cert data — every
+     * entrant with a valid elapsed time becomes a finisher.
      */
     private List<Finisher> buildFinishers(List<EntryData> items,
-                                          HandicappingSummary system,
+                                          List<HandicappingSummary> measurementSystems,
                                           LocalDate raceDate, Club organizingClub)
     {
         if (items == null)
@@ -531,20 +561,158 @@ public class SailSysImporter
                 continue;
 
             String certNumber = null;
-            if (system != null && system.id != null)
+            for (HandicappingSummary sys : measurementSystems)
             {
-                Double value = extractHandicapValue(entry.calculations, system.id);
-                if (value == null)
-                    continue; // no handicap for this system — exclude from this division
-                certNumber = resolveCertificate(boat, normalizeSystem(system.shortName),
-                    value, raceDate.getYear(), nonSpinnaker, false, isClubCert(system.shortName));
+                if (sys.id == null) continue;
+                Double value = extractHandicapValue(entry.calculations, sys.id);
+                if (value != null)
+                {
+                    certNumber = resolveCertificate(boat, normalizeSystem(sys.shortName),
+                        value, raceDate.getYear(), nonSpinnaker, false, isClubCert(sys.shortName));
+                    break; // use first matching system
+                }
             }
 
-            // Re-read boat after cert may have been added by resolveCertificate
-            // (boat object passed to resolveCertificate may be stale; the ID is stable)
             finishers.add(new Finisher(boat.id(), elapsed, nonSpinnaker, certNumber));
         }
         return List.copyOf(finishers);
+    }
+
+    // --- Dedicated-importer detection and certificate-only mode ---
+
+    /** Returns true if any existing race for the given club + date was imported by BWPS or RSHYR. */
+    private boolean hasDedicatedImporterRace(String clubId, LocalDate raceDate)
+    {
+        if (clubId == null) return false;
+        String prefix = IdGenerator.sanitizeIdForFilesystem(clubId) + "-" + raceDate + "-";
+        for (Map.Entry<String, Race> entry : store.races().entrySet())
+        {
+            if (entry.getKey().startsWith(prefix))
+            {
+                String source = entry.getValue().source();
+                if (source != null)
+                {
+                    for (String ds : DEDICATED_SOURCES)
+                    {
+                        if (source.contains(ds))
+                            return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Resolves boats and certificates from competitor data without creating a race record. */
+    private void extractCertificatesOnly(List<DivisionData> competitors,
+                                         List<HandicappingSummary> measurementSystems,
+                                         LocalDate raceDate, Club organizingClub)
+    {
+        if (competitors == null) return;
+        int count = 0;
+        for (DivisionData divData : competitors)
+        {
+            if (divData.items == null) continue;
+            for (EntryData entry : divData.items)
+            {
+                Boat boat = resolveBoat(entry.boat, organizingClub, raceDate);
+                if (boat == null) continue;
+                count++;
+
+                boolean nonSpinnaker = entry.nonSpinnaker != null && entry.nonSpinnaker;
+                for (HandicappingSummary sys : measurementSystems)
+                {
+                    if (sys.id == null) continue;
+                    Double value = extractHandicapValue(entry.calculations, sys.id);
+                    if (value != null)
+                    {
+                        resolveCertificate(boat, normalizeSystem(sys.shortName),
+                            value, raceDate.getYear(), nonSpinnaker, false,
+                            isClubCert(sys.shortName));
+                        break;
+                    }
+                }
+            }
+        }
+        LOG.info("SailSys: cert-only mode for race at {} on {} — {} boat(s) processed " +
+            "(race already imported by dedicated importer)",
+            organizingClub != null ? organizingClub.id() : "?", raceDate, count);
+    }
+
+    // --- Race merging (same physical race imported from multiple series/systems) ---
+
+    /** Union two seriesId lists, preserving order, no duplicates. */
+    private static List<String> mergeSeriesIds(List<String> existing, List<String> incoming)
+    {
+        List<String> merged = new ArrayList<>(existing);
+        for (String s : incoming)
+        {
+            if (!merged.contains(s))
+                merged.add(s);
+        }
+        return List.copyOf(merged);
+    }
+
+    /**
+     * Merges two division lists from the same physical race.  For divisions with matching
+     * names, finishers are merged: new boats are added, and existing finishers gain a
+     * certificate number if the incoming data provides one they lacked.
+     * Divisions that exist only in one list are included as-is.
+     */
+    private static List<Division> mergeDivisions(List<Division> existing, List<Division> incoming)
+    {
+        List<Division> merged = new ArrayList<>();
+
+        for (Division eDiv : existing)
+        {
+            Division iDiv = incoming.stream()
+                .filter(d -> Objects.equals(d.name(), eDiv.name()))
+                .findFirst().orElse(null);
+
+            if (iDiv == null)
+            {
+                merged.add(eDiv);
+                continue;
+            }
+
+            // Merge finishers within the matching division
+            List<Finisher> mergedFinishers = new ArrayList<>(eDiv.finishers());
+            for (Finisher iFinisher : iDiv.finishers())
+            {
+                int idx = -1;
+                for (int i = 0; i < mergedFinishers.size(); i++)
+                {
+                    if (mergedFinishers.get(i).boatId().equals(iFinisher.boatId()))
+                    {
+                        idx = i;
+                        break;
+                    }
+                }
+
+                if (idx < 0)
+                {
+                    // New boat not in existing division — add it
+                    mergedFinishers.add(iFinisher);
+                }
+                else if (mergedFinishers.get(idx).certificateNumber() == null
+                    && iFinisher.certificateNumber() != null)
+                {
+                    // Existing finisher has no cert, incoming has one — upgrade
+                    mergedFinishers.set(idx, iFinisher);
+                }
+                // else: existing already has cert data or incoming has nothing new — keep existing
+            }
+            merged.add(new Division(eDiv.name(), List.copyOf(mergedFinishers)));
+        }
+
+        // Add any incoming divisions that had no match in existing
+        for (Division iDiv : incoming)
+        {
+            if (existing.stream().noneMatch(d -> Objects.equals(d.name(), iDiv.name())))
+                merged.add(iDiv);
+        }
+
+        return List.copyOf(merged);
     }
 
     // --- Boat resolution ---
@@ -575,6 +743,11 @@ public class SailSysImporter
             designName = null;
 
         Boat boat = store.findOrCreateBoat(sailNo, name, designName, raceDate, SOURCE);
+        if (boat == null)
+        {
+            ImporterLog.warn(LOG, "Skipping ambiguous boat sailNo={} name={} — multiple designs in store", sailNo, name);
+            return null;
+        }
 
         // Assign club if missing
         Club boatClub = resolveBoatClub(boatSummary.club, organizingClub);
@@ -685,6 +858,37 @@ public class SailSysImporter
             return List.of();
         return handicappings.stream()
             .filter(h -> h != null && h.shortName != null && isMeasurementSystem(h.shortName))
+            .toList();
+    }
+
+    /**
+     * Scans competitor calculations to find which claimed measurement systems actually have
+     * data.  A system is "actual" if at least one boat has a non-null handicap value for it.
+     * This filters out systems that are listed in the race handicappings but have no real
+     * calculation data (e.g. race 34328 claims ORCc but no boat has ORCc calculations).
+     */
+    private static List<HandicappingSummary> resolveActualSystems(
+        List<DivisionData> competitors, List<HandicappingSummary> claimedSystems)
+    {
+        if (competitors == null || claimedSystems.isEmpty())
+            return List.of();
+
+        Set<Integer> activeIds = new HashSet<>();
+        for (DivisionData div : competitors)
+        {
+            if (div.items == null) continue;
+            for (EntryData entry : div.items)
+            {
+                for (HandicappingSummary sys : claimedSystems)
+                {
+                    if (sys.id != null && extractHandicapValue(entry.calculations, sys.id) != null)
+                        activeIds.add(sys.id);
+                }
+            }
+        }
+
+        return claimedSystems.stream()
+            .filter(s -> s.id != null && activeIds.contains(s.id))
             .toList();
     }
 
@@ -873,7 +1077,6 @@ public class SailSysImporter
         public String  dateTime;
         public Integer number;
         public String  name;
-        public Boolean offsetPursuitRace;
         public ClubSummary            club;
         public SeriesSummary          series;
         public List<HandicappingSummary> handicappings;

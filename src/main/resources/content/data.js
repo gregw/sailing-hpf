@@ -145,6 +145,7 @@ const state = {
     dir:      { boats: 'asc', designs: 'asc', clubs: 'asc', races: 'desc', series: 'desc' },
     pageSize: 25,
     searchTimers: {},
+    searches: { boats: '', designs: '', clubs: '', races: '', series: '' },  // persistent per-tab search terms
     activeTab: 'boats',
     selected:     { boats: new Set(), designs: new Set() },   // IDs of checked rows
     selectedData: { boats: new Map(), designs: new Map() },   // id → item for merge panel
@@ -153,6 +154,7 @@ const state = {
     currentRaceIdx:  -1,   // index into raceItems of the currently shown race
     boatItems:       [],   // current page's boat rows for prev/next navigation
     currentBoatIdx:  -1,   // index into boatItems of the currently shown boat
+    lastDetailBoat:  null, // most recently loaded boat detail (for edit panel)
 };
 
 let currentDivRaceId = null;
@@ -167,6 +169,9 @@ function switchTab(entity) {
         document.getElementById('panel-' + e).classList.toggle('active', e === entity);
     });
     state.activeTab = entity;
+    // Restore persisted search term for this tab
+    const q = document.getElementById('q-' + entity);
+    if (q && state.searches[entity] !== undefined) q.value = state.searches[entity];
     updateFilterBanner(entity);
     updateFilterControls(entity);
     if (document.querySelector('#tbody-' + entity + ' tr') === null) {
@@ -176,6 +181,7 @@ function switchTab(entity) {
 
 function setFilter(entity, param, value, label) {
     state.filter[entity] = { param, value, label };
+    state.searches[entity] = '';   // navigation filter clears any persistent search
     state.pages[entity] = 0;
     const q = document.getElementById('q-' + entity);
     if (q) q.value = '';
@@ -213,6 +219,8 @@ function updateFilterControls(entity) {
 }
 
 function debounceSearch(entity) {
+    const q = document.getElementById('q-' + entity);
+    if (q) state.searches[entity] = q.value;
     clearTimeout(state.searchTimers[entity]);
     state.searchTimers[entity] = setTimeout(() => doSearch(entity), 300);
 }
@@ -221,6 +229,13 @@ function doSearch(entity) {
     state.pages[entity] = 0;
     document.getElementById('detail-' + entity).classList.remove('visible');
     loadList(entity, 0);
+}
+
+function clearSearch(entity) {
+    state.searches[entity] = '';
+    const q = document.getElementById('q-' + entity);
+    if (q) q.value = '';
+    doSearch(entity);
 }
 
 function setPageSize(size) {
@@ -368,6 +383,11 @@ function renderPager(entity, data) {
 }
 
 async function loadDetail(entity, id) {
+    if (entity === 'series') {
+        loadSeriesChart(id);
+        return;
+    }
+
     const data = await fetchJson('/api/' + entity + '/' + encodeURIComponent(id));
     if (!data) return;
 
@@ -389,6 +409,11 @@ async function loadDetail(entity, id) {
         const aliasDiv = document.getElementById('aliases-boats');
         const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
         aliasDiv.innerHTML = aliases && aliases.length > 0 ? renderBoatAliases(aliases) : '';
+
+        // Store loaded boat data for the edit panel and show the edit button
+        state.lastDetailBoat = data;
+        document.getElementById('edit-btn-container').style.display = '';
+        hideEditPanel();
 
         updateBoatNav();
     }
@@ -523,7 +548,14 @@ function renderResidualChart(residuals) {
                 }),
                 size: 8
             },
-            text: entries.map(e => `${e.division}<br>w=${e.weight.toFixed(2)}<br>r=${(-e.residual).toFixed(4)}`),
+            text: entries.map(e => {
+                const parts = [];
+                if (e.seriesName) parts.push(esc(e.seriesName));
+                if (e.raceName)   parts.push(esc(e.raceName));
+                parts.push(e.division || '—');
+                parts.push(`w=${e.weight.toFixed(2)}  r=${(-e.residual).toFixed(4)}`);
+                return parts.join('<br>');
+            }),
             hoverinfo: 'text+x'
         };
     }
@@ -654,7 +686,48 @@ function hideMergePanel(entity) {
 
 document.addEventListener('hpf:authready', () => {
     loadList(state.activeTab, state.pages[state.activeTab]);
+    applyMergeAuthState();
 });
+
+let requestEmail = '';
+
+function syncRequestEmail(value) {
+    requestEmail = value;
+    // Keep all email inputs in sync
+    ['merge-email-boats', 'merge-email-designs', 'edit-email'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el !== document.activeElement) el.value = value;
+    });
+}
+
+function applyMergeAuthState() {
+    const w = isWriteAllowed();
+    ['boats', 'designs'].forEach(entity => {
+        const mergeBtn = document.getElementById('merge-btn-' + entity);
+        const reqBtn   = document.getElementById('merge-request-btn-' + entity);
+        const confirmBtn = document.getElementById('merge-confirm-' + entity);
+        const reqConfirmBtn = document.getElementById('merge-request-confirm-' + entity);
+        const emailRow = document.getElementById('merge-email-row-' + entity);
+        if (mergeBtn)       mergeBtn.style.display      = w ? '' : 'none';
+        if (reqBtn)         reqBtn.style.display         = w ? 'none' : '';
+        if (confirmBtn)     confirmBtn.style.display     = w ? '' : 'none';
+        if (reqConfirmBtn)  reqConfirmBtn.style.display  = w ? 'none' : '';
+        if (emailRow)       emailRow.style.display       = w ? 'none' : '';
+    });
+    const editSaveBtn  = document.getElementById('edit-save-btn');
+    const editReqBtn   = document.getElementById('edit-request-btn');
+    const editEmailRow = document.getElementById('edit-email-row');
+    if (editSaveBtn)  editSaveBtn.style.display  = w ? '' : 'none';
+    if (editReqBtn)   editReqBtn.style.display   = w ? 'none' : '';
+    if (editEmailRow) editEmailRow.style.display = w ? 'none' : '';
+    // Pre-populate email fields with remembered value
+    if (!w) {
+        ['merge-email-boats', 'merge-email-designs', 'edit-email'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = requestEmail;
+        });
+    }
+}
 
 async function performMerge(entity) {
     if (!isWriteAllowed()) return;
@@ -698,6 +771,158 @@ async function toggleExcluded(entity, id, excluded) {
     }
 }
 
+// ---- Merge request (read-only users) ----
+
+async function requestMerge(entity) {
+    const keepRadio = document.querySelector('#merge-radio-list-' + entity + ' input[name="merge-keep-' + entity + '"]:checked');
+    if (!keepRadio) return;
+    const keepId   = keepRadio.value;
+    const mergeIds = Array.from(state.selected[entity]).filter(id => id !== keepId);
+    const statusEl = document.getElementById('merge-status-' + entity);
+    statusEl.textContent = 'Submitting request…';
+
+    const email = document.getElementById('merge-email-' + entity)?.value.trim() || '';
+    const result = await fetchJson('/api/' + entity + '/merge-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keepId, mergeIds, ...(email && { email }) })
+    });
+
+    if (result && result.ok) {
+        clearSelection(entity);
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
+// ---- Edit boat ----
+
+let editingBoatId = null;
+let editChoicesLoaded = false;
+
+async function loadEditChoices() {
+    if (editChoicesLoaded) return;
+    editChoicesLoaded = true;
+
+    const [designsResp, clubsResp] = await Promise.all([
+        fetchJson('/api/designs?size=9999&sort=canonicalName&dir=asc'),
+        fetchJson('/api/clubs?size=9999&sort=shortName&dir=asc')
+    ]);
+
+    const designSel = document.getElementById('edit-boat-design');
+    if (designsResp && designsResp.items) {
+        const opts = designsResp.items.map(d => {
+            const o = document.createElement('option');
+            o.value = d.id;
+            o.textContent = d.canonicalName || d.id;
+            return o;
+        });
+        // Preserve current selection while replacing options
+        const cur = designSel.value;
+        designSel.replaceChildren(...opts);
+        designSel.value = cur;
+    }
+
+    const clubSel = document.getElementById('edit-boat-club');
+    if (clubsResp && clubsResp.items) {
+        const opts = clubsResp.items.map(c => {
+            const o = document.createElement('option');
+            o.value = c.id;
+            o.textContent = c.shortName ? `${c.shortName} — ${c.id}` : c.id;
+            return o;
+        });
+        const cur = clubSel.value;
+        clubSel.replaceChildren(...opts);
+        clubSel.value = cur;
+    }
+}
+
+function showEditPanel() {
+    const item = state.lastDetailBoat;
+    if (!item) return;
+    editingBoatId = item.id;
+    document.getElementById('edit-boat-sail').value = item.sailNumber || '';
+    document.getElementById('edit-boat-name').value = item.name || '';
+    // Populate selects before setting value so the option exists
+    loadEditChoices().then(() => {
+        document.getElementById('edit-boat-design').value = item.designId || '';
+        document.getElementById('edit-boat-club').value = item.clubId || '';
+    });
+    document.getElementById('edit-boat-design').value = item.designId || '';
+    document.getElementById('edit-boat-club').value = item.clubId || '';
+    document.getElementById('edit-status-boats').textContent = '';
+    document.getElementById('edit-btn-container').style.display = 'none';
+    document.getElementById('edit-panel-boats').style.display = '';
+    applyMergeAuthState();
+}
+
+function hideEditPanel() {
+    document.getElementById('edit-panel-boats').style.display = 'none';
+    document.getElementById('edit-btn-container').style.display = '';
+    editingBoatId = null;
+}
+
+async function saveBoatEdit() {
+    if (!isWriteAllowed() || !editingBoatId) return;
+    const statusEl = document.getElementById('edit-status-boats');
+    statusEl.textContent = 'Saving…';
+
+    const body = {
+        boatId: editingBoatId,
+        sailNumber: document.getElementById('edit-boat-sail').value.trim(),
+        name: document.getElementById('edit-boat-name').value.trim(),
+        designId: document.getElementById('edit-boat-design').value.trim(),
+        clubId: document.getElementById('edit-boat-club').value.trim()
+    };
+
+    const result = await fetchJson('/api/boats/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+
+    if (!result || !result.ok) {
+        statusEl.textContent = 'Save failed: ' + ((result && result.error) || 'see console');
+        return;
+    }
+
+    let msg = 'Saved.';
+    if (result.idChanged) msg += ' ID changed to ' + result.newBoatId + '.';
+    if (result.updatedRaces > 0) msg += ' Updated ' + result.updatedRaces + ' race(s).';
+    statusEl.textContent = msg;
+    hideEditPanel();
+    loadList('boats', state.pages.boats);
+    if (result.newBoatId) loadDetail('boats', result.newBoatId);
+}
+
+async function requestBoatEdit() {
+    if (!editingBoatId) return;
+    const statusEl = document.getElementById('edit-status-boats');
+    statusEl.textContent = 'Submitting request…';
+
+    const email = document.getElementById('edit-email')?.value.trim() || '';
+    const body = {
+        boatId: editingBoatId,
+        sailNumber: document.getElementById('edit-boat-sail').value.trim(),
+        name: document.getElementById('edit-boat-name').value.trim(),
+        designId: document.getElementById('edit-boat-design').value.trim(),
+        clubId: document.getElementById('edit-boat-club').value.trim(),
+        ...(email && { email })
+    };
+
+    const result = await fetchJson('/api/boats/edit-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+
+    if (result && result.ok) {
+        hideEditPanel();
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
 // ---- Race division chart ----
 
 function setupRaceDivisionChart(raceId, raceJson) {
@@ -709,9 +934,9 @@ function setupRaceDivisionChart(raceId, raceJson) {
         document.getElementById('division-section-races').style.display = 'none';
         return;
     }
-    // Map null/blank division names to "" (sentinel for API) and display as handicapSystem or "Results".
+    // Map null/blank division names to "" (sentinel for API) and display as "Results".
     // Deduplicate by value so multiple null-named divisions collapse to one "" option.
-    const fallbackLabel = raceJson.handicapSystem || 'Results';
+    const fallbackLabel = 'Results';
     const seen = new Set();
     const divisions = [];
     for (const d of rawDivisions) {
@@ -823,6 +1048,24 @@ async function loadRaceDivChart(raceId, divisionName) {
     const VARIANT_LABELS = { spin: 'Spin', nonSpin: 'Non-Spin', twoHanded: 'Two-Handed', mixed: 'MIXED' };
     const labelEl = document.getElementById('race-variant-label');
     if (labelEl) labelEl.textContent = 'Variant: ' + (VARIANT_LABELS[data.divisionVariant] ?? data.divisionVariant ?? '');
+
+    // Show note about excluded finishers
+    const plotted = data.finishers.filter(f => f.hpf != null && f.elapsed > 0).length;
+    const noteEl = document.getElementById('race-division-note');
+    if (noteEl) {
+        const total = data.totalFinishers ?? data.finishers.length;
+        if (plotted < total) {
+            const apiExcluded = total - data.finishers.length;
+            const noHpf = data.finishers.length - plotted;
+            let parts = [];
+            if (apiExcluded > 0) parts.push(apiExcluded + ' no data');
+            if (noHpf > 0) parts.push(noHpf + ' no HPF');
+            noteEl.textContent = 'Showing ' + plotted + ' of ' + total + ' finishers (' + parts.join(', ') + ')';
+        } else {
+            noteEl.textContent = '';
+        }
+    }
+
     renderDivisionChart(data);
 }
 
@@ -901,6 +1144,99 @@ function renderDivisionChart(data) {
 
     document.getElementById('division-section-races').style.display = '';
     Plotly.react('race-division-chart', traces, layout, { responsive: true });
+}
+
+// ---- Series chart ----
+
+let seriesChartData = null;  // last loaded series chart response
+
+async function loadSeriesChart(seriesId) {
+    const section = document.getElementById('series-chart-section');
+    const label = document.getElementById('series-chart-label');
+    label.textContent = 'Loading series chart…';
+    section.style.display = '';
+
+    const data = await fetchJson('/api/series/chart?seriesId=' + encodeURIComponent(seriesId));
+    if (!data || !data.races || data.races.length === 0) {
+        label.textContent = 'No chart data available for this series.';
+        document.getElementById('series-division-select').innerHTML = '';
+        Plotly.purge('series-chart');
+        return;
+    }
+
+    seriesChartData = data;
+    label.textContent = (data.seriesName || seriesId) + ' — ' + data.club;
+
+    // Collect unique division names across all races, preserving first-seen order
+    const divNameSet = new Set();
+    data.races.forEach(r => r.divisions.forEach(d => divNameSet.add(d.name || '')));
+    const divNames = [...divNameSet];
+
+    const sel = document.getElementById('series-division-select');
+    sel.innerHTML = divNames.map(n => `<option value="${esc(n)}">${esc(n || '—')}</option>`).join('');
+
+    renderSeriesChartForDivision(divNames[0] || '');
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function onSeriesDivisionChange() {
+    const divName = document.getElementById('series-division-select').value;
+    renderSeriesChartForDivision(divName);
+}
+
+function renderSeriesChartForDivision(divName) {
+    const data = seriesChartData;
+    if (!data) return;
+
+    // Colour palette for races
+    const raceColors = [
+        '#2255aa', '#c47900', '#2ca02c', '#d62728', '#9467bd',
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+        '#ff7f0e', '#1f77b4', '#aec7e8', '#ffbb78', '#98df8a'
+    ];
+
+    const traces = [];
+    data.races.forEach((race, raceIdx) => {
+        const color = raceColors[raceIdx % raceColors.length];
+        const raceLabel = race.raceName || race.date || race.raceId;
+
+        const div = race.divisions.find(d => (d.name || '') === divName);
+        if (!div) return;
+
+        const finishers = div.finishers.filter(f => f.hpf != null && f.hpfCorrected != null);
+        if (finishers.length === 0) return;
+
+        const xs = finishers.map(f => f.hpf);
+        const ys = finishers.map(f => f.hpfCorrected / 60);
+        const texts = finishers.map(f =>
+            `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>HPF corrected: ${fmtTime(f.hpfCorrected)}`
+        );
+
+        traces.push({
+            x: xs, y: ys,
+            mode: 'lines+markers', type: 'scatter',
+            name: raceLabel,
+            line: { dash: 'solid', color: color, width: 1.5 },
+            marker: { size: 5 },
+            text: texts,
+            hoverinfo: 'text'
+        });
+    });
+
+    if (traces.length === 0) {
+        Plotly.purge('series-chart');
+        return;
+    }
+
+    const layout = {
+        xaxis: { title: 'HPF' },
+        yaxis: { title: 'HPF Corrected Time (min)', tickformat: '.1f', autorange: 'reversed' },
+        legend: { orientation: 'h', y: -0.25 },
+        margin: { t: 30, b: 80, l: 60, r: 20 },
+        hovermode: 'closest'
+    };
+
+    Plotly.react('series-chart', traces, layout, { responsive: true });
 }
 
 // ---- URL param handling (navigation from comparison page) ----

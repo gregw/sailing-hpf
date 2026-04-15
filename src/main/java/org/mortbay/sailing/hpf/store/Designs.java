@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
 
 /**
  * Reads {@code design.yaml} from the config directory (or classpath fallback) and returns
@@ -31,6 +32,74 @@ class Designs
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(
             new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER))
             .registerModule(new JavaTimeModule());
+
+    /**
+     * Adds or updates a boat design override in {@code design.yaml}.
+     * Finds the existing {@code DesignOverride} block for {@code designId} (or creates one),
+     * then adds a {@code BoatOverrideEntry} for the given sail number and name if not already present.
+     */
+    static void addDesignOverride(Path configDir, String sailNumber, String name,
+                                  String designId, String canonicalName)
+    {
+        Path file = configDir.resolve(FILENAME);
+        CatalogueFile catalogue = null;
+        if (Files.exists(file))
+        {
+            try
+            {
+                catalogue = YAML_MAPPER.readValue(file.toFile(), CatalogueFile.class);
+            }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for update: {}", file, e.getMessage());
+                return;
+            }
+        }
+        if (catalogue == null)
+            catalogue = new CatalogueFile();
+        if (catalogue.boatDesignOverrides == null)
+            catalogue.boatDesignOverrides = new ArrayList<>();
+
+        // Find or create the DesignOverride block for this designId
+        DesignOverride block = catalogue.boatDesignOverrides.stream()
+            .filter(o -> Objects.equals(o.designId, designId))
+            .findFirst().orElse(null);
+        if (block == null)
+        {
+            block = new DesignOverride();
+            block.designId = designId;
+            block.canonicalName = canonicalName;
+            block.boats = new ArrayList<>();
+            catalogue.boatDesignOverrides.add(block);
+        }
+        if (block.boats == null)
+            block.boats = new ArrayList<>();
+
+        // Add the boat entry if not already present (match on sailNumber + name)
+        String normSail = IdGenerator.normaliseSailNumber(sailNumber);
+        String normName = IdGenerator.normaliseName(name);
+        boolean duplicate = block.boats.stream().anyMatch(b ->
+            Objects.equals(IdGenerator.normaliseSailNumber(b.sailNumber), normSail)
+            && Objects.equals(IdGenerator.normaliseName(b.name), normName));
+        if (!duplicate)
+        {
+            BoatOverrideEntry entry = new BoatOverrideEntry();
+            entry.sailNumber = sailNumber;
+            entry.name = name;
+            block.boats.add(entry);
+        }
+
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), catalogue);
+            LOG.info("Updated {} with design override {} for {}/{}", file, designId, sailNumber, name);
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+        }
+    }
 
     static DesignCatalogue load(Path configDir)
     {

@@ -27,6 +27,7 @@
     <div id="filter-banner-boats" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-boats" placeholder="Search by id or name…" oninput="debounceSearch('boats')">
+      <button class="search-clear-btn" title="Clear search" onclick="clearSearch('boats')">✕</button>
       <button onclick="doSearch('boats')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="filter-dupe-sails" onchange="doSearch('boats')"> Duplicate sail numbers</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-boats" onchange="doSearch('boats')"> Show excluded</label>
@@ -47,14 +48,20 @@
 
     <div id="merge-bar-boats" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-boats"></span>
-      <button onclick="showMergePanel('boats')" style="margin-left:0.5rem;">Merge selected…</button>
+      <button id="merge-btn-boats" onclick="showMergePanel('boats')" style="margin-left:0.5rem;">Merge selected…</button>
+      <button id="merge-request-btn-boats" onclick="showMergePanel('boats')" style="margin-left:0.5rem;display:none;">Request merge…</button>
       <button onclick="clearSelection('boats')" style="margin-left:0.5rem;">Clear selection</button>
     </div>
 
     <div id="merge-panel-boats" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
       <strong>Select the canonical boat to keep:</strong>
       <div id="merge-radio-list-boats" style="margin:0.6rem 0;"></div>
-      <button onclick="performMerge('boats')">Confirm merge</button>
+      <div id="merge-email-row-boats" style="display:none; margin-bottom:0.5rem;">
+        <label for="merge-email-boats" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="merge-email-boats" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <button id="merge-confirm-boats" onclick="performMerge('boats')">Confirm merge</button>
+      <button id="merge-request-confirm-boats" onclick="requestMerge('boats')" style="display:none;">Request merge</button>
       <button onclick="hideMergePanel('boats')" style="margin-left:0.5rem;">Cancel</button>
       <div id="merge-status-boats" style="margin-top:0.5rem; color:#555;"></div>
     </div>
@@ -63,6 +70,28 @@
       <div id="ref-factors-boats" style="margin-bottom:0.75rem;"></div>
       <div id="hpf-detail-boats" style="margin-bottom:0.75rem;"></div>
       <div id="aliases-boats" style="margin-bottom:0.75rem;"></div>
+      <div id="edit-btn-container" style="margin-bottom:0.75rem;display:none;"><button onclick="showEditPanel()">Edit boat…</button></div>
+      <div id="edit-panel-boats" style="display:none; margin-bottom:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+        <strong>Edit Boat</strong>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
+          <label for="edit-boat-sail">Sail #:</label>
+          <input type="text" id="edit-boat-sail" style="font-family:monospace;padding:3px 6px;">
+          <label for="edit-boat-name">Name:</label>
+          <input type="text" id="edit-boat-name" style="font-family:monospace;padding:3px 6px;">
+          <label for="edit-boat-design">Design:</label>
+          <select id="edit-boat-design" style="font-family:monospace;padding:3px 6px;"></select>
+          <label for="edit-boat-club">Club:</label>
+          <select id="edit-boat-club" style="font-family:monospace;padding:3px 6px;"></select>
+        </div>
+        <div id="edit-email-row" style="display:none; margin-bottom:0.5rem;">
+          <label for="edit-email" style="font-size:0.9rem;">Your email (optional): </label>
+          <input type="email" id="edit-email" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+        </div>
+        <button id="edit-save-btn" onclick="saveBoatEdit()">Save</button>
+        <button id="edit-request-btn" onclick="requestBoatEdit()" style="display:none;">Request</button>
+        <button onclick="hideEditPanel()" style="margin-left:0.5rem;">Cancel</button>
+        <div id="edit-status-boats" style="margin-top:0.5rem; color:#555;"></div>
+      </div>
       <div id="pre-boats" class="json-tree"></div>
     </div>
   </div>
@@ -71,6 +100,7 @@
     <div id="filter-banner-designs" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-designs" placeholder="Search by id or name…" oninput="debounceSearch('designs')">
+      <button class="search-clear-btn" title="Clear search" onclick="clearSearch('designs')">✕</button>
       <button onclick="doSearch('designs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-designs" onchange="doSearch('designs')"> Exclude nulls</label>
@@ -90,14 +120,20 @@
 
     <div id="merge-bar-designs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-designs"></span>
-      <button onclick="showMergePanel('designs')" style="margin-left:0.5rem;">Merge selected…</button>
+      <button id="merge-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;">Merge selected…</button>
+      <button id="merge-request-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;display:none;">Request merge…</button>
       <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
     </div>
 
     <div id="merge-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
       <strong>Select the canonical design to keep:</strong>
       <div id="merge-radio-list-designs" style="margin:0.6rem 0;"></div>
-      <button onclick="performMerge('designs')">Confirm merge</button>
+      <div id="merge-email-row-designs" style="display:none; margin-bottom:0.5rem;">
+        <label for="merge-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="merge-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <button id="merge-confirm-designs" onclick="performMerge('designs')">Confirm merge</button>
+      <button id="merge-request-confirm-designs" onclick="requestMerge('designs')" style="display:none;">Request merge</button>
       <button onclick="hideMergePanel('designs')" style="margin-left:0.5rem;">Cancel</button>
       <div id="merge-status-designs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
@@ -109,6 +145,7 @@
     <div id="filter-banner-clubs" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-clubs" placeholder="Search by id, short name or long name…" oninput="debounceSearch('clubs')">
+      <button class="search-clear-btn" title="Clear search" onclick="clearSearch('clubs')">✕</button>
       <button onclick="doSearch('clubs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-clubs" onchange="doSearch('clubs')"> Exclude nulls</label>
@@ -132,6 +169,7 @@
     <div id="filter-banner-races" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-races" placeholder="Search by id or club…" oninput="debounceSearch('races')">
+      <button class="search-clear-btn" title="Clear search" onclick="clearSearch('races')">✕</button>
       <button onclick="doSearch('races')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-races" onchange="doSearch('races')"> Exclude empty</label>
@@ -157,6 +195,7 @@
         <span id="race-variant-label" style="font-size:0.9rem;color:#555;"></span>
         <label><input type="checkbox" id="race-show-error-bars" onchange="onRaceErrorBarsChange()"> Error bars</label>
       </div>
+      <div id="race-division-note" style="font-size:0.85rem;color:#888;margin-bottom:0.25rem;"></div>
       <div id="race-division-chart" style="width:100%;height:400px;"></div>
       <div class="division-nav" style="margin-top:0.5rem;">
         <button id="race-prev-btn" onclick="prevRace()" disabled>&#8592; Prev</button>
@@ -172,6 +211,7 @@
     <div id="filter-banner-series" class="filter-banner" style="display:none"></div>
     <div class="search-row">
       <input type="text" id="q-series" placeholder="Search by club or series name…" oninput="debounceSearch('series')">
+      <button class="search-clear-btn" title="Clear search" onclick="clearSearch('series')">✕</button>
       <button onclick="doSearch('series')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-empty-series" checked onchange="doSearch('series')"> Exclude empty</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-series" onchange="setPageSize(this.value)">
@@ -187,6 +227,13 @@
       <tbody id="tbody-series"></tbody>
     </table>
     <div class="pagination" id="pager-series"></div>
+    <div id="series-chart-section" style="display:none; margin-top:1rem;">
+      <div id="series-chart-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
+      <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
+        <label>Division: <select id="series-division-select" onchange="onSeriesDivisionChange()"></select></label>
+      </div>
+      <div id="series-chart" style="width:100%;height:500px;"></div>
+    </div>
     <div class="detail-panel" id="detail-series"></div>
   </div>
 
