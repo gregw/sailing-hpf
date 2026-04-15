@@ -57,6 +57,8 @@ designs:
     canonicalName: "Beneteau First 35"
     aliases:
     - "FIRST 35"
+    - "Beneteau 35 First"
+    - "beneteau35first"
   beneteaufirst53:
     canonicalName: "Beneteau First 53"
     aliases:
@@ -204,11 +206,32 @@ designs:
     aliases:
     - "Adams Ten Cruising"
     - "adamstencruising"
+    - "Adams 10 Cruising"
+    - "adams10cruising"
   reichelpugh69:
     canonicalName: "Reichel / Pugh 69"
     aliases:
     - "Reichal Pugh 69"
     - "reichalpugh69"
+  archambaulta40:
+    canonicalName: "ARCHAMBAULT A40"
+    aliases:
+    - "Archambault 40"
+    - "archambault40"
+    - "Archambault AC40"
+    - "archambaultac40"
+  archambaulta31:
+    canonicalName: "ARCHAMBAULT A31"
+    aliases:
+    - "Archambault 31"
+    - "archambault31"
+  archambaulta40rc:
+    canonicalName: "ARCHAMBAULT A40 RC"
+    aliases:
+    - "Archambault 40 RC"
+    - "archambault40rc"
+    - "Archambault Rc40"
+    - "archambaultrc40"
 boats:
   MYC7-daydreaming:
     canonicalName: "Day Dreaming"

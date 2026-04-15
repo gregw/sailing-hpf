@@ -1,174 +1,187 @@
-# Designs to exclude from HPF calculation (dinghies, off-the-beach, beach cats).
-# Values are matched case-insensitively against the normalised design ID.
-# Named keelboat one-designs (Dragon, Etchells, Elliott, VX One, etc.) are NOT listed here.
 excluded:
-  - Dinghy
-  - Optimist
-  - ILCA 4
-  - ILCA 6
-  - ILCA 7
-  - Laser
-  - OK Dinghy
-  - Finn
-  - Pacer
-  - Flying 11
-  - Sabot
-  - Minnow
-  - Contender
-  - 29er
-  - 49er
-  - 79er
-  - 470
-  - 420
-  - 505
-  - Tasar
-  - NS14
-  - B14
-  - International 14
-  - International Canoe
-  - Cherub
-  - O'pen Skiff
-  - International Cadet
-  - Flying Ant
-  - Windsurfer
-  - Windfoil
-  - Waszp
-  - Hobie 14
-  - Hobie 14 Turbo
-  - Hobie 16
-  - Hobie 17
-  - Hobie 18
-  - F16
-  - F18
-  - A Class Catamaran
-  - Nacra 4.5
-  - Nacra 16
-  - Nacra 17
-  - Paper Tiger
-  - Skud 18
-  - Musto Skiff
-  - RS Aero 6
-  - RS Aero 7
-  - RS200
-  - RS Quest
-  - RS Feva
-  - Feva XL
-  - RS800
-  - RS100 8.4
-  - 12ft Skiff
-  - 13ft Skiff
-  - 16ft Skiff
-  - 18ft Skiff
-  - Historic 18 foot Skiffs
-  - International Moth
-  - Scow Moth
-  - Mosquito
-  - Javelin
-  - Skate
-  - Heron
-  - Sailfish
-  - Pittwater Junior
-  - Spiral
-  - Sharpie
-  - Blazer
-  - Arrow
-
-# Design names to ignore — these are placeholders, brands, or rig types that appear in
-# source data but do not identify an actual design. Boats with these names as their only
-# design will be treated as having no design. Matched case-insensitively against normalised names.
+- "Dinghy"
+- "Optimist"
+- "ILCA 4"
+- "ILCA 6"
+- "ILCA 7"
+- "Laser"
+- "OK Dinghy"
+- "Finn"
+- "Pacer"
+- "Flying 11"
+- "Sabot"
+- "Minnow"
+- "Contender"
+- "29er"
+- "49er"
+- "79er"
+- "470"
+- "420"
+- "505"
+- "Tasar"
+- "NS14"
+- "B14"
+- "International 14"
+- "International Canoe"
+- "Cherub"
+- "O'pen Skiff"
+- "International Cadet"
+- "Flying Ant"
+- "Windsurfer"
+- "Windfoil"
+- "Waszp"
+- "Hobie 14"
+- "Hobie 14 Turbo"
+- "Hobie 16"
+- "Hobie 17"
+- "Hobie 18"
+- "F16"
+- "F18"
+- "A Class Catamaran"
+- "Nacra 4.5"
+- "Nacra 16"
+- "Nacra 17"
+- "Paper Tiger"
+- "Skud 18"
+- "Musto Skiff"
+- "RS Aero 6"
+- "RS Aero 7"
+- "RS200"
+- "RS Quest"
+- "RS Feva"
+- "Feva XL"
+- "RS800"
+- "RS100 8.4"
+- "12ft Skiff"
+- "13ft Skiff"
+- "16ft Skiff"
+- "18ft Skiff"
+- "Historic 18 foot Skiffs"
+- "International Moth"
+- "Scow Moth"
+- "Mosquito"
+- "Javelin"
+- "Skate"
+- "Heron"
+- "Sailfish"
+- "Pittwater Junior"
+- "Spiral"
+- "Sharpie"
+- "Blazer"
+- "Arrow"
 ignored:
-  - d1
-  - d2
-  - d3
-  - d4
-  - d5
-  - d6
-  - d7
-  - d8
-  - d9
-  - d10
-  - d11
-  - d12
-  - d13
-  - d14
-  - d15
-  - d16
-  - d17
-  - d18
-  - d19
-  - d20
-  - d21
-  - d22
-  - d23
-  - d24
-  - d25
-  - d26
-  - d27
-  - d28
-  - d29
-  - d30
-  - d123
-  - sloop
-  - cutter
-  - ketch
-  - yawl
-  - catamaran
-  - trimaran
-  - multihull
-  - monohull
-  - classic sloop
-  - cruiser racer
-  - cruiser
-  - racer
-  - keelboat
-  - yacht
-  - sailing yacht
-  - motor sailer
-  - motorsailer
-  - jboat
-  - j boat
-  - xyacht
-  - beneteau
-  - jeanneau
-  - bavaria
-  - hanse
-  - dufour
-  - elan
-  - catalina
-  - hunter
-
-# Boat-to-design overrides: assign a specific designId to boats identified by sail number + name.
-# Use this for boats that import without a design (e.g. PHS-only boats) or with the wrong design.
-# canonicalName sets the display name used when the design is auto-created (optional; defaults to designId).
+- "d1"
+- "d2"
+- "d3"
+- "d4"
+- "d5"
+- "d6"
+- "d7"
+- "d8"
+- "d9"
+- "d10"
+- "d11"
+- "d12"
+- "d13"
+- "d14"
+- "d15"
+- "d16"
+- "d17"
+- "d18"
+- "d19"
+- "d20"
+- "d21"
+- "d22"
+- "d23"
+- "d24"
+- "d25"
+- "d26"
+- "d27"
+- "d28"
+- "d29"
+- "d30"
+- "d123"
+- "sloop"
+- "cutter"
+- "ketch"
+- "yawl"
+- "catamaran"
+- "trimaran"
+- "multihull"
+- "monohull"
+- "classic sloop"
+- "cruiser racer"
+- "cruiser"
+- "racer"
+- "keelboat"
+- "yacht"
+- "sailing yacht"
+- "motor sailer"
+- "motorsailer"
+- "jboat"
+- "j boat"
+- "xyacht"
+- "beneteau"
+- "jeanneau"
+- "bavaria"
+- "hanse"
+- "dufour"
+- "elan"
+- "catalina"
+- "hunter"
 boatDesignOverrides:
-  - designId: "sydney36mkii"
-    canonicalName: "Sydney 36 MkII"
-    boats:
-      - sailNumber: "5915"
-        name: "Stormaway"
-      - sailNumber: "6499"
-        name: "Supernova"
-      - sailNumber: "RF360"
-        name: "This Way Up"
-  - designId: "bashfordsydney36"
-    canonicalName: "Bashford Sydney 36"
-    boats:
-      - sailNumber: "1236"
-        name: "LOCAL HERO"
-  - designId: "archambaultgrandsurprise"
-    canonicalName: "Archambault Grand Surprise"
-    boats:
-      - sailNumber: "MYC32"
-        name: "Esprit"
-      - sailNumber: "M2"
-        name: "Remedy"
-      - sailNumber: "N16"
-        name: "Bazinga"
-      - sailNumber: "1919"
-        name: "Lost Horizon"
-  - designId: "archambaultsurprise"
-    canonicalName: "Archambault Surprise"
-    boats:
-      - sailNumber: "6750"
-        name: "Asterix"
-
+- designId: "sydney36mkii"
+  canonicalName: "Sydney 36 MkII"
+  boats:
+  - sailNumber: "5915"
+    name: "Stormaway"
+    from: null
+    until: null
+  - sailNumber: "6499"
+    name: "Supernova"
+    from: null
+    until: null
+  - sailNumber: "RF360"
+    name: "This Way Up"
+    from: null
+    until: null
+- designId: "bashfordsydney36"
+  canonicalName: "Bashford Sydney 36"
+  boats:
+  - sailNumber: "1236"
+    name: "LOCAL HERO"
+    from: null
+    until: null
+- designId: "archambaultgrandsurprise"
+  canonicalName: "Archambault Grand Surprise"
+  boats:
+  - sailNumber: "MYC32"
+    name: "Esprit"
+    from: null
+    until: null
+  - sailNumber: "M2"
+    name: "Remedy"
+    from: null
+    until: null
+  - sailNumber: "N16"
+    name: "Bazinga"
+    from: null
+    until: null
+  - sailNumber: "1919"
+    name: "Lost Horizon"
+    from: null
+    until: null
+- designId: "archambaultsurprise"
+  canonicalName: "Archambault Surprise"
+  boats:
+  - sailNumber: "6750"
+    name: "Asterix"
+    from: null
+    until: null
+- designId: "etchells"
+  canonicalName: "Etchells"
+  boats:
+  - sailNumber: "1161"
+    name: "Wildlife"
+    from: null
+    until: null

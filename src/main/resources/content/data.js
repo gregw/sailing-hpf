@@ -158,6 +158,8 @@ const state = {
 
 let currentDivRaceId = null;
 let showRaceErrorBars = false;
+let showRaceTrendLine = false;
+let showRaceRfLine    = true;
 let preferredDivision = null;
 
 function isWriteAllowed() { return window.hpfAuth?.authenticated; }
@@ -582,7 +584,8 @@ function renderResidualChart(residuals) {
         margin: { t: 40, b: 50, l: 60, r: 20 }
     };
 
-    Plotly.newPlot(container, traces, layout, { responsive: true });
+    Plotly.newPlot(container, traces, layout, { responsive: true })
+        .then(() => Plotly.Plots.resize(container));
 }
 
 function renderProfileChart(profile) {
@@ -1030,8 +1033,18 @@ function onRaceDivisionChange() {
     loadRaceDivChart(currentDivRaceId, document.getElementById('race-division-select').value);
 }
 
+function onRaceRfChange() {
+    showRaceRfLine = document.getElementById('race-show-rf').checked;
+    onRaceDivisionChange();
+}
+
 function onRaceErrorBarsChange() {
     showRaceErrorBars = document.getElementById('race-show-error-bars').checked;
+    onRaceDivisionChange();
+}
+
+function onRaceTrendChange() {
+    showRaceTrendLine = document.getElementById('race-show-trend').checked;
     onRaceDivisionChange();
 }
 
@@ -1108,11 +1121,38 @@ function renderDivisionChart(data) {
           line: { dash: 'solid', color: '#2255aa', width: 2 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'hpf', 'rfWeight'),
           text: hoverTexts('HPF corrected', hpfCorr), hoverinfo: 'text' },
-        { x: xs, y: rfCorr,  mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+        ...(showRaceRfLine ? [{ x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
           line: { dash: 'dot', color: '#c47900', width: 1.5 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'rf', 'rfWeight'),
-          text: hoverTexts('RF corrected', rfCorr), hoverinfo: 'text' }
+          text: hoverTexts('RF corrected', rfCorr), hoverinfo: 'text' }] : [])
     ];
+
+    if (showRaceTrendLine) {
+        // Linear regression of hpfCorrected times vs HPF, excluding nulls
+        const pts = finishers.map((f, i) => ({ x: xs[i], y: hpfCorr[i] }))
+                             .filter(p => p.y != null);
+        if (pts.length >= 2) {
+            const n   = pts.length;
+            const sx  = pts.reduce((s, p) => s + p.x, 0);
+            const sy  = pts.reduce((s, p) => s + p.y, 0);
+            const sxx = pts.reduce((s, p) => s + p.x * p.x, 0);
+            const sxy = pts.reduce((s, p) => s + p.x * p.y, 0);
+            const denom = n * sxx - sx * sx;
+            if (denom !== 0) {
+                const slope     = (n * sxy - sx * sy) / denom;
+                const intercept = (sy - slope * sx) / n;
+                const xMin = Math.min(...pts.map(p => p.x));
+                const xMax = Math.max(...pts.map(p => p.x));
+                traces.push({
+                    x: [xMin, xMax],
+                    y: [slope * xMin + intercept, slope * xMax + intercept],
+                    mode: 'lines', type: 'scatter', name: 'HPF corr trend',
+                    line: { dash: 'dashdot', color: '#2255aa', width: 2 },
+                    hoverinfo: 'skip'
+                });
+            }
+        }
+    }
 
     // Boat name labels: vertical text at each finisher's lowest time point
     // (lowest time = topmost on chart since y-axis is reversed)
