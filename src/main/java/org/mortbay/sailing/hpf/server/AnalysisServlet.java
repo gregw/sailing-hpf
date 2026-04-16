@@ -113,7 +113,10 @@ public class AnalysisServlet extends HttpServlet
             resp.sendError(404, "Unknown comparison id: " + id);
             return;
         }
-        writeJson(resp, result);
+        // Wrap with minAnalysisR2 so the UI can use the configured threshold
+        Map<String, Object> wrapper = MAPPER.convertValue(result, LinkedHashMap.class);
+        wrapper.put("minAnalysisR2", cache.minAnalysisR2());
+        writeJson(resp, wrapper);
     }
 
     private void handleTable(String id, HttpServletRequest req, HttpServletResponse resp)

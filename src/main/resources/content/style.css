@@ -169,6 +169,12 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
     opacity: 0.6; margin-left: 2px; font-family: monospace;
 }
 .chip-close:hover { opacity: 1; }
+.chip-clear-all {
+    align-self: center; background: none; border: 1px solid #aaa;
+    border-radius: 12px; cursor: pointer; font-size: 0.8rem;
+    color: #666; padding: 2px 10px; line-height: 1.4;
+}
+.chip-clear-all:hover { background: #f0f0f0; color: #c00; border-color: #c00; }
 
 /* Division navigation */
 .division-nav { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }

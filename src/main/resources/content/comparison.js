@@ -12,6 +12,8 @@ let selectedItems   = [];   // {type:'boat', id, label, color}
 let allAvailable    = false;
 let selectedVariant = 'spin';
 let showErrorBars    = false;
+let showRfLine       = true;
+let showHpfLine      = true;
 let showTrendLinear  = true;
 let showTrendSliding = true;
 let hideLegend       = false;
@@ -104,6 +106,8 @@ function addBoat() {
     focusedBoatId = null;
     document.getElementById('add-boat-btn').disabled = true;
     document.getElementById('boat-search').value = '';
+    candidateBoats = [];   // clear immediately so stale highlighted list doesn't linger
+    renderBoatList();
     renderChips();
     saveSelection();
     loadCandidates();
@@ -112,6 +116,14 @@ function addBoat() {
 
 function removeItem(idx) {
     selectedItems.splice(idx, 1);
+    renderChips();
+    saveSelection();
+    loadCandidates();
+    loadChart();
+}
+
+function clearAll() {
+    selectedItems = [];
     renderChips();
     saveSelection();
     loadCandidates();
@@ -129,6 +141,14 @@ function renderChips() {
         chip.innerHTML = `${esc(item.label)} <button class="chip-close" onclick="removeItem(${idx})" title="Remove">×</button>`;
         container.appendChild(chip);
     });
+    if (selectedItems.length > 0) {
+        const btn = document.createElement('button');
+        btn.className = 'chip-clear-all';
+        btn.title = 'Remove all boats';
+        btn.textContent = '✕ Clear all';
+        btn.onclick = clearAll;
+        container.appendChild(btn);
+    }
 }
 
 // ---- Error band helpers ----
@@ -286,7 +306,7 @@ function renderChart(data) {
         const hpfFactor = selectedVariant === 'nonSpin' ? boat.hpfNonSpin
             : selectedVariant === 'twoHanded' ? boat.hpfTwoHanded : boat.hpfSpin;
 
-        if (rfFactor) {
+        if (showRfLine && rfFactor) {
             traces.push({
                 x: lineX, y: [rfFactor.value, rfFactor.value],
                 type: 'scatter', mode: 'lines',
@@ -296,7 +316,7 @@ function renderChart(data) {
                 hovertemplate: `${esc(name)} RF: %{y:.4f}<extra></extra>`
             });
         }
-        if (hpfFactor) {
+        if (showHpfLine && hpfFactor) {
             traces.push({
                 x: lineX, y: [hpfFactor.value, hpfFactor.value],
                 type: 'scatter', mode: 'lines',
@@ -443,10 +463,12 @@ function renderHandicapCalc(data) {
     // Header row
     const thead = document.createElement('thead');
     const hdrTr = document.createElement('tr');
-    ['', 'HPF', 'RF', ...(showBestFit ? ['Best Fit'] : []), 'Enter handicap'].forEach((text, i) => {
+    const hdrLabels = ['', 'HPF', 'RF', ...(showBestFit ? ['Best Fit'] : []), 'Enter handicap'];
+    hdrLabels.forEach((text, i) => {
         const th = document.createElement('th');
         th.textContent = text;
-        th.style.cssText = 'padding:2px 8px;font-size:0.8rem;color:#555;text-align:' + (i === 0 ? 'left' : 'center') + ';';
+        const align = i === 0 ? 'left' : i === hdrLabels.length - 1 ? 'center' : 'right';
+        th.style.cssText = `padding:2px 8px;font-size:0.8rem;color:#555;text-align:${align};`;
         hdrTr.appendChild(th);
     });
     thead.appendChild(hdrTr);
@@ -488,7 +510,7 @@ function renderHandicapCalc(data) {
         input.dataset.boatId = b.id;
         input.placeholder = 'enter…';
         input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
-        input.addEventListener('input', () => onCalcInput(input, calcBoats));
+        input.addEventListener('input', () => recalcAll(calcBoats));
         tdInput.appendChild(input);
         tr.appendChild(tdInput);
 
@@ -497,18 +519,30 @@ function renderHandicapCalc(data) {
     table.appendChild(tbody);
 }
 
-function onCalcInput(changedInput, calcBoats) {
-    const raw     = changedInput.value.trim();
-    const val     = parseFloat(raw);
-    const srcBoat = calcBoats.find(b => b.id === changedInput.dataset.boatId);
-    if (!srcBoat) return;
+// Fit-quality color: green (good fit) → red (bad fit)
+function fitColor(deviation) {
+    const t = Math.min(deviation / 0.05, 1);
+    const h = 120 * (1 - t);
+    return `hsl(${h}, 60%, 38%)`;
+}
 
-    // Clear other inputs so only one drives the calculation at a time
-    document.querySelectorAll('.hpf-calc-input').forEach(inp => {
-        if (inp !== changedInput) inp.value = '';
+// Confidence color: blue (low variance) → brown (high variance)
+function confidenceColor(cv) {
+    const t = Math.min(cv / 0.05, 1);
+    const h = 210 - 180 * t;
+    const l = 45 - 7 * t;
+    return `hsl(${h}, 55%, ${l}%)`;
+}
+
+function restoreAll() {
+    document.querySelectorAll('.hpf-calc-value').forEach(td => {
+        const origStr = td.dataset.origValue;
+        td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
+        td.style.color = '';
     });
+}
 
-    // Update all value cells — each column uses its own per-boat ratio
+function scaleSingle(anchor, calcBoats) {
     document.querySelectorAll('.hpf-calc-value').forEach(td => {
         const ft      = td.dataset.factorType;
         const origStr = td.dataset.origValue;
@@ -516,24 +550,105 @@ function onCalcInput(changedInput, calcBoats) {
         const origVal = parseFloat(origStr);
         if (isNaN(origVal)) return;
 
-        if (!raw || isNaN(val)) {
-            // Restore original displayed value
-            td.textContent = origVal.toFixed(4);
-            td.style.color = '';
-            return;
-        }
-
-        const srcFactor = srcBoat[ft];
+        const srcFactor = anchor.boat[ft];
         if (srcFactor == null) {
-            // Column not available for the anchor boat — can't scale
             td.textContent = origVal.toFixed(4);
             td.style.color = '';
             return;
         }
 
-        td.textContent = (origVal * (val / srcFactor)).toFixed(4);
+        td.textContent = (origVal * (anchor.value / srcFactor)).toFixed(4);
         td.style.color = '#c05000';
     });
+}
+
+function scaleMulti(anchors, calcBoats) {
+    // Build per-factor-type ratio stats
+    const anchorIds = new Set(anchors.map(a => a.boat.id));
+    const anchorByBoat = new Map(anchors.map(a => [a.boat.id, a]));
+
+    // Collect factor types from the cells
+    const ftSet = new Set();
+    document.querySelectorAll('.hpf-calc-value').forEach(td => ftSet.add(td.dataset.factorType));
+
+    // Per factor type: compute ratios, mean, stddev
+    const ftStats = {};
+    for (const ft of ftSet) {
+        const ratios = [];
+        for (const a of anchors) {
+            const orig = a.boat[ft];
+            if (orig != null && orig !== 0) ratios.push({ boatId: a.boat.id, r: a.value / orig });
+        }
+        if (ratios.length === 0) {
+            ftStats[ft] = null;
+            continue;
+        }
+        const R = ratios.reduce((s, x) => s + x.r, 0) / ratios.length;
+        const S = ratios.length > 1
+            ? Math.sqrt(ratios.reduce((s, x) => s + (x.r - R) ** 2, 0) / ratios.length)
+            : 0;
+        const cv = R > 0 ? S / R : 0;
+        ftStats[ft] = { ratios, R, S, cv, ratioMap: new Map(ratios.map(x => [x.boatId, x.r])) };
+    }
+
+    // Update all value cells
+    document.querySelectorAll('.hpf-calc-value').forEach(td => {
+        const ft      = td.dataset.factorType;
+        const boatId  = td.dataset.boatId;
+        const origStr = td.dataset.origValue;
+        if (!origStr) return;
+        const origVal = parseFloat(origStr);
+        if (isNaN(origVal)) return;
+
+        const stats = ftStats[ft];
+        if (!stats) {
+            td.textContent = origVal.toFixed(4);
+            td.style.color = '';
+            return;
+        }
+
+        // Single valid ratio for this column — treat as single-anchor
+        if (stats.ratios.length === 1) {
+            td.textContent = (origVal * stats.R).toFixed(4);
+            td.style.color = '#c05000';
+            return;
+        }
+
+        const isAnchor = anchorIds.has(boatId);
+        if (isAnchor) {
+            // Show the entered value (entered / orig * orig = entered)
+            const a = anchorByBoat.get(boatId);
+            td.textContent = a.value.toFixed(4);
+            // Color: fit quality — how far this boat's ratio is from consensus
+            const r = stats.ratioMap.get(boatId);
+            if (r != null) {
+                const deviation = Math.abs(r - stats.R) / stats.R;
+                td.style.color = fitColor(deviation);
+            } else {
+                td.style.color = '';
+            }
+        } else {
+            // Unentered boat: consensus-scaled value
+            td.textContent = (origVal * stats.R).toFixed(4);
+            // Color: confidence based on coefficient of variation
+            td.style.color = confidenceColor(stats.cv);
+        }
+    });
+}
+
+function recalcAll(calcBoats) {
+    const anchors = [];
+    document.querySelectorAll('.hpf-calc-input').forEach(inp => {
+        const v = parseFloat(inp.value);
+        if (!isNaN(v)) {
+            const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
+            if (boat) anchors.push({ boat, value: v });
+        }
+    });
+
+    if (anchors.length === 0) { restoreAll(); return; }
+    if (anchors.length === 1) { scaleSingle(anchors[0], calcBoats); return; }
+    scaleMulti(anchors, calcBoats);
 }
 
 // ---- Elapsed time comparison charts ----
@@ -686,8 +801,9 @@ function renderElapsedChart(divId, data, colorA, colorB) {
     const layout = {
         xaxis: { title: `${esc(nameB)} elapsed (h)`, range: [xMax + xPad, 0] },
         yaxis: { title: `${esc(nameA)} elapsed (h)`, range: [yMax + yPad, 0] },
-        legend: { orientation: 'v', xanchor: 'right', x: 1 },
-        margin: { t: 20, b: 70, l: 80, r: 20 },
+        showlegend: !hideLegend,
+        legend: { orientation: 'h', y: -0.2 },
+        margin: { t: 20, b: hideLegend ? 70 : 100, l: 80, r: 20 },
         hovermode: 'closest'
     };
 
@@ -744,9 +860,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         loadCandidates();
     });
     document.getElementById('variant-selector').addEventListener('change', onVariantChange);
+    document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('show-hpf-line')      .addEventListener('change', e => { showHpfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
     document.getElementById('last-12-months')    .addEventListener('change', e => { showLast12Months   = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });
     document.getElementById('common-races-only') .addEventListener('change', e => { showCommonRacesOnly = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('boat-search').addEventListener('input', () => {

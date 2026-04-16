@@ -44,7 +44,7 @@ schedule:
   days:
   - "TUESDAY"
   time: "08:08:00"
-nextSailSysRaceId: 32414
+nextSailSysRaceId: 32413
 sailsysEndRaceId: 41104
 targetIrcYear: 2025
 outlierSigma: null
@@ -56,6 +56,15 @@ sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
 sailsysHttpDelayMs: 200
 sailsysRecentRaceDays: 14
+sailsysExcludedRacePatterns:
+- "OTB"
+- "Off the Beach"
+- "skiff"
+- "foil"
+- "dinghy"
+- "finn"
+- "aero"
+- "international ok"
 bwpsMinYear: 2021
 
 # --- ORC importer ---

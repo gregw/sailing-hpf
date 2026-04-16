@@ -122,6 +122,7 @@ public class TaskService
                                Integer sailsysYoungRaceMaxAgeDays,  // null → default 365
                                Integer sailsysHttpDelayMs,          // null → default 200
                                Integer sailsysRecentRaceDays,       // null → default 14
+                               List<String> sailsysExcludedRacePatterns, // null → built-in defaults
                                Integer bwpsMinYear,                 // null → default 2020
                                Integer orcListMaxAgeDays,           // null → default 1
                                Double minAnalysisR2,             // null → default 0.50
@@ -175,6 +176,8 @@ public class TaskService
     private volatile int sailsysYoungRaceMaxAgeDays = 365;
     private volatile int sailsysHttpDelayMs = 200;
     private volatile int sailsysRecentRaceDays = 14;
+    private volatile List<String> sailsysExcludedRacePatterns =
+        List.of("OTB", "Off the Beach", "skiff", "foil", "dinghy");
     private volatile int bwpsMinYear = BwpsImporter.DEFAULT_MIN_YEAR;
     private volatile int orcListMaxAgeDays = 1;
     private volatile double minAnalysisR2 = ConversionGraph.DEFAULT_MIN_R2;
@@ -244,6 +247,7 @@ public class TaskService
             if (config.sailsysYoungRaceMaxAgeDays() != null) sailsysYoungRaceMaxAgeDays = config.sailsysYoungRaceMaxAgeDays();
             if (config.sailsysHttpDelayMs() != null) sailsysHttpDelayMs = config.sailsysHttpDelayMs();
             if (config.sailsysRecentRaceDays() != null) sailsysRecentRaceDays = config.sailsysRecentRaceDays();
+            if (config.sailsysExcludedRacePatterns() != null) sailsysExcludedRacePatterns = config.sailsysExcludedRacePatterns().stream().filter(p -> p != null).toList();
             if (config.bwpsMinYear() != null) bwpsMinYear = config.bwpsMinYear();
             if (config.orcListMaxAgeDays() != null) orcListMaxAgeDays = config.orcListMaxAgeDays();
             if (config.minAnalysisR2() != null) minAnalysisR2 = config.minAnalysisR2();
@@ -618,7 +622,7 @@ public void stop()
                     startId, endId, id -> currentSailSysId = id, stopRequested::get,
                     racesDir, sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays,
                     sailsysYoungRaceMaxAgeDays, sailsysHttpDelayMs,
-                    sailsysRecentRaceDays);
+                    sailsysRecentRaceDays, sailsysExcludedRacePatterns);
                 if (result.minRecentId() > 0)
                     currentSailSysId = result.minRecentId() - 1;
                 if (result.maxFoundId() > 0)
@@ -687,7 +691,7 @@ public void stop()
                     targetIrcYear, outlierSigma,
                     recentRaceReimportDays,
                     sailsysYoungCacheMaxAgeDays, sailsysOldCacheMaxAgeDays, sailsysYoungRaceMaxAgeDays,
-                    sailsysHttpDelayMs, sailsysRecentRaceDays, bwpsMinYear,
+                    sailsysHttpDelayMs, sailsysRecentRaceDays, sailsysExcludedRacePatterns, bwpsMinYear,
                     orcListMaxAgeDays,
                     minAnalysisR2, clubCertificateWeight, hpfLambda, hpfOutlierK, hpfAsymmetryFactor,
                     hpfOuterDampingFactor, hpfOuterConvergenceThreshold, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,

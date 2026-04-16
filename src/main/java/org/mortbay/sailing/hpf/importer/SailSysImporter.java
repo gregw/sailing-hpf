@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -89,6 +90,7 @@ public class SailSysImporter
     private int youngRaceMaxAgeDays  = 365;
     private int httpDelayMs          = 200;
     private int recentRaceDays       = 14;
+    private List<String> excludedRacePatterns = List.of();
 
     /** SailSys integer ID of the race currently being processed (for source tagging). */
     private int currentSailSysRaceId = 0;
@@ -271,14 +273,15 @@ public class SailSysImporter
                    Path racesDir,
                    int youngCacheMaxAgeDays, int oldCacheMaxAgeDays,
                    int youngRaceMaxAgeDays, int httpDelayMs,
-                   int recentRaceDays)
+                   int recentRaceDays, List<String> excludedRacePatterns)
         throws Exception
     {
-        this.youngCacheMaxAgeDays = youngCacheMaxAgeDays;
-        this.oldCacheMaxAgeDays   = oldCacheMaxAgeDays;
-        this.youngRaceMaxAgeDays  = youngRaceMaxAgeDays;
-        this.httpDelayMs          = httpDelayMs;
-        this.recentRaceDays       = recentRaceDays;
+        this.youngCacheMaxAgeDays  = youngCacheMaxAgeDays;
+        this.oldCacheMaxAgeDays    = oldCacheMaxAgeDays;
+        this.youngRaceMaxAgeDays   = youngRaceMaxAgeDays;
+        this.httpDelayMs           = httpDelayMs;
+        this.recentRaceDays        = recentRaceDays;
+        this.excludedRacePatterns  = excludedRacePatterns != null ? excludedRacePatterns : List.of();
 
         LOG.info("Importing SailSys races id={} to id={}", startId, endId);
         int processed = 0;
@@ -495,8 +498,12 @@ public class SailSysImporter
         String source = SOURCE + (currentSailSysRaceId > 0 ? "-" + currentSailSysRaceId : "");
         List<String> newSeriesIds = seriesId != null ? List.of(seriesId) : List.of();
 
+        // Check whether this race matches any configured exclusion pattern before storing.
+        boolean autoExclude = matchesExclusionPattern(data.name, seriesName);
+
         // If a race with this ID already exists (e.g. same physical race imported from
         // both a PHS series and an ORC series), merge rather than overwrite.
+        List<Division> storedDivisions;
         Race existing = store.races().get(raceId);
         if (existing != null)
         {
@@ -508,12 +515,30 @@ public class SailSysImporter
             store.putRace(new Race(
                 raceId, clubId, mergedSeriesIds, raceDate, number, data.name,
                 mergedDivisions, mergedSource, Instant.now(), null));
+            storedDivisions = mergedDivisions;
         }
         else
         {
             store.putRace(new Race(
                 raceId, clubId, newSeriesIds, raceDate, number, data.name,
                 divisions, source, Instant.now(), null));
+            storedDivisions = divisions;
+        }
+
+        if (autoExclude)
+        {
+            store.setRaceExcluded(raceId, true);
+            int boatCount = 0;
+            for (Division div : storedDivisions)
+            {
+                for (Finisher f : div.finishers())
+                {
+                    store.setBoatExcluded(f.boatId(), true);
+                    boatCount++;
+                }
+            }
+            LOG.info("SailSys: auto-excluded race '{}' (id={}) and {} finisher boat(s) — name/series matched exclusion pattern",
+                data.name, data.id, boatCount);
         }
 
         if (clubId != null && seriesId != null && seriesName != null)
@@ -898,6 +923,22 @@ public class SailSysImporter
         return claimedSystems.stream()
             .filter(s -> s.id != null && activeIds.contains(s.id))
             .toList();
+    }
+
+    /**
+     * Returns true if either the race name or series name contains any of the configured
+     * excluded-race patterns (case-insensitive substring match).
+     */
+    private boolean matchesExclusionPattern(String raceName, String seriesName)
+    {
+        if (excludedRacePatterns.isEmpty()) return false;
+        for (String pattern : excludedRacePatterns)
+        {
+            String lp = pattern.toLowerCase(Locale.ROOT);
+            if (raceName != null && raceName.toLowerCase(Locale.ROOT).contains(lp)) return true;
+            if (seriesName != null && seriesName.toLowerCase(Locale.ROOT).contains(lp)) return true;
+        }
+        return false;
     }
 
     /**

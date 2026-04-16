@@ -320,7 +320,7 @@ async function loadAnalysis() {
     document.getElementById('th-conv-x').textContent = labels.x;
     document.getElementById('th-conv-y').textContent = 'Predicted ' + labels.y;
 
-    const MIN_R2 = 0.75;
+    const MIN_R2 = data.minAnalysisR2 ?? 0.5;
     if (data.fit) {
         const r2 = data.fit.r2;
         document.getElementById('analysis-summary').textContent =

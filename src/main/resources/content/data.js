@@ -1183,6 +1183,41 @@ function renderDivisionChart(data) {
 
     document.getElementById('division-section-races').style.display = '';
     Plotly.react('race-division-chart', traces, layout, { responsive: true });
+
+    // Compare button: include all finishers with a boatId (not just HPF-filtered ones)
+    const compareBoats = (data.finishers || [])
+        .filter(f => f.boatId)
+        .map(f => ({ id: f.boatId, label: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name }));
+    addCompareButton('race-compare-btn-container', compareBoats);
+}
+
+// ---- Compare button ----
+
+const COMPARE_COLORS = [
+    '#3a7ec4', '#e67e22', '#27ae60', '#8e44ad', '#c0392b',
+    '#16a085', '#d35400', '#2c3e50', '#f39c12', '#1abc9c'
+];
+
+function addCompareButton(containerId, boats) {
+    // boats: array of {id, label}
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (boats.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.textContent = `Compare ${boats.length} boats\u2026`;
+    btn.style.marginTop = '0.5rem';
+    btn.onclick = () => {
+        const items = boats.map((b, i) => ({
+            type: 'boat',
+            id: b.id,
+            label: b.label,
+            color: COMPARE_COLORS[i % COMPARE_COLORS.length]
+        }));
+        sessionStorage.setItem('hpf-comparison-items', JSON.stringify(items));
+        window.location.href = '/comparison.html';
+    };
+    container.appendChild(btn);
 }
 
 // ---- Series chart ----
@@ -1304,6 +1339,19 @@ function renderSeriesChartForDivision(divName) {
     };
 
     Plotly.react('series-chart', traces, layout, { responsive: true });
+
+    // Compare button: unique boats across all races in this division
+    const seenBoats = new Map();
+    data.races.forEach(race => {
+        const div = race.divisions.find(d => (d.name || '') === divName);
+        if (!div) return;
+        div.finishers.forEach(f => {
+            if (f.boatId && !seenBoats.has(f.boatId))
+                seenBoats.set(f.boatId, f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        });
+    });
+    addCompareButton('series-compare-btn-container',
+        [...seenBoats.entries()].map(([id, label]) => ({ id, label })));
 }
 
 // ---- URL param handling (navigation from comparison page) ----

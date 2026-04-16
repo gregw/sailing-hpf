@@ -154,8 +154,13 @@ public class AnalysisCache implements DataStore.InvalidationListener
         // Keep entries that have index data but no reference factors (boats not in BuildResult)
         for (Map.Entry<String, BoatDerived> e : currentBoats.entrySet())
         {
-            if (!newBoats.containsKey(e.getKey()) && (!e.getValue().raceIds().isEmpty() || !e.getValue().seriesIds().isEmpty()))
-                newBoats.put(e.getKey(), new BoatDerived(e.getValue().boat(), null, e.getValue().raceIds(), e.getValue().seriesIds(), e.getValue().hpf()));
+            String id = e.getKey();
+            if (newBoats.containsKey(id)) continue;
+            if (store.isBoatExcluded(id)) continue;
+            Boat b = e.getValue().boat();
+            if (b.designId() != null && store.isDesignExcluded(b.designId())) continue;
+            if (!e.getValue().raceIds().isEmpty() || !e.getValue().seriesIds().isEmpty())
+                newBoats.put(id, new BoatDerived(b, null, e.getValue().raceIds(), e.getValue().seriesIds(), e.getValue().hpf()));
         }
         this.boatDerived = Map.copyOf(newBoats);
 
@@ -165,6 +170,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         for (Map.Entry<String, ReferenceFactors> e : built.designFactors().entrySet())
         {
             String id = e.getKey();
+            if (store.isDesignExcluded(id)) continue;
             Design design = store.designs().get(id);
             if (design == null) continue;
             DesignDerived existing = currentDesigns.get(id);
@@ -174,7 +180,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
         // Keep entries that have index data but no reference factors
         for (Map.Entry<String, DesignDerived> e : currentDesigns.entrySet())
         {
-            if (!newDesigns.containsKey(e.getKey()) && !e.getValue().boatIds().isEmpty())
+            if (!newDesigns.containsKey(e.getKey()) && !e.getValue().boatIds().isEmpty()
+                    && !store.isDesignExcluded(e.getKey()))
                 newDesigns.put(e.getKey(), new DesignDerived(e.getValue().design(), null, e.getValue().boatIds()));
         }
         this.designDerived = Map.copyOf(newDesigns);
@@ -234,17 +241,25 @@ public class AnalysisCache implements DataStore.InvalidationListener
 
         for (var boat : store.boats().values())
         {
+            if (store.isBoatExcluded(boat.id())) continue;
+            if (boat.designId() != null && store.isDesignExcluded(boat.designId())) continue;
             if (boat.designId() != null)
                 byDesign.computeIfAbsent(boat.designId(), k -> new LinkedHashSet<>()).add(boat.id());
         }
 
         for (Race race : store.races().values())
         {
+            if (store.isRaceExcluded(race.id())) continue;
+            if (store.isClubExcluded(race.clubId())) continue;
             if (race.divisions() == null) continue;
             for (Division div : race.divisions())
             {
                 for (Finisher f : div.finishers())
                 {
+                    if (store.isBoatExcluded(f.boatId())) continue;
+                    Boat fBoat = store.boats().get(f.boatId());
+                    if (fBoat != null && fBoat.designId() != null
+                            && store.isDesignExcluded(fBoat.designId())) continue;
                     byBoatR.computeIfAbsent(f.boatId(), k -> new LinkedHashSet<>()).add(race.id());
                     if (race.seriesIds() != null)
                         for (String sid : race.seriesIds())
@@ -265,6 +280,8 @@ public class AnalysisCache implements DataStore.InvalidationListener
         {
             Boat boat = store.boats().get(id);
             if (boat == null) continue;
+            if (store.isBoatExcluded(id)) continue;
+            if (boat.designId() != null && store.isDesignExcluded(boat.designId())) continue;
             BoatDerived existing = currentBoats.get(id);
             ReferenceFactors rf = existing != null ? existing.referenceFactors() : null;
             Set<String> raceIds = byBoatR.getOrDefault(id, Set.of());
@@ -284,6 +301,7 @@ public class AnalysisCache implements DataStore.InvalidationListener
         {
             Design design = store.designs().get(id);
             if (design == null) continue;
+            if (store.isDesignExcluded(id)) continue;
             DesignDerived existing = currentDesigns.get(id);
             ReferenceFactors rf = existing != null ? existing.referenceFactors() : null;
             Set<String> boatIds = byDesign.getOrDefault(id, Set.of());
@@ -434,12 +452,20 @@ public class AnalysisCache implements DataStore.InvalidationListener
      */
     private void mergeHpfResults(HpfResult result)
     {
-        // Merge BoatHpf into BoatDerived
+        // Merge BoatHpf into BoatDerived — skip excluded boats/designs
         Map<String, BoatDerived> currentBoats = this.boatDerived;
-        Map<String, BoatDerived> newBoats = new LinkedHashMap<>(currentBoats);
+        Map<String, BoatDerived> newBoats = new LinkedHashMap<>();
+        for (Map.Entry<String, BoatDerived> e : currentBoats.entrySet())
+        {
+            String id = e.getKey();
+            if (store.isBoatExcluded(id)) continue;
+            Boat b = e.getValue().boat();
+            if (b.designId() != null && store.isDesignExcluded(b.designId())) continue;
+            newBoats.put(id, e.getValue());
+        }
         for (Map.Entry<String, BoatHpf> e : result.boatHpfs().entrySet())
         {
-            BoatDerived existing = currentBoats.get(e.getKey());
+            BoatDerived existing = newBoats.get(e.getKey());
             if (existing != null)
                 newBoats.put(e.getKey(), new BoatDerived(existing.boat(), existing.referenceFactors(),
                     existing.raceIds(), existing.seriesIds(), e.getValue()));
