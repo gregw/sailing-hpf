@@ -6,15 +6,15 @@
 importers:
 - name: "orc"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "ams"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
@@ -22,7 +22,7 @@ importers:
   runAtStartup: false
 - name: "topyacht"
   mode: "api"
-  includeInSchedule: false
+  includeInSchedule: true
   runAtStartup: false
 - name: "build-indexes"
   mode: "run"
@@ -41,8 +41,7 @@ importers:
   includeInSchedule: true
   runAtStartup: true
 schedule:
-  days:
-  - "TUESDAY"
+  days: []
   time: "08:08:00"
 targetIrcYear: 2025
 outlierSigma: null
@@ -72,7 +71,7 @@ hpfLambda: 1.0
 hpfOutlierK: 0.5
 hpfAsymmetryFactor: 2.5
 hpfOuterDampingFactor: 0.3
-hpfOuterConvergenceThreshold: 0.27
+hpfOuterConvergenceThreshold: 0.275
 hpfConvergenceThreshold: 1.0E-4
 hpfMaxInnerIterations: 100
 hpfMaxOuterIterations: 50

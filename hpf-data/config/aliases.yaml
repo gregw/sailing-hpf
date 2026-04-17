@@ -323,6 +323,8 @@ boats:
       name: null
     - sailNumber: "443614437"
       name: null
+    - sailNumber: "44361AUS4788"
+      name: "okavangodelta"
   "11744-xsmoment":
     canonicalName: "XS MOMENT"
     aliases:
@@ -503,3 +505,33 @@ boats:
     aliases:
     - sailNumber: "E442"
       name: "toybox"
+  MH4-toybox2:
+    canonicalName: "TOYBOX 2"
+    aliases:
+    - sailNumber: "MH442"
+      name: "toybox2"
+  "1309-katikikatanga":
+    canonicalName: "Katiki Katanga"
+    aliases:
+    - sailNumber: "TBA"
+      name: "katikikatanga"
+  JKA150-nonstop:
+    canonicalName: "Non Stop"
+    aliases:
+    - sailNumber: "KA150"
+      name: "nonstop"
+  "5220-pacatack":
+    canonicalName: "Pacatack"
+    aliases:
+    - sailNumber: "5220"
+      name: "pacatak"
+  JKA125-peajay:
+    canonicalName: "Pea Jay"
+    aliases:
+    - sailNumber: "KA125"
+      name: "peajay"
+  B5584-oneoutofthebox:
+    canonicalName: "One Out of the Box"
+    aliases:
+    - sailNumber: "E5584"
+      name: "oneoutofthebox"

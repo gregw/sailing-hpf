@@ -822,3 +822,6 @@ boatClubOverrides:
 - sailNumber: "K"
   name: "Mooloolaba Team Orange"
   clubId: "mooloolabayachtclub.com.au"
+- sailNumber: "MYC10"
+  name: "Joss"
+  clubId: "myc.org.au"
