@@ -1,0 +1,23 @@
+[Unit]
+Description=Sailing HPF Server
+Documentation=https://github.com/gregw/sailing-hpf
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=sailing-hpf
+Group=sailing-hpf
+WorkingDirectory=/opt/sailing-hpf
+ExecStart=/usr/bin/mvn --batch-mode exec:java -Dhpf-data=/var/lib/sailing-hpf
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sailing-hpf
+
+# Prevent the service from acquiring new privileges
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
