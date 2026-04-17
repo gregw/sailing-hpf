@@ -433,21 +433,28 @@ public class DataStore
         List<Club> allClubs = Stream.concat(
                 clubs.values().stream(),
                 clubSeed.values().stream().filter(c -> !clubs.containsKey(c.id())))
-            .filter(c -> !isClubExcluded(c.id()))
             .toList();
+        List<Club> nonExcluded = allClubs.stream().filter(c -> !isClubExcluded(c.id())).toList();
 
-        // Primary: exact short name match
-        List<Club> matches = allClubs.stream()
+        // Primary: exact short name match — prefer non-excluded, fall back to all if needed
+        List<Club> matches = nonExcluded.stream()
             .filter(c -> shortName.equalsIgnoreCase(c.shortName()))
             .toList();
+        if (matches.isEmpty())
+            matches = allClubs.stream().filter(c -> shortName.equalsIgnoreCase(c.shortName())).toList();
 
         // Fallback: long name or alias match (handles full-name club fields from BWPS etc.)
         if (matches.isEmpty())
         {
-            matches = allClubs.stream()
+            matches = nonExcluded.stream()
                 .filter(c -> shortName.equalsIgnoreCase(c.longName())
                           || c.aliases().stream().anyMatch(shortName::equalsIgnoreCase))
                 .toList();
+            if (matches.isEmpty())
+                matches = allClubs.stream()
+                    .filter(c -> shortName.equalsIgnoreCase(c.longName())
+                              || c.aliases().stream().anyMatch(shortName::equalsIgnoreCase))
+                    .toList();
         }
 
         // Fallback: compound name (e.g. "CYCA/RPEYC") — try each slash-separated token in order
@@ -458,11 +465,17 @@ public class DataStore
                 String t = token.trim();
                 if (t.isBlank())
                     continue;
-                matches = allClubs.stream()
+                matches = nonExcluded.stream()
                     .filter(c -> t.equalsIgnoreCase(c.shortName())
                               || t.equalsIgnoreCase(c.longName())
                               || c.aliases().stream().anyMatch(t::equalsIgnoreCase))
                     .toList();
+                if (matches.isEmpty())
+                    matches = allClubs.stream()
+                        .filter(c -> t.equalsIgnoreCase(c.shortName())
+                                  || t.equalsIgnoreCase(c.longName())
+                                  || c.aliases().stream().anyMatch(t::equalsIgnoreCase))
+                        .toList();
                 if (!matches.isEmpty())
                     break;
             }
@@ -485,6 +498,10 @@ public class DataStore
         }
         if (matches.size() > 1)
         {
+            // If ambiguous across excluded/non-excluded, prefer non-excluded
+            List<Club> preferNonExcluded = matches.stream().filter(c -> !isClubExcluded(c.id())).toList();
+            if (preferNonExcluded.size() == 1)
+                return preferNonExcluded.getFirst();
             LOG.warn("Ambiguous club name={} — {} matches ({}); clubId not set ({})",
                 shortName, matches.size(),
                 matches.stream().map(c -> c.id() + "/" + c.state()).toList(),
