@@ -48,10 +48,10 @@ function weightSpan(value, formattedValue, w) {
 
 const COLUMNS = {
     boats: [
-        { label: 'ID',     key: 'id',     anchor: 'col-boat-id',      tip: 'Unique boat identifier derived from sail number, name and design.' },
+        { label: 'ID',     key: 'id',     anchor: 'col-boat-id',      tip: 'Unique boat identifier derived from sail number, name and design.', cls: 'id-col' },
         { label: 'Sail',   key: 'sailNumber', anchor: 'col-boat-sail', tip: 'Sail number as recorded in source data (SailSys / TopYacht).' },
-        { label: 'Name',   key: 'name',   anchor: 'col-boat-name',     tip: 'Boat name as recorded in source data.' },
-        { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design',
+        { label: 'Name',   key: 'name',   anchor: 'col-boat-name',     tip: 'Boat name as recorded in source data.', cls: 'id-col' },
+        { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design', cls: 'id-col',
           tip: 'Design (class) identifier; click to search for this design in the designs tab.',
           render: item => item.designId || '',
           action: item => {
@@ -86,7 +86,7 @@ const COLUMNS = {
           render: v => v != null
             ? weightSpan(v, v.toFixed(3), v)
             : '<span style="color:#bbb">—</span>' },
-        { label: 'Club',     key: 'clubId', anchor: 'col-boat-club',   tip: 'Home club identifier.' },
+        { label: 'Club',     key: 'clubId', anchor: 'col-boat-club',   tip: 'Home club identifier.', cls: 'id-col' },
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
           tip: 'Number of recorded finishes; click to view this boat\'s races.',
           render: item => item.finishes ? String(item.finishes) : '',
@@ -96,7 +96,7 @@ const COLUMNS = {
           tip: 'Excluded boats are hidden from analysis and charts.' },
     ],
     designs: [
-        { label: 'ID',     key: 'id',           anchor: 'col-design-id',     tip: 'Unique design identifier (normalised class name).' },
+        { label: 'ID',     key: 'id',           anchor: 'col-design-id',     tip: 'Unique design identifier (normalised class name).', cls: 'id-col' },
         { label: 'Name',   key: 'canonicalName', anchor: 'col-design-name',   tip: 'Canonical design name used in all reports.' },
         { label: 'RF',     key: 'spinRef',       anchor: 'col-design-rf',
           tip: 'Design-level Reference Factor aggregated across all boats of this class. Colors: green = high confidence, red = low',
@@ -117,7 +117,7 @@ const COLUMNS = {
           tip: 'Excluded designs are hidden from analysis and charts.' },
     ],
     clubs: [
-        { label: 'ID',        key: 'id',        anchor: 'col-club-id',    tip: 'Club identifier (website domain).' },
+        { label: 'ID',        key: 'id',        anchor: 'col-club-id',    tip: 'Club identifier (website domain).', cls: 'id-col' },
         { label: 'Short',     key: 'shortName', anchor: 'col-club-short', tip: 'Short name used in source data.' },
         { label: 'Name',      key: 'longName',  anchor: 'col-club-name',  tip: 'Full club name.' },
         { label: 'State',     key: 'state',     anchor: 'col-club-state', tip: 'Australian state or territory.' },
@@ -144,7 +144,7 @@ const COLUMNS = {
           tip: 'Club that runs this series; click to show only series from this club.',
           render: item => item.club || item.clubId || '',
           action: item => setFilter('series', 'clubId', item.clubId, 'Series at ' + (item.club || item.clubId)) },
-        { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.' },
+        { label: 'Name',      key: 'name',      anchor: 'col-series-name',    tip: 'Series name.', cls: 'id-col' },
         { label: 'First',     key: 'firstDate', anchor: 'col-series-first',   tip: 'Date of the first race in this series.' },
         { label: 'Last',      key: 'lastDate',  anchor: 'col-series-last',    tip: 'Date of the last race in this series.' },
         { label: 'Races',     type: 'action', sortKey: 'races', anchor: 'col-series-races',
@@ -155,9 +155,9 @@ const COLUMNS = {
           tip: 'Excluded series — all races in this series are excluded from HPF calculations.' },
     ],
     races: [
-        { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.' },
+        { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.', cls: 'id-col' },
         { label: 'Date',      key: 'date',      anchor: 'col-race-date',      tip: 'Race date.' },
-        { label: 'Club',      key: 'clubId',    anchor: 'col-race-club',      tip: 'Club that ran this race.' },
+        { label: 'Club',      key: 'clubId',    anchor: 'col-race-club',      tip: 'Club that ran this race.', cls: 'id-col' },
         { label: 'Series',    type: 'action', sortKey: 'seriesName', anchor: 'col-race-series',
           tip: 'Series this race belongs to; click to show the races of this series.',
           render: item => item.seriesName || '',
@@ -385,6 +385,7 @@ function renderTable(entity, items, append) {
         };
         cols.forEach(col => {
             const td = document.createElement('td');
+            if (col.cls) td.className = col.cls;
             if (col.type === 'toggle') {
                 td.style.textAlign = 'center';
                 const ecb = document.createElement('input');
