@@ -37,19 +37,12 @@
         <option value="twoHanded">Two-handed</option>
       </select></label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-boats" onchange="doSearch('boats')"> Exclude nulls</label>
-      <label style="margin-left:auto;">Rows: <select id="page-size-boats" onchange="setPageSize(this.value)">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select></label>
     </div>
-    <div class="pagination" id="pager-top-boats"></div>
-    <table>
+    <div class="table-scroll" style="max-height:calc(75vh - 300px);overflow-y:auto;"><table>
       <thead><tr id="thead-boats"></tr></thead>
       <tbody id="tbody-boats"></tbody>
-    </table>
-    <div class="pagination" id="pager-boats"></div>
+    </table></div>
+    <div class="scroll-status" id="scroll-status-boats"></div>
 
     <div id="merge-bar-boats" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-boats"></span>
@@ -117,19 +110,12 @@
       <button onclick="doSearch('designs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-designs" onchange="doSearch('designs')"> Exclude nulls</label>
-      <label style="margin-left:auto;">Rows: <select id="page-size-designs" onchange="setPageSize(this.value)">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select></label>
     </div>
-    <div class="pagination" id="pager-top-designs"></div>
-    <table>
+    <div class="table-scroll" style="max-height:calc(75vh - 300px);overflow-y:auto;"><table>
       <thead><tr id="thead-designs"></tr></thead>
       <tbody id="tbody-designs"></tbody>
-    </table>
-    <div class="pagination" id="pager-designs"></div>
+    </table></div>
+    <div class="scroll-status" id="scroll-status-designs"></div>
 
     <div id="merge-bar-designs" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-designs"></span>
@@ -166,19 +152,12 @@
       <button onclick="doSearch('clubs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-clubs" onchange="doSearch('clubs')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-clubs" onchange="doSearch('clubs')"> Exclude nulls</label>
-      <label style="margin-left:auto;">Rows: <select id="page-size-clubs" onchange="setPageSize(this.value)">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select></label>
     </div>
-    <div class="pagination" id="pager-top-clubs"></div>
-    <table>
+    <div class="table-scroll" style="max-height:calc(75vh - 300px);overflow-y:auto;"><table>
       <thead><tr id="thead-clubs"></tr></thead>
       <tbody id="tbody-clubs"></tbody>
-    </table>
-    <div class="pagination" id="pager-clubs"></div>
+    </table></div>
+    <div class="scroll-status" id="scroll-status-clubs"></div>
     <div class="detail-panel" id="detail-clubs"><div id="pre-clubs" class="json-tree"></div></div>
   </div>
 
@@ -190,19 +169,12 @@
       <button onclick="doSearch('races')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-races" onchange="doSearch('races')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-races" onchange="doSearch('races')"> Exclude empty</label>
-      <label style="margin-left:auto;">Rows: <select id="page-size-races" onchange="setPageSize(this.value)">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select></label>
     </div>
-    <div class="pagination" id="pager-top-races"></div>
-    <table>
+    <div class="table-scroll" style="max-height:calc(75vh - 300px);overflow-y:auto;"><table>
       <thead><tr id="thead-races"></tr></thead>
       <tbody id="tbody-races"></tbody>
-    </table>
-    <div class="pagination" id="pager-races"></div>
+    </table></div>
+    <div class="scroll-status" id="scroll-status-races"></div>
 
     <div id="division-section-races" style="display:none; margin-top:1rem;">
       <div id="race-series-race-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
@@ -235,19 +207,12 @@
       <button onclick="doSearch('series')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-series" onchange="doSearch('series')"> Show excluded</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-empty-series" checked onchange="doSearch('series')"> Exclude empty</label>
-      <label style="margin-left:auto;">Rows: <select id="page-size-series" onchange="setPageSize(this.value)">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select></label>
     </div>
-    <div class="pagination" id="pager-top-series"></div>
-    <table>
+    <div class="table-scroll" style="max-height:calc(75vh - 300px);overflow-y:auto;"><table>
       <thead><tr id="thead-series"></tr></thead>
       <tbody id="tbody-series"></tbody>
-    </table>
-    <div class="pagination" id="pager-series"></div>
+    </table></div>
+    <div class="scroll-status" id="scroll-status-series"></div>
     <div id="series-chart-section" style="display:none; margin-top:1rem;">
       <div id="series-chart-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">

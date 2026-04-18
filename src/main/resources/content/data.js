@@ -179,14 +179,17 @@ function setBoatVariant(v) {
     const hpfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-hpf');
     if (rfCol)  rfCol.sortKey  = v === 'nonSpin' ? 'nonSpinRef'   : v === 'twoHanded' ? 'twoHandedRef' : 'spinRef';
     if (hpfCol) hpfCol.sortKey = v === 'nonSpin' ? 'hpfNonSpin'   : v === 'twoHanded' ? 'hpfTwoHanded' : 'hpf';
-    loadList('boats', state.pages.boats);
+    loadList('boats', 0);
 }
 
 const state = {
     pages:    { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
     sort:     { boats: 'id', designs: 'id', clubs: 'shortName', races: 'date', series: 'firstDate' },
     dir:      { boats: 'asc', designs: 'asc', clubs: 'asc', races: 'desc', series: 'desc' },
-    pageSize: 25,
+    pageSize: 50,
+    hasMore:  { boats: false, designs: false, clubs: false, races: false, series: false },
+    loading:  { boats: false, designs: false, clubs: false, races: false, series: false },
+    totals:   { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
     searchTimers: {},
     searches: { boats: '', designs: '', clubs: '', races: '', series: '' },  // persistent per-tab search terms
     activeTab: 'boats',
@@ -283,16 +286,9 @@ function clearSearch(entity) {
     doSearch(entity);
 }
 
-function setPageSize(size) {
-    state.pageSize = parseInt(size);
-    ['clubs', 'boats', 'designs', 'series', 'races'].forEach(e => {
-        const el = document.getElementById('page-size-' + e);
-        if (el) el.value = state.pageSize;
-    });
-    loadList(state.activeTab, 0);
-}
-
 async function loadList(entity, page) {
+    if (state.loading[entity]) return;
+    state.loading[entity] = true;
     state.pages[entity] = page;
     const q    = document.getElementById('q-' + entity).value;
     const sort = state.sort[entity];
@@ -310,11 +306,15 @@ async function loadList(entity, page) {
     const excludeEmptyEl = document.getElementById('exclude-empty-' + entity);
     if (!f && excludeEmptyEl && excludeEmptyEl.checked) url += '&excludeEmpty=true';
     const data = await fetchJson(url);
+    state.loading[entity] = false;
     if (!data) return;
 
-    renderHeaders(entity);
-    renderTable(entity, data.items);
-    renderPager(entity, data);
+    const append = page > 0;
+    if (!append) renderHeaders(entity);
+    renderTable(entity, data.items, append);
+    state.totals[entity] = data.total;
+    state.hasMore[entity] = (page + 1) * data.size < data.total;
+    renderScrollStatus(entity);
 }
 
 function renderHeaders(entity) {
@@ -347,15 +347,23 @@ function sortBy(entity, key) {
     loadList(entity, 0);
 }
 
-function renderTable(entity, items) {
+function renderTable(entity, items, append) {
     const tbody = document.getElementById('tbody-' + entity);
-    tbody.innerHTML = '';
+    if (!append) tbody.innerHTML = '';
     const cols = COLUMNS[entity];
 
-    if (entity === 'races') state.raceItems = items;
-    if (entity === 'boats') state.boatItems = items;
+    if (entity === 'races') {
+        if (append) state.raceItems = state.raceItems.concat(items);
+        else state.raceItems = items;
+    }
+    if (entity === 'boats') {
+        if (append) state.boatItems = state.boatItems.concat(items);
+        else state.boatItems = items;
+    }
 
+    const baseIdx = append ? tbody.children.length : 0;
     items.forEach((item, itemIdx) => {
+        const globalIdx = baseIdx + itemIdx;
         const tr = document.createElement('tr');
         if (item.excluded) tr.classList.add('excluded');
         if (entity === 'boats' || entity === 'designs') {
@@ -371,8 +379,8 @@ function renderTable(entity, items) {
             tr.appendChild(tdCb);
         }
         tr.onclick = () => {
-            if (entity === 'races') state.currentRaceIdx = itemIdx;
-            if (entity === 'boats') { state.currentBoatIdx = itemIdx; }
+            if (entity === 'races') state.currentRaceIdx = globalIdx;
+            if (entity === 'boats') { state.currentBoatIdx = globalIdx; }
             loadDetail(entity, item.id);
         };
         cols.forEach(col => {
@@ -412,20 +420,31 @@ function renderTable(entity, items) {
     });
 }
 
-function renderPager(entity, data) {
-    const page = data.page;
-    const totalPages = Math.ceil(data.total / data.size) || 1;
-    let html = '';
-    if (page > 0)
-        html += `<button onclick="loadList('${entity}', ${page - 1})">← Prev</button>`;
-    html += `<span>Page ${page + 1} of ${totalPages} (${data.total.toLocaleString()} total)</span>`;
-    if ((page + 1) * data.size < data.total)
-        html += `<button onclick="loadList('${entity}', ${page + 1})">Next →</button>`;
-
-    document.getElementById('pager-' + entity).innerHTML = html;
-    const topEl = document.getElementById('pager-top-' + entity);
-    if (topEl) topEl.innerHTML = html;
+function renderScrollStatus(entity) {
+    const loaded = document.getElementById('tbody-' + entity).children.length;
+    const total  = state.totals[entity];
+    const html   = `<span>${loaded.toLocaleString()} of ${total.toLocaleString()}</span>`;
+    const el = document.getElementById('scroll-status-' + entity);
+    if (el) el.innerHTML = html;
 }
+
+function loadNextPage(entity) {
+    if (!state.hasMore[entity] || state.loading[entity]) return;
+    loadList(entity, state.pages[entity] + 1);
+}
+
+// Attach infinite-scroll listeners to all table-scroll containers
+document.addEventListener('DOMContentLoaded', () => {
+    ['clubs', 'boats', 'designs', 'series', 'races'].forEach(entity => {
+        const container = document.querySelector('#panel-' + entity + ' .table-scroll');
+        if (!container) return;
+        container.addEventListener('scroll', () => {
+            if (container.scrollTop + container.clientHeight >= container.scrollHeight - 40) {
+                loadNextPage(entity);
+            }
+        });
+    });
+});
 
 async function loadDetail(entity, id) {
     if (entity === 'series') {
@@ -732,7 +751,7 @@ function hideMergePanel(entity) {
 }
 
 document.addEventListener('hpf:authready', () => {
-    loadList(state.activeTab, state.pages[state.activeTab]);
+    loadList(state.activeTab, 0);
     applyMergeAuthState();
 });
 
@@ -946,7 +965,7 @@ async function saveBoatEdit() {
     if (result.updatedRaces > 0) msg += ' Updated ' + result.updatedRaces + ' race(s).';
     statusEl.textContent = msg;
     hideEditPanel();
-    loadList('boats', state.pages.boats);
+    loadList('boats', 0);
     if (result.newBoatId) loadDetail('boats', result.newBoatId);
 }
 
