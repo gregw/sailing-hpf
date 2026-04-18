@@ -30,7 +30,7 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 
 echo "==> Creating data directory $DATA_DIR…"
 mkdir -p "$DATA_DIR"
-chown "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
+chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
 
 echo "==> Pre-building the project…"
 sudo -u "$SERVICE_USER" mvn --batch-mode -f "$INSTALL_DIR/pom.xml" compile -q

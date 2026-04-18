@@ -337,11 +337,14 @@ function renderChart(data) {
 
         const entries = filteredPerBoat.get(boat.id);
         if (entries.length > 0) {
-            const xs = [], ys = [], sizes = [], texts = [], custom = [];
+            const xs = [], ys = [], sizes = [], opacities = [], symbols = [], texts = [], custom = [];
             entries.forEach(e => {
+                const w = Math.min(Math.max(e.weight, 0), 1);
                 xs.push(e.date);
                 ys.push(e.backCalcFactor);
-                sizes.push(5 + 5 * Math.min(e.weight, 1));
+                sizes.push(4 + 6 * w);
+                opacities.push(parseFloat((0.35 + 0.65 * w).toFixed(2)));
+                symbols.push(e.weight < 0.01 ? 'x' : 'circle');
                 texts.push(
                     `${esc(name)}<br>` +
                     (e.seriesName ? `${esc(e.seriesName)}<br>` : '') +
@@ -359,7 +362,7 @@ function renderChart(data) {
                 x: xs, y: ys,
                 type: 'scatter', mode: 'markers',
                 name,
-                marker: { color, size: sizes, symbol: 'circle',
+                marker: { color, size: sizes, opacity: opacities, symbol: symbols,
                     line: { color: 'rgba(0,0,0,0.3)', width: 0.5 } },
                 text: texts,
                 customdata: custom,
@@ -535,6 +538,14 @@ function fitColor(deviation) {
     return `hsl(${h}, 60%, 38%)`;
 }
 
+function fitLabel(deviation) {
+    const pct = (deviation * 100).toFixed(1);
+    if (deviation < 0.01) return `Entered value — deviation ${pct}% from consensus (excellent fit)`;
+    if (deviation < 0.025) return `Entered value — deviation ${pct}% from consensus (good fit)`;
+    if (deviation < 0.05) return `Entered value — deviation ${pct}% from consensus (moderate fit)`;
+    return `Entered value — deviation ${pct}% from consensus (poor fit)`;
+}
+
 // Confidence color: blue (low variance) → brown (high variance)
 function confidenceColor(cv) {
     const t = Math.min(cv / 0.05, 1);
@@ -543,11 +554,20 @@ function confidenceColor(cv) {
     return `hsl(${h}, 55%, ${l}%)`;
 }
 
+function confidenceLabel(cv) {
+    const pct = (cv * 100).toFixed(1);
+    if (cv < 0.01) return `Scaled from consensus — spread ${pct}% (high confidence)`;
+    if (cv < 0.025) return `Scaled from consensus — spread ${pct}% (moderate confidence)`;
+    if (cv < 0.05) return `Scaled from consensus — spread ${pct}% (low confidence)`;
+    return `Scaled from consensus — spread ${pct}% (very low confidence)`;
+}
+
 function restoreAll() {
     document.querySelectorAll('.hpf-calc-value').forEach(td => {
         const origStr = td.dataset.origValue;
         td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
         td.style.color = '';
+        td.title = '';
     });
 }
 
@@ -563,11 +583,13 @@ function scaleSingle(anchor, calcBoats) {
         if (srcFactor == null) {
             td.textContent = origVal.toFixed(4);
             td.style.color = '';
+            td.title = '';
             return;
         }
 
         td.textContent = (origVal * (anchor.value / srcFactor)).toFixed(4);
         td.style.color = '#c05000';
+        td.title = 'Scaled from single entered value — no consensus spread available';
     });
 }
 
@@ -613,6 +635,7 @@ function scaleMulti(anchors, calcBoats) {
         if (!stats) {
             td.textContent = origVal.toFixed(4);
             td.style.color = '';
+            td.title = '';
             return;
         }
 
@@ -620,6 +643,7 @@ function scaleMulti(anchors, calcBoats) {
         if (stats.ratios.length === 1) {
             td.textContent = (origVal * stats.R).toFixed(4);
             td.style.color = '#c05000';
+            td.title = 'Scaled from single entered value — no consensus spread available';
             return;
         }
 
@@ -633,14 +657,17 @@ function scaleMulti(anchors, calcBoats) {
             if (r != null) {
                 const deviation = Math.abs(r - stats.R) / stats.R;
                 td.style.color = fitColor(deviation);
+                td.title = fitLabel(deviation);
             } else {
                 td.style.color = '';
+                td.title = '';
             }
         } else {
             // Unentered boat: consensus-scaled value
             td.textContent = (origVal * stats.R).toFixed(4);
             // Color: confidence based on coefficient of variation
             td.style.color = confidenceColor(stats.cv);
+            td.title = confidenceLabel(stats.cv);
         }
     });
 }

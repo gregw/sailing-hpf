@@ -31,6 +31,11 @@
       <button onclick="doSearch('boats')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="filter-dupe-sails" onchange="doSearch('boats')"> Duplicate sail numbers</label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-boats" onchange="doSearch('boats')"> Show excluded</label>
+      <label style="margin-left:0.5rem;">Variant: <select id="boat-variant" onchange="setBoatVariant(this.value)">
+        <option value="spin">Spin</option>
+        <option value="nonSpin">Non-spin</option>
+        <option value="twoHanded">Two-handed</option>
+      </select></label>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="exclude-nulls-boats" onchange="doSearch('boats')"> Exclude nulls</label>
       <label style="margin-left:auto;">Rows: <select id="page-size-boats" onchange="setPageSize(this.value)">
         <option value="10">10</option>

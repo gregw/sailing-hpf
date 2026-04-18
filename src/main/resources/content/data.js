@@ -24,14 +24,26 @@ function renderJsonTree(val, depth) {
 function weightColor(w) {
     const cw = Math.min(w ?? 0, 1);
     if (cw >= 0.5) {
-        // Neutral dark gray at 0.5 → dark green at 1.0
+        // Medium gray at 0.5 → bright green at 1.0
         const t = (cw - 0.5) * 2;
-        return `rgb(${Math.round(80*(1-t))},${Math.round(80+40*t)},${Math.round(80*(1-t))})`;
+        return `rgb(${Math.round(120*(1-t))},${Math.round(120+40*t)},${Math.round(120*(1-t))})`;
     } else {
-        // Dark red at 0 → neutral dark gray at 0.5
+        // Bright red at 0 → medium gray at 0.5
         const t = cw * 2;
-        return `rgb(${Math.round(180-100*t)},${Math.round(80*t)},${Math.round(80*t)})`;
+        return `rgb(${Math.round(220-100*t)},${Math.round(30+90*t)},${Math.round(30+90*t)})`;
     }
+}
+
+function weightLabel(w) {
+    if (w == null) return 'No data';
+    if (w >= 0.85) return `Weight: ${w.toFixed(2)} — high confidence`;
+    if (w >= 0.6)  return `Weight: ${w.toFixed(2)} — moderate confidence`;
+    if (w >= 0.35) return `Weight: ${w.toFixed(2)} — low confidence`;
+    return `Weight: ${w.toFixed(2)} — very low confidence`;
+}
+
+function weightSpan(value, formattedValue, w) {
+    return `<span style="color:${weightColor(w)}" title="${weightLabel(w)}">${formattedValue}</span>`;
 }
 
 const COLUMNS = {
@@ -51,20 +63,28 @@ const COLUMNS = {
               switchTab('designs');
               loadList('designs', 0);
           } },
-        { label: 'RF',     key: 'spinRef', anchor: 'col-boat-rf',
-          tip: 'Reference Factor — IRC-equivalent handicap derived from certificates "standard candles" or median performance against boats with an RF. Colour: green = high confidence, red = low.',
-          render: v => v && v.value != null
-            ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
-            : '<span style="color:#bbb">—</span>' },
-        { label: 'HPF',    key: 'hpf',    anchor: 'col-boat-hpf',
-          tip: 'Historical Performance Factor — back-calculated time correction factor optimized over this boat\'s racing history. Colour: green = high confidence, red = low.',
-          render: v => v && v.value != null
-            ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
-            : '<span style="color:#bbb">—</span>' },
+        { label: 'RF',  anchor: 'col-boat-rf', sortKey: 'spinRef',
+          tip: 'Reference Factor for the selected variant — IRC-equivalent handicap derived from certificates or median performance. Colour: green = high confidence, red = low.',
+          render: item => {
+              const v = boatVariant === 'nonSpin' ? item.nonSpinRef
+                      : boatVariant === 'twoHanded' ? item.twoHandedRef : item.spinRef;
+              return v && v.value != null
+                  ? weightSpan(v.value, v.value.toFixed(4), v.weight)
+                  : '<span style="color:#bbb">—</span>';
+          } },
+        { label: 'HPF', anchor: 'col-boat-hpf', sortKey: 'hpf',
+          tip: 'Historical Performance Factor for the selected variant — back-calculated time correction factor optimized over this boat\'s racing history. Colour: green = high confidence, red = low.',
+          render: item => {
+              const v = boatVariant === 'nonSpin' ? item.hpfNonSpin
+                      : boatVariant === 'twoHanded' ? item.hpfTwoHanded : item.hpf;
+              return v && v.value != null
+                  ? weightSpan(v.value, v.value.toFixed(4), v.weight)
+                  : '<span style="color:#bbb">—</span>';
+          } },
         { label: 'Overall', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
           tip: 'Performance profile overall score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, NonChaotic and Stability spokes (last 12 months).',
           render: v => v != null
-            ? `<span style="color:${weightColor(v)}">${v.toFixed(3)}</span>`
+            ? weightSpan(v, v.toFixed(3), v)
             : '<span style="color:#bbb">—</span>' },
         { label: 'Club',     key: 'clubId', anchor: 'col-boat-club',   tip: 'Home club identifier.' },
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
@@ -81,12 +101,12 @@ const COLUMNS = {
         { label: 'RF',     key: 'spinRef',       anchor: 'col-design-rf',
           tip: 'Design-level Reference Factor aggregated across all boats of this class. Colors: green = high confidence, red = low',
           render: v => v && v.value != null
-            ? `<span style="color:${weightColor(v.weight)}">${v.value.toFixed(4)}</span>`
+            ? weightSpan(v.value, v.value.toFixed(4), v.weight)
             : '<span style="color:#bbb">—</span>' },
         { label: 'RF Weight', key: 'spinRef', anchor: 'col-design-rf-weight',
           tip: 'Statistical weight of the design-level RF: higher means more race data and tighter confidence.',
           render: v => v && v.weight != null
-            ? `<span style="color:${weightColor(v.weight)}">${v.weight.toFixed(1)}</span>`
+            ? weightSpan(v.weight, v.weight.toFixed(1), v.weight)
             : '<span style="color:#bbb">—</span>' },
         { label: 'Boats',  type: 'action', sortKey: 'boats', anchor: 'col-design-boats',
           tip: 'Number of boats of this design; click to show these boats in the boats table.',
@@ -150,6 +170,17 @@ const COLUMNS = {
           tip: 'Excluded races are not used in HPF calculations.' },
     ],
 };
+
+let boatVariant = 'spin';
+
+function setBoatVariant(v) {
+    boatVariant = v;
+    const rfCol  = COLUMNS.boats.find(c => c.anchor === 'col-boat-rf');
+    const hpfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-hpf');
+    if (rfCol)  rfCol.sortKey  = v === 'nonSpin' ? 'nonSpinRef'   : v === 'twoHanded' ? 'twoHandedRef' : 'spinRef';
+    if (hpfCol) hpfCol.sortKey = v === 'nonSpin' ? 'hpfNonSpin'   : v === 'twoHanded' ? 'hpfTwoHanded' : 'hpf';
+    loadList('boats', state.pages.boats);
+}
 
 const state = {
     pages:    { boats: 0, designs: 0, clubs: 0, races: 0, series: 0 },
@@ -372,7 +403,7 @@ function renderTable(entity, items) {
                     td.textContent = text || '';
                 }
             } else {
-                const v = item[col.key];
+                const v = col.key != null ? item[col.key] : item;
                 td.innerHTML = col.render ? col.render(v) : esc(v != null ? String(v) : '');
             }
             tr.appendChild(td);
@@ -557,10 +588,11 @@ function renderResidualChart(residuals) {
             name: name,
             marker: {
                 color: entries.map(e => {
-                    const a = Math.max(0.6, Math.min(1.0, e.weight));
-                    return baseColor.replace('1)', a + ')');
+                    const a = (Math.max(0.45, Math.min(1.0, e.weight))).toFixed(2);
+                    return baseColor.replace(/[\d.]+\)$/, a + ')');
                 }),
-                size: 8
+                size: entries.map(e => 5 + 4 * Math.min(Math.max(e.weight, 0), 1)),
+                symbol: entries.map(e => e.weight < 0.01 ? 'x' : 'circle')
             },
             text: entries.map(e => {
                 const parts = [];

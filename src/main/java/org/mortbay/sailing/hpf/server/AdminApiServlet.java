@@ -359,11 +359,23 @@ public class AdminApiServlet extends HttpServlet
                     case "name"       -> Comparator.comparing(Boat::name,       Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                     case "designId"   -> Comparator.comparing(Boat::designId,   Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
                     case "clubId"     -> Comparator.comparing(Boat::clubId,     Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
-                    case "spinRef"    -> Comparator.comparing(
+                    case "spinRef"      -> Comparator.comparing(
                                             (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.referenceFactors() != null && bd2.referenceFactors().spin() != null) ? bd2.referenceFactors().spin().value() : 0.0; },
                                             Comparator.<Double>naturalOrder());
-                    case "hpf"        -> Comparator.comparing(
+                    case "nonSpinRef"   -> Comparator.comparing(
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.referenceFactors() != null && bd2.referenceFactors().nonSpin() != null) ? bd2.referenceFactors().nonSpin().value() : 0.0; },
+                                            Comparator.<Double>naturalOrder());
+                    case "twoHandedRef" -> Comparator.comparing(
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.referenceFactors() != null && bd2.referenceFactors().twoHanded() != null) ? bd2.referenceFactors().twoHanded().value() : 0.0; },
+                                            Comparator.<Double>naturalOrder());
+                    case "hpf"          -> Comparator.comparing(
                                             (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.hpf() != null && bd2.hpf().spin() != null) ? bd2.hpf().spin().value() : 0.0; },
+                                            Comparator.<Double>naturalOrder());
+                    case "hpfNonSpin"   -> Comparator.comparing(
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.hpf() != null && bd2.hpf().nonSpin() != null) ? bd2.hpf().nonSpin().value() : 0.0; },
+                                            Comparator.<Double>naturalOrder());
+                    case "hpfTwoHanded" -> Comparator.comparing(
+                                            (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return (bd2 != null && bd2.hpf() != null && bd2.hpf().twoHanded() != null) ? bd2.hpf().twoHanded().value() : 0.0; },
                                             Comparator.<Double>naturalOrder());
                     case "finishes"   -> Comparator.comparingInt(
                                             (Boat b2) -> { BoatDerived bd2 = cache.boatDerived().get(b2.id()); return bd2 != null ? bd2.raceIds().size() : 0; });
@@ -385,11 +397,14 @@ public class AdminApiServlet extends HttpServlet
                 row.put("designId",   b.designId());
                 row.put("clubId",     b.clubId());
                 BoatDerived bd = cache.boatDerived().get(b.id());
-                Factor spin = (bd != null && bd.referenceFactors() != null) ? bd.referenceFactors().spin() : null;
-                row.put("spinRef",    spin != null ? factorMap(spin) : null);
+                ReferenceFactors rf = (bd != null) ? bd.referenceFactors() : null;
+                row.put("spinRef",      rf != null && rf.spin()      != null ? factorMap(rf.spin())      : null);
+                row.put("nonSpinRef",   rf != null && rf.nonSpin()   != null ? factorMap(rf.nonSpin())   : null);
+                row.put("twoHandedRef", rf != null && rf.twoHanded() != null ? factorMap(rf.twoHanded()) : null);
                 BoatHpf hpf = (bd != null) ? bd.hpf() : null;
-                Factor hpfSpin = (hpf != null) ? hpf.spin() : null;
-                row.put("hpf",       hpfSpin != null ? factorMap(hpfSpin) : null);
+                row.put("hpf",          hpf != null && hpf.spin()      != null ? factorMap(hpf.spin())      : null);
+                row.put("hpfNonSpin",   hpf != null && hpf.nonSpin()   != null ? factorMap(hpf.nonSpin())   : null);
+                row.put("hpfTwoHanded", hpf != null && hpf.twoHanded() != null ? factorMap(hpf.twoHanded()) : null);
                 row.put("finishes", bd != null ? bd.raceIds().size() : 0);
                 PerformanceProfile prof = cache.profilesByBoatId().get(b.id());
                 row.put("profile", prof != null ? prof.overallScore() : null);
