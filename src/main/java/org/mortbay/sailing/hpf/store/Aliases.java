@@ -389,12 +389,16 @@ public class Aliases
     }
 
     /**
-     * Reads aliases.yaml, merges in entries from a merge operation (skipping existing entries),
-     * and writes the file back.  Pre-existing comments in the file are not preserved.
+     * Reads aliases.yaml, merges in entries from a merge or rename operation (skipping
+     * duplicates), and writes the file back. Pre-existing comments in the file are not
+     * preserved.
      * <p>
-     * Uses the new name-design key scheme: entries are keyed by normName[-designId].
-     * Alternate sail numbers (merged-away boat's sail number when different from canonical) are
-     * stored as alias entries with a {@code sailNumber} field.
+     * Entries are keyed by {@code normSail-normName}. Each new alias also acts as a
+     * pointer: if the YAML still has an entry keyed by {@code <alias.sailNumber>-<alias.name>}
+     * (an "orphan" left over from a previous identity), its aliases are absorbed into the
+     * keep entry and the orphan key is deleted. Without this, an importer seeing one of the
+     * orphan's aliases would keep resolving back to the merged-away identity and re-create
+     * the boat after every import.
      */
     public static void addAliases(Path configDir, String normSailNo, String canonicalName, List<SailNumberName> aliases)
     {
@@ -422,12 +426,46 @@ public class Aliases
         BoatEntry entry = yaml.boats.get(key);
         List<SailNumberName> existing = entry != null && entry.aliases() != null
             ? new ArrayList<>(entry.aliases()) : new ArrayList<>();
+
+        int absorbed = 0;
         for (SailNumberName snn : aliases)
         {
             boolean duplicate = existing.stream().anyMatch(e ->
                 Objects.equals(e.sailNumber(), snn.sailNumber()) && Objects.equals(e.name(), snn.name()));
             if (!duplicate)
                 existing.add(snn);
+
+            // Absorb and remove any orphan entry keyed by this alias's (sail, name).
+            // Skip if it would refer to the keep key itself (defensive — shouldn't normally happen).
+            String orphanKey = snn.sailNumber() + "-" + snn.name();
+            if (orphanKey.equalsIgnoreCase(key))
+                continue;
+            String orphanCanonicalSail = snn.sailNumber();    // sail prefix of the orphan key
+            BoatEntry orphan = removeKeyIgnoreCase(yaml.boats, orphanKey);
+            if (orphan != null && orphan.aliases() != null)
+            {
+                String keepNormName = IdGenerator.normaliseName(canonicalName);
+                for (SailNumberName orphanAlias : orphan.aliases())
+                {
+                    if (orphanAlias.name() == null || orphanAlias.name().isBlank()) continue;
+                    // A null/blank sailNumber under the orphan key implicitly meant
+                    // "the orphan's canonical sail" — preserve that semantic when moving the
+                    // alias under a new keep key, otherwise the rebind would silently change.
+                    String aliasSail = (orphanAlias.sailNumber() == null || orphanAlias.sailNumber().isBlank())
+                        ? orphanCanonicalSail : orphanAlias.sailNumber();
+                    String aliasName = orphanAlias.name();
+                    // Skip the alias that points back to the keep entry itself
+                    if (aliasSail.equalsIgnoreCase(normSailNo) && aliasName.equalsIgnoreCase(keepNormName))
+                        continue;
+                    boolean dup = existing.stream().anyMatch(e ->
+                        Objects.equals(e.sailNumber(), aliasSail) && Objects.equals(e.name(), aliasName));
+                    if (!dup)
+                    {
+                        existing.add(new SailNumberName(aliasSail, aliasName));
+                        absorbed++;
+                    }
+                }
+            }
         }
         yaml.boats.put(key, new BoatEntry(
             entry != null ? entry.canonicalName() : canonicalName,
@@ -437,12 +475,30 @@ public class Aliases
         {
             Files.createDirectories(file.getParent());
             YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), yaml);
-            LOG.info("Updated {} with {} merge alias spec(s)", file, aliases.size());
+            LOG.info("Updated {} with {} merge alias spec(s){}", file, aliases.size(),
+                absorbed > 0 ? " (+ " + absorbed + " absorbed from orphan entries)" : "");
         }
         catch (Exception e)
         {
             LOG.error("Failed to write {}: {}", file, e.getMessage());
         }
+    }
+
+    /**
+     * Removes a key from the boats map ignoring case, returning the removed value or null.
+     * The YAML loader stores keys as-written, so a case-insensitive lookup is needed to
+     * match orphan entries written by an earlier import or merge.
+     */
+    private static BoatEntry removeKeyIgnoreCase(Map<String, BoatEntry> boats, String key)
+    {
+        BoatEntry direct = boats.remove(key);
+        if (direct != null) return direct;
+        for (String k : new ArrayList<>(boats.keySet()))
+        {
+            if (k.equalsIgnoreCase(key))
+                return boats.remove(k);
+        }
+        return null;
     }
 
 }

@@ -9,10 +9,10 @@ package org.mortbay.sailing.hpf.analysis;
  * Computed by {@link PerformanceProfileBuilder#buildAll} after each HPF run.
  */
 public record PerformanceProfile(
-    double frequency,     // percentile rank by race count last 12m
-    double diversity,     // percentile rank by distinct opponents last 12m
-    double consistency,   // percentile rank by sum-of-squared residuals last 12m (lower = better)
+    double frequency,     // percentile rank by duration-weighted race count × small year-spread bonus
+    double diversity,     // percentile rank by variant-weighted Σ√(encounters) per (opponent, variant)
+    double consistency,   // percentile rank by mean asymmetric r² (negative residuals weighted more); lower = better
     double stability,     // percentile rank by asymmetric slope penalty (level=best, declining=worst)
-    double nonChaotic,    // percentile rank by correlation of |residual| with race dispersion
+    double nonChaotic,    // percentile rank by mean r² weighted by 1/dispersion; lower = better
     double overallScore   // normalised polygon area [0,1]
 ) {}

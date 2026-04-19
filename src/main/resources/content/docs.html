@@ -510,22 +510,29 @@
         </tr>
         <tr>
             <td><strong>Frequency</strong></td>
-            <td>How much time the boat spends racing</td>
-            <td>Percentile rank of a duration-weighted race count in the last 12 months.
-                Each distinct race contributes <em>(race duration / fleet-median duration)<sup>α</sup></em>
-                to the score, where α ≈ 0.26 (a race twice as long counts 1.2× more).
-                A boat racing frequently, or in longer events, scores higher than one with
-                only token participation. Minimum 3 distinct races required to appear
-                in the fleet ranking at all.</td>
+            <td>How much time the boat spends racing, and how broadly across the year</td>
+            <td>Percentile rank of a duration-weighted race count multiplied by a small
+                year-spread bonus. Each distinct race contributes
+                <em>(race duration / fleet-median duration)<sup>α</sup></em>, where α ≈ 0.26
+                (a race twice as long counts 1.2× more). The total is then multiplied by
+                <em>0.85 + 0.15 × min(months_active, 12) / 12</em>, so a boat racing in 1 month
+                gets ≈ 0.86 and a boat racing every month gets 1.0. The bonus is deliberately
+                small so duration-weighted race count remains the dominant contribution.
+                Minimum 3 distinct races required to appear in the fleet ranking at all.</td>
         </tr>
         <tr>
             <td><strong>Consistency</strong></td>
-            <td>How tightly the residuals cluster around zero</td>
-            <td>Percentile rank of the unweighted mean squared residual across recent race
-                entries (lower = better). Every race counts equally regardless of outlier status,
-                so a boat with large residuals is correctly penalised even if those races were
-                down-weighted in the HPF optimiser. A boat with small, stable residuals scores
-                well; wide scatter scores poorly.
+            <td>How tightly the residuals cluster around zero (with extra weight on fast surprises)</td>
+            <td>Percentile rank of the asymmetrically weighted mean squared residual across
+                recent race entries (lower = better). Every race counts equally regardless of
+                outlier status, so a boat with large residuals is correctly penalised even if
+                those races were down-weighted in the HPF optimiser.
+                <br><br>
+                <em>Asymmetric weighting:</em> negative residuals (boat <em>faster</em> than
+                its HPF predicted) are weighted 1.5× more than positive residuals (slower) of
+                the same magnitude. A fast surprise suggests untapped potential and a genuinely
+                inconsistent boat, whereas slow days are more often explained by gear, tactics
+                or a single bad start.
                 <br><br>
                 <em>Discards:</em> similar to series scoring, a configurable number of
                 most-divergent results are excluded before computing the mean. One additional
@@ -535,24 +542,27 @@
         </tr>
         <tr>
             <td><strong>Diversity</strong></td>
-            <td>How broadly the boat races, weighted by variant</td>
-            <td>Percentile rank of a variant-weighted opponent exposure score. For each
-                distinct (opponent, variant) pair encountered in recent races, the variant's
-                weight is added to the score: Non-spin = 0.8, Spin = 1.0, Two-handed = 1.2
-                (configurable). The same opponent met in two different variants counts twice.
-                Racing in broader or more demanding variants — and against a wider field —
-                scores higher.</td>
+            <td>How broadly and how often the boat races against varied opposition</td>
+            <td>Percentile rank of a variant-weighted Σ(√encounters) score. For each distinct
+                (opponent, variant) pair encountered in recent races, the contribution is
+                <em>variant_weight × √(encounters)</em>, with variant weights Non-spin = 0.8,
+                Spin = 1.0, Two-handed = 1.2 (configurable). The square root damps repeats so
+                distinct opposition still dominates, but a boat that <em>frequently</em> races
+                a diverse field scores higher than one with the same breadth of opposition met
+                only once or twice. The same opponent met in two different variants counts as
+                two pairs.</td>
         </tr>
         <tr>
             <td><strong>NonChaotic</strong></td>
-            <td>Whether performance variation is weather-driven rather than boat/crew-driven</td>
-            <td>Percentile rank of the weighted Pearson correlation between |residual| and the
-                race's fleet dispersion (weighted IQR of corrected times across the whole fleet
-                that day). High correlation means the boat's big residuals coincide with days
-                when the whole fleet was spread out — its inconsistency is conditions-driven,
-                not intrinsic unreliability. Low or negative correlation means the boat has
-                bad races on good days. Boats with fewer than 5 paired observations receive
-                a score of 0.</td>
+            <td>Whether large residuals occur on chaotic fleet days (excusable) or calm ones (not)</td>
+            <td>Percentile rank of the inverse-dispersion-weighted mean squared residual
+                (lower = better). Each race's contribution is <em>weight × r²</em> with
+                <em>weight = 1 / (dispersion + 0.01)</em> — calm days (low dispersion) penalise
+                large residuals heavily; chaotic days (high dispersion) excuse them. So small
+                residuals on chaotic days score best, large residuals on chaotic days score in
+                the middle, and large residuals on calm days score worst — when the whole fleet
+                was sailing predictably and yet this boat scattered, that's an intrinsic issue.
+                Boats with fewer than 5 races that have dispersion data receive a score of 0.</td>
         </tr>
         <tr>
             <td><strong>Stability</strong></td>

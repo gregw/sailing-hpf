@@ -5,6 +5,7 @@ import org.mortbay.sailing.hpf.data.Finisher;
 import org.mortbay.sailing.hpf.data.Race;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -23,11 +24,18 @@ import java.util.Set;
  * <p>
  * Spoke definitions (pentagon order: Frequency → Consistency → Diversity → NonChaotic → Stability):
  * <ul>
- *   <li><b>Frequency</b> — distinct race count in last 12m (higher = better)</li>
- *   <li><b>Consistency</b> — Σ(w·r²) for residuals in last 12m (lower raw = better rank)</li>
- *   <li><b>Diversity</b> — distinct opponents raced against in last 12m (higher = better)</li>
- *   <li><b>NonChaotic</b> — Pearson correlation of |residual| with race dispersion in last 12m
- *       (higher = inconsistency is weather-driven rather than boat/crew-driven)</li>
+ *   <li><b>Frequency</b> — duration-weighted distinct race count in last 12m, multiplied by a
+ *       small year-spread bonus (boats racing across many months score slightly higher than
+ *       boats concentrated in a short season)</li>
+ *   <li><b>Consistency</b> — mean of asymmetrically weighted squared residuals; negative
+ *       residuals (boat faster than HPF) count more than positive ones, since they suggest
+ *       untapped potential and a genuinely inconsistent boat. Lower raw = better rank</li>
+ *   <li><b>Diversity</b> — variant-weighted Σ(√encounters) over distinct (opponent, variant)
+ *       pairs; rewards both breadth of opposition and frequency of meeting it</li>
+ *   <li><b>NonChaotic</b> — mean squared residual weighted inversely by fleet dispersion;
+ *       large residuals on calm days are penalised more than large residuals on chaotic days,
+ *       so boats with small residuals in chaos rank best, and boats with large residuals in
+ *       calm conditions rank worst. Lower raw = better rank</li>
  *   <li><b>Stability</b> — asymmetric slope penalty on weighted linear regression of residual vs date:
  *       level slope = best; improving (negative slope) = moderate penalty;
  *       declining (positive slope) = double penalty</li>
@@ -43,6 +51,26 @@ public class PerformanceProfileBuilder
     /** Derived power-law exponent: 2^α = FREQUENCY_DURATION_SCALE. */
     private static final double FREQUENCY_DURATION_ALPHA =
         Math.log(FREQUENCY_DURATION_SCALE) / Math.log(2.0);
+    /**
+     * Year-spread floor for the Frequency multiplier. A boat with all races in a single
+     * month gets this multiplier; a boat with races in 12 distinct months gets 1.0.
+     * Values in between interpolate linearly. Set close to 1.0 to keep the bonus small.
+     */
+    private static final double FREQUENCY_SPREAD_MIN = 0.85;
+
+    /**
+     * Relative weight of negative residuals (boat faster than HPF) versus positive ones
+     * (slower) in the Consistency squared-residual sum. A value > 1 makes "fast" surprises
+     * count more than "slow" ones — they suggest untapped potential and a genuinely
+     * inconsistent boat, whereas slow days are more often explained by gear or tactics.
+     */
+    private static final double CONSISTENCY_FAST_WEIGHT = 1.5;
+
+    /**
+     * Floor added to dispersion in the NonChaotic 1/dispersion weighting to avoid
+     * blow-ups when dispersion is near zero (very tight fleet day).
+     */
+    private static final double DISPERSION_EPSILON = 0.01;
 
     private final double nonSpinDiversityWeight;
     private final double spinDiversityWeight;
@@ -120,8 +148,11 @@ public class PerformanceProfileBuilder
         double refDurSecs = allMedians.isEmpty() ? 3600.0 : allMedians.get(allMedians.size() / 2);
 
         // --- Step 1: raw metrics per boat ---
-        // [0] frequency (race count), [1] diversity (opponent count),
-        // [2] sumSqAll (consistency), [3] slopePenalty (stability), [4] nonChaotic corr (NaN if insufficient)
+        // [0] frequency (duration- and spread-weighted race count, higher = better),
+        // [1] diversity (variant-weighted Σ√encounters, higher = better),
+        // [2] consistency (asymmetric mean r², lower = better),
+        // [3] stability (slope penalty, lower = better),
+        // [4] nonChaotic (1/dispersion-weighted mean r², lower = better; NaN if insufficient)
         Map<String, double[]> raw = new LinkedHashMap<>();
 
         for (Map.Entry<String, List<EntryResidual>> entry : residualsByBoatId.entrySet())
@@ -138,36 +169,44 @@ public class PerformanceProfileBuilder
             // Duration-weighted frequency: each distinct race contributes (d/d_ref)^α.
             // Races at the fleet-median duration contribute 1.0 (unchanged from plain count);
             // longer races contribute slightly more, shorter ones slightly less.
+            // A small year-spread bonus is then applied: a boat racing in many distinct months
+            // of the 12-month window scores slightly more than one concentrated in a few months,
+            // rewarding year-round participation without overwhelming the duration-weighted count.
             Set<String> seenForFreq = new HashSet<>();
+            Set<YearMonth> activeMonths = new HashSet<>();
             double freq = 0;
             for (EntryResidual r : recent)
             {
+                activeMonths.add(YearMonth.from(r.raceDate()));
                 if (!seenForFreq.add(r.raceId())) continue;
                 Map<String, Double> dm = raceDivMedianSecs.get(r.raceId());
                 double durSecs = (dm != null && dm.get(r.divisionName()) != null)
                     ? dm.get(r.divisionName()) : refDurSecs;
                 freq += Math.pow(durSecs / refDurSecs, FREQUENCY_DURATION_ALPHA);
             }
+            int monthsActive = Math.min(activeMonths.size(), 12);
+            double spreadFactor = FREQUENCY_SPREAD_MIN
+                + (1.0 - FREQUENCY_SPREAD_MIN) * monthsActive / 12.0;
+            freq *= spreadFactor;
 
-            // Diversity: variant-weighted distinct (opponent, variant) pairs.
-            // Each distinct race contributes (variantWeight × opponents seen in that race);
-            // the same opponent seen in different variants counts separately.
-            // Variant weights: nonSpin < spin < twoHanded — racing harder/broader variants
-            // exposes the boat to a wider community of sailors.
+            // Diversity: variant-weighted Σ(√encounters) across distinct (opponent, variant) pairs.
+            // For each pair we count how many races the boat sailed against that opponent in that
+            // variant, then add varWt × √count. The √ damps repeats so distinct opposition still
+            // dominates the score, but a boat that frequently races against a diverse field scores
+            // higher than one that has only met the same opposition once or twice.
+            // Variant weights: nonSpin < spin < twoHanded — racing harder/broader variants exposes
+            // the boat to a wider community of sailors.
             Map<String, Integer> raceVariant = new LinkedHashMap<>();
             for (EntryResidual r : recent)
                 raceVariant.putIfAbsent(r.raceId(),
                     r.twoHanded() ? 2 : (r.nonSpinnaker() ? 1 : 0));
 
-            Set<String> seenPairs = new HashSet<>();
-            double diversity = 0;
+            // opponentBoatId → variant → encounter count
+            Map<String, Map<Integer, Integer>> pairCounts = new LinkedHashMap<>();
             for (Map.Entry<String, Integer> rve : raceVariant.entrySet())
             {
                 String raceId = rve.getKey();
                 int variant   = rve.getValue();
-                double varWt  = variant == 2 ? twoHandedDiversityWeight
-                              : variant == 1 ? nonSpinDiversityWeight
-                              : spinDiversityWeight;
                 Race race = races.get(raceId);
                 if (race == null || race.divisions() == null) continue;
                 for (Division div : race.divisions())
@@ -176,20 +215,37 @@ public class PerformanceProfileBuilder
                     for (Finisher f : div.finishers())
                     {
                         if (boatId.equals(f.boatId())) continue;
-                        if (seenPairs.add(f.boatId() + "|" + variant))
-                            diversity += varWt;
+                        pairCounts.computeIfAbsent(f.boatId(), k -> new LinkedHashMap<>())
+                            .merge(variant, 1, Integer::sum);
                     }
                 }
             }
+            double diversity = 0;
+            for (Map<Integer, Integer> variantMap : pairCounts.values())
+            {
+                for (Map.Entry<Integer, Integer> ve : variantMap.entrySet())
+                {
+                    int variant  = ve.getKey();
+                    double varWt = variant == 2 ? twoHandedDiversityWeight
+                                 : variant == 1 ? nonSpinDiversityWeight
+                                 : spinDiversityWeight;
+                    diversity += varWt * Math.sqrt(ve.getValue());
+                }
+            }
 
-            // Consistency: unweighted mean squared residual, with optional drops.
+            // Consistency: mean of asymmetrically weighted squared residuals, with optional drops.
             // IRLS weights are deliberately NOT used here: they down-weight large outlier
             // residuals, which would perversely make inconsistent boats look more consistent
-            // (their big outlier races contribute very little to the sum).  Using the plain
+            // (their big outlier races contribute very little to the sum). Using the plain
             // mean ensures every race counts equally and the result is independent of fleet size.
+            // Asymmetric weighting: negative residuals (boat faster than HPF) are weighted
+            // CONSISTENCY_FAST_WEIGHT× more than positive ones. A "fast" surprise is more
+            // diagnostic of inconsistency than a "slow" one — it suggests the boat has
+            // untapped potential the HPF has not yet captured, whereas slow races are more
+            // often explained away by gear, tactics, or a single bad start.
             // Drops: every consistencyDropInterval distinct races, one additional most-divergent
-            // entry is excluded — rewarding boats with a long track record by ignoring their
-            // worst results, similar to a series scoring discard.
+            // entry is excluded (by absolute residual) — rewarding boats with a long track record
+            // by ignoring their worst results, similar to a series scoring discard.
             int drops = (consistencyDropInterval > 0) ? (int)(distinctRaces / consistencyDropInterval) : 0;
             List<EntryResidual> forConsistency;
             if (drops <= 0 || drops >= recent.size())
@@ -206,7 +262,10 @@ public class PerformanceProfileBuilder
             }
             double sumSqAll = 0;
             for (EntryResidual r : forConsistency)
-                sumSqAll += r.residual() * r.residual();
+            {
+                double r2 = r.residual() * r.residual();
+                sumSqAll += (r.residual() < 0 ? CONSISTENCY_FAST_WEIGHT : 1.0) * r2;
+            }
             sumSqAll /= forConsistency.size();
 
             // Stability: asymmetric slope penalty.
@@ -214,7 +273,7 @@ public class PerformanceProfileBuilder
             // Level (slope ≈ 0) → penalty = 0 → best rank.
             double slopePenalty = computeSlopePenalty(recent);
 
-            // NonChaotic: Pearson corr(|residual|, race_dispersion)
+            // NonChaotic: mean r² weighted by 1/dispersion. Lower = better.
             double nonChaotic = computeNonChaotic(recent, dispersionByRaceDivision);
 
             raw.put(boatId, new double[]{freq, diversity, sumSqAll, slopePenalty, nonChaotic});
@@ -275,8 +334,9 @@ public class PerformanceProfileBuilder
     }
 
     /**
-     * Percentile ranks for NonChaotic (index 4). Boats with NaN correlation get score 0.
-     * Among boats with valid correlation, higher correlation = better rank.
+     * Percentile ranks for NonChaotic (index 4). Boats with NaN penalty (insufficient
+     * paired observations) get score 0. Among boats with a valid penalty, lower penalty
+     * = better rank (small residuals on calm days).
      */
     private static double[] nonChaoticRanks(Map<String, double[]> raw)
     {
@@ -284,8 +344,8 @@ public class PerformanceProfileBuilder
         int n = ids.length;
         double[] scores = new double[n];  // default 0 for NaN
 
-        // Collect valid-data boats
-        List<int[]> valid = new ArrayList<>();  // [originalIndex, sortPosition]
+        // Collect valid-data boats and sort ascending by penalty (lower = better).
+        List<int[]> valid = new ArrayList<>();
         for (int i = 0; i < n; i++)
             if (!Double.isNaN(raw.get(ids[i])[4]))
                 valid.add(new int[]{i});
@@ -295,7 +355,7 @@ public class PerformanceProfileBuilder
         for (int rank = 0; rank < m; rank++)
         {
             double frac = m == 1 ? 0.5 : (double) rank / (m - 1);
-            scores[valid.get(rank)[0]] = frac;  // higher corr = better = higher rank
+            scores[valid.get(rank)[0]] = 1.0 - frac;  // lower penalty → higher score
         }
         return scores;
     }
@@ -343,6 +403,18 @@ public class PerformanceProfileBuilder
 
     // --- NonChaotic raw metric ---
 
+    /**
+     * Computes the NonChaotic penalty: mean squared residual weighted inversely by fleet
+     * dispersion. Calm conditions (low dispersion → high weight) penalise large residuals
+     * heavily; chaotic conditions (high dispersion → low weight) excuse them. Therefore:
+     * <ul>
+     *   <li>small residuals on chaotic days → very low contribution → best rank</li>
+     *   <li>large residuals on chaotic days → moderate contribution → middle rank</li>
+     *   <li>large residuals on calm days → very high contribution → worst rank</li>
+     * </ul>
+     * Returns {@link Double#NaN} if fewer than {@link #MIN_NONCHAOTIC_PAIRS} races have
+     * dispersion data; such boats are ranked 0 by {@link #nonChaoticRanks}.
+     */
     private static double computeNonChaotic(
         List<EntryResidual> recent,
         Map<String, Map<String, Double>> dispersionByRaceDivision)
@@ -350,41 +422,22 @@ public class PerformanceProfileBuilder
         if (dispersionByRaceDivision == null || dispersionByRaceDivision.isEmpty())
             return Double.NaN;
 
-        // Collect (|residual|, dispersion, weight) triples
-        double[] absR = new double[recent.size()];
-        double[] disp = new double[recent.size()];
-        double[] wts  = new double[recent.size()];
+        double sumW = 0, sumWR2 = 0;
         int count = 0;
-
         for (EntryResidual r : recent)
         {
             Map<String, Double> divMap = dispersionByRaceDivision.get(r.raceId());
             if (divMap == null) continue;
             Double d = divMap.get(r.divisionName());
             if (d == null) continue;
-            absR[count] = Math.abs(r.residual());
-            disp[count] = d;
-            wts[count]  = r.weight();
+            double w = r.weight() / (d + DISPERSION_EPSILON);
+            sumW   += w;
+            sumWR2 += w * r.residual() * r.residual();
             count++;
         }
 
         if (count < MIN_NONCHAOTIC_PAIRS) return Double.NaN;
-
-        // Weighted Pearson correlation
-        double sw = 0, swx = 0, swy = 0;
-        for (int i = 0; i < count; i++) { sw += wts[i]; swx += wts[i] * absR[i]; swy += wts[i] * disp[i]; }
-        double mx = swx / sw, my = swy / sw;
-
-        double num = 0, denX = 0, denY = 0;
-        for (int i = 0; i < count; i++)
-        {
-            double dx = absR[i] - mx, dy = disp[i] - my;
-            num  += wts[i] * dx * dy;
-            denX += wts[i] * dx * dx;
-            denY += wts[i] * dy * dy;
-        }
-        double denom = Math.sqrt(denX * denY);
-        return denom > 1e-12 ? num / denom : Double.NaN;
+        return sumW > 1e-12 ? sumWR2 / sumW : Double.NaN;
     }
 
     // --- Overall score ---

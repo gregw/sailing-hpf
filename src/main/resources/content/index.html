@@ -29,10 +29,10 @@
       </p>
 
     <div class="stats">
-        <div class="stat"><a href="data.html?tab=clubs"><strong id="stat-clubs">–</strong></a>Clubs</div>
+        <div class="stat"><a href="data.html?tab=clubs"><strong id="stat-clubs">–</strong><span class="stat-excluded" id="stat-clubs-excl"></span></a>Clubs</div>
         <div class="stat"><a href="data.html?tab=designs"><strong id="stat-designs">–</strong><span class="stat-excluded" id="stat-designs-excl"></span></a>Designs</div>
         <div class="stat"><a href="data.html?tab=boats"><strong id="stat-boats">–</strong><span class="stat-excluded" id="stat-boats-excl"></span></a>Boats</div>
-        <div class="stat"><a href="data.html?tab=series"><strong id="stat-series">–</strong></a>Series</div>
+        <div class="stat"><a href="data.html?tab=series"><strong id="stat-series">–</strong><span class="stat-excluded" id="stat-series-excl"></span></a>Series</div>
         <div class="stat"><a href="data.html?tab=races"><strong id="stat-races">–</strong><span class="stat-excluded" id="stat-races-excl"></span></a>Races</div>
     </div>
 
@@ -80,6 +80,8 @@
         document.getElementById('stat-races').textContent = data.races.toLocaleString();
         setExcludedSpan('stat-boats-excl',   data.boatsExcluded);
         setExcludedSpan('stat-designs-excl', data.designsExcluded);
+        setExcludedSpan('stat-clubs-excl',   data.clubsExcluded);
+        setExcludedSpan('stat-series-excl',  data.seriesExcluded);
         setExcludedSpan('stat-races-excl',   data.racesExcluded);
     }
     loadStats();

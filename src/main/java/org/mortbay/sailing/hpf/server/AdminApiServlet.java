@@ -255,18 +255,30 @@ public class AdminApiServlet extends HttpServlet
      * <p>
      * Merges the club seed with persisted club records to obtain the total club count,
      * then returns JSON with keys {@code races}, {@code boats}, {@code designs}, {@code clubs},
-     * and {@code series} (non-catch-all series only).
+     * and {@code series} (non-catch-all, non-excluded series only). Each count has a matching
+     * {@code …Excluded} key giving the number of entities of that type that are currently
+     * excluded from analysis.
      */
     private void handleStats(HttpServletResponse resp) throws IOException
     {
         // Merge seed + persisted to get total club count
         Map<String, Club> allClubs = new LinkedHashMap<>(store.clubSeed());
         allClubs.putAll(store.clubs());
-        long seriesCount = store.clubs().values().stream()
-            .filter(c -> c.series() != null)
-            .flatMap(c -> c.series().stream())
-            .filter(s -> !s.isCatchAll())
+        long excludedClubs = allClubs.keySet().stream()
+            .filter(store::isClubExcluded)
             .count();
+        // Series: count non-catch-all series, splitting by excluded vs not.
+        long seriesCount = 0, excludedSeries = 0;
+        for (Club c : store.clubs().values())
+        {
+            if (c.series() == null) continue;
+            for (Series s : c.series())
+            {
+                if (s.isCatchAll()) continue;
+                if (store.isSeriesExcluded(s.name())) excludedSeries++;
+                else seriesCount++;
+            }
+        }
         long excludedBoats = store.boats().values().stream()
             .filter(b -> store.isBoatExcluded(b.id())
                       || (b.designId() != null && store.isDesignExcluded(b.designId())))
@@ -282,8 +294,10 @@ public class AdminApiServlet extends HttpServlet
         stats.put("boatsExcluded",  excludedBoats);
         stats.put("designs",        store.designs().size() - excludedDesigns);
         stats.put("designsExcluded", excludedDesigns);
-        stats.put("clubs",          allClubs.size());
+        stats.put("clubs",          allClubs.size() - excludedClubs);
+        stats.put("clubsExcluded",  excludedClubs);
         stats.put("series",         seriesCount);
+        stats.put("seriesExcluded", excludedSeries);
         stats.put("races",          store.races().size()   - excludedRaces);
         stats.put("racesExcluded",  excludedRaces);
         writeJson(resp, stats);

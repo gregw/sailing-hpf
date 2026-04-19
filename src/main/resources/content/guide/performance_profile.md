@@ -45,48 +45,82 @@ All measures use the **last 12 months** of race data only.
 
 ### 1. Frequency
 
-**What it measures:** how much time the boat spends racing.
+**What it measures:** how much time the boat spends racing, and how broadly that
+participation is spread across the year.
 
-**Derivation:** percentile rank of a duration-weighted race count. Each distinct race
-contributes *(race duration / fleet-median duration)^α* to the score, where α ≈ 0.26
-(a race twice as long counts approximately 1.2× more). This rewards boats that race
-frequently or compete in longer offshore events.
+**Derivation:** percentile rank of a duration-weighted race count, multiplied by a
+small year-spread bonus.
+
+- Each distinct race contributes *(race duration / fleet-median duration)^α* where
+  α ≈ 0.26 (a race twice as long counts approximately 1.2× more).
+- The total is then multiplied by a *spread factor* derived from the number of
+  distinct calendar months in which the boat raced inside the 12-month window:
+
+  ```
+  spread_factor = 0.85 + 0.15 × min(months_active, 12) / 12
+  ```
+
+  A boat racing in a single month gets ≈ 0.86; a boat racing every month of the year
+  gets 1.0. The bonus is deliberately small — duration-weighted race count remains the
+  dominant contribution.
 
 **Interpretation:** a high frequency score means the boat is an active participant in
-the fleet. This spoke is included because a boat with rich race data is more useful to
-handicappers than an occasionally-racing boat with the same HPF. It is not a measure of
-sailing quality, but it does underpin the reliability of the other spokes.
+the fleet over the whole year, not just a short season. This spoke is included because a
+boat with rich, well-spread race data is more useful to handicappers than an occasionally-
+or seasonally-racing boat with the same HPF. It is not a measure of sailing quality, but
+it does underpin the reliability of the other spokes.
 
 ---
 
 ### 2. Consistency
 
-**What it measures:** how tightly the boat's results cluster around its HPF.
+**What it measures:** how tightly the boat's results cluster around its HPF, with extra
+weight on "fast" surprises that hint at untapped potential.
 
-**Derivation:** percentile rank of the mean squared residual across recent race entries
-(lower MSR = better = higher percentile). Every race counts equally regardless of whether
-it was down-weighted in the HPF optimiser, so a boat with occasional large residuals is
-correctly penalised.
+**Derivation:** percentile rank of the *asymmetrically weighted* mean squared residual
+across recent race entries (lower = better = higher percentile). Every race counts equally
+regardless of whether it was down-weighted in the HPF optimiser, so a boat with occasional
+large residuals is correctly penalised.
 
-**Discards:** a configurable number of the most-divergent results are excluded before
-computing the mean, similar to series scoring. One discard is allowed per *N* distinct
-races sailed (default N = 11): 1 discard at 11 races, 2 at 22, and so on. This rewards
-boats with long track records by forgiving occasional bad days.
+**Asymmetric weighting:** negative residuals (boat *faster* than its HPF predicted) are
+weighted **1.5×** more than positive residuals (slower) of the same magnitude:
+
+```
+contribution = r²    if r ≥ 0   (slow surprise)
+             = 1.5×r² if r < 0   (fast surprise)
+```
+
+A fast surprise suggests the boat has more potential than its current HPF reflects —
+likely a sign of a genuinely inconsistent boat, where a single big result distorts the
+average. A slow surprise is more easily explained by a bad start, a gear failure, or a
+tactical error and is therefore weighted less harshly.
+
+**Discards:** a configurable number of the most-divergent results (by absolute residual)
+are excluded before computing the mean, similar to series scoring. One discard is allowed
+per *N* distinct races sailed (default N = 11): 1 discard at 11 races, 2 at 22, and so on.
+This rewards boats with long track records by forgiving occasional bad days.
 
 **Interpretation:** a high consistency score means the boat produces similar results
-race after race. This reflects stable crew, preparation, and boat reliability. It does
-not by itself say whether those results are fast or slow — that relationship is captured
-by the HPF value itself.
+race after race, *and* does not occasionally surprise the fleet with unexpectedly fast
+times. This reflects stable crew, preparation, and boat reliability. It does not by
+itself say whether those results are fast or slow — that relationship is captured by
+the HPF value itself.
 
 ---
 
 ### 3. Diversity
 
-**What it measures:** how broadly the boat races, weighted by racing variant.
+**What it measures:** how broadly the boat races, weighted by racing variant *and* by
+how often it meets each opponent.
 
-**Derivation:** percentile rank of a variant-weighted opponent exposure score. For each
-distinct *(opponent, variant)* pair encountered in recent races, the variant's weight is
-added to the score:
+**Derivation:** percentile rank of a variant-weighted *√-encounters* score. For each
+distinct *(opponent, variant)* pair encountered in recent races, the contribution is
+
+```
+contribution = variant_weight × √(encounters with that opponent in that variant)
+```
+
+with variant weights:
 
 | Variant | Weight |
 |---|---|
@@ -94,28 +128,50 @@ added to the score:
 | Spinnaker | 1.0 |
 | Two-handed | 1.2 |
 
-The same opponent met in two different variants counts twice. Racing against a wider
-field, or in more demanding variants, scores higher.
+The same opponent met in two different variants counts as two pairs. The square root
+damps repeats, so distinct opposition still dominates the score, but a boat that
+*frequently* races a diverse field scores higher than a boat with the same breadth
+of opposition met only once or twice.
 
-**Interpretation:** a high diversity score means the boat's HPF is grounded in varied
-competitive experience — multiple fleets, different course types, different race lengths.
-This makes the HPF more reliable as a cross-context descriptor of performance.
+For example, with default weights, ten spinnaker encounters against five distinct
+opponents (5 × √10 ≈ 15.8) outscores one spinnaker encounter against the same five
+opponents (5 × √1 = 5).
+
+**Interpretation:** a high diversity score means the boat's HPF is grounded in
+*repeated* competitive exposure to a varied field — multiple fleets, different course
+types, different race lengths, often. This makes the HPF more reliable as a cross-context
+descriptor of performance.
 
 ---
 
 ### 4. NonChaotic
 
-**What it measures:** whether performance variation is driven by racing conditions
-rather than boat or crew unpredictability.
+**What it measures:** whether large performance variations occur on chaotic fleet days
+(excusable) or on calm fleet days (intrinsic boat/crew issues).
 
-**Derivation:** percentile rank of the weighted Pearson correlation between a boat's
-absolute residual and the race's fleet dispersion (weighted IQR of corrected times across
-the whole fleet that day). High positive correlation means the boat's large residuals
-coincide with days when the whole fleet was scattered — its inconsistency is
-conditions-driven, not intrinsic. Low or negative correlation means the boat has bad
-races even on days when everyone else is sailing predictably.
+**Derivation:** percentile rank of a *mean squared residual weighted inversely by fleet
+dispersion* (lower = better). Each race's contribution is
 
-Boats with fewer than 5 paired observations receive a score of 0.
+```
+weight_i = 1 / (dispersion_i + 0.01)        # dispersion = weighted IQR of corrected times / T₀
+penalty  = Σ(weight_i × r_i²) / Σ(weight_i)
+```
+
+Calm days (low dispersion → high weight) make large residuals very expensive; chaotic
+days (high dispersion → low weight) excuse them.
+
+This produces the following ranking, from best to worst:
+
+1. **Small residual on a chaotic day** — small × small contribution → very low penalty (best)
+2. **Large residual on a chaotic day** — small × large contribution → moderate penalty
+3. **Large residual on a calm day** — large × large contribution → very high penalty (worst)
+
+Small residuals on calm days are also rewarded (small × large contribution is small),
+so a boat that is simply consistent in all conditions does well too. The spoke
+specifically penalises a boat whose worst races happen on the days when the rest of
+the fleet was sailing predictably.
+
+Boats with fewer than 5 races that have dispersion data receive a score of 0.
 
 **Interpretation:** a high NonChaotic score does not mean the boat is fast; it means
 that when the boat underperforms, there is usually a fleet-wide reason. Combined with
@@ -184,8 +240,8 @@ primary insight; the number is a convenience summary for sorting and comparison.
 A boat must have at least **3 distinct races** in the last 12 months to appear in the
 fleet ranking at all. Below this threshold no spoke scores are shown.
 
-The NonChaotic spoke additionally requires **5 paired observations** (boat residual
-plus fleet dispersion for the same race); below this it scores 0.
+The NonChaotic spoke additionally requires **5 races with dispersion data** (boat
+residual paired with the fleet's race-day dispersion); below this it scores 0.
 
 ---
 
