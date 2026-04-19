@@ -344,6 +344,8 @@ function sortBy(entity, key) {
         state.sort[entity] = key;
         state.dir[entity]  = 'asc';
     }
+    const container = document.querySelector('#panel-' + entity + ' .table-scroll');
+    if (container) container.scrollTop = 0;
     loadList(entity, 0);
 }
 

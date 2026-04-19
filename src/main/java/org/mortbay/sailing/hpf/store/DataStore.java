@@ -1282,8 +1282,15 @@ public class DataStore
         // name and the canonical boat already exists, merge the stale boat into it.
         // This repairs boats that were created before the alias entry was added and prevents
         // them from persisting across imports via the direct boats.get(boatId) fast path.
+        // After merging we also consolidate aliases.yaml: an orphan alias entry keyed by the
+        // stale (sail, name) — typically left over from a previous merge — gets absorbed into
+        // the canonical entry, otherwise the next import would re-resolve the stale identity
+        // and recreate the JSON boat record.
         {
-            List<Map.Entry<String, String>> staleBoatPairs = new ArrayList<>();
+            record StalePair(String staleId, String canonId,
+                             String staleSail, String staleName,
+                             String canonSail, String canonName) {}
+            List<StalePair> staleBoatPairs = new ArrayList<>();
             for (Boat b : new ArrayList<>(boats.values()))
             {
                 String normName = IdGenerator.normaliseName(b.name());
@@ -1301,7 +1308,12 @@ public class DataStore
                         Design d = b.designId() != null ? designs.get(b.designId()) : null;
                         String canonId = IdGenerator.generateBoatId(canonSail, displayName, d);
                         if (boats.containsKey(canonId))
-                            staleBoatPairs.add(Map.entry(b.id(), canonId));
+                        {
+                            Boat canonical = boats.get(canonId);
+                            staleBoatPairs.add(new StalePair(b.id(), canonId,
+                                b.sailNumber(), normName,
+                                canonSail, canonical.name()));
+                        }
                         else
                             LOG.warn("Stale boat {} (name '{}') should map to canonical '{}' per alias seed but canonical boat {} not found; will be renamed on next import",
                                 b.id(), b.name(), displayName, canonId);
@@ -1311,11 +1323,19 @@ public class DataStore
             if (!staleBoatPairs.isEmpty())
             {
                 LOG.info("Auto-fixing {} stale boat(s) at startup", staleBoatPairs.size());
-                for (Map.Entry<String, String> pair : staleBoatPairs)
+                boolean aliasesChanged = false;
+                for (StalePair pair : staleBoatPairs)
                 {
-                    LOG.info("Auto-merging stale boat {} into canonical {}", pair.getKey(), pair.getValue());
-                    mergeBoats(pair.getValue(), List.of(pair.getKey()));
+                    LOG.info("Auto-merging stale boat {} into canonical {}", pair.staleId(), pair.canonId());
+                    mergeBoats(pair.canonId(), List.of(pair.staleId()));
+                    // Consolidate aliases.yaml so the orphan entry that resolved to the stale
+                    // identity is absorbed into the canonical entry.
+                    Aliases.addAliases(configDir, pair.canonSail(), pair.canonName(),
+                        List.of(new Aliases.SailNumberName(pair.staleSail(), pair.staleName())));
+                    aliasesChanged = true;
                 }
+                if (aliasesChanged)
+                    aliases = Aliases.load(configDir);
             }
         }
 
