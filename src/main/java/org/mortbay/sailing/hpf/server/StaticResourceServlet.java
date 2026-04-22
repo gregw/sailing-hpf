@@ -9,6 +9,7 @@ import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
 import java.util.List;
+import java.util.Map;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +34,12 @@ public class StaticResourceServlet extends HttpServlet
     private static final Pattern A_HREF =
         Pattern.compile("<a href=\"([^\"]+)\"");
 
+    /** In-app paths served from GitHub wiki pages (raw markdown, rendered on request). */
+    private static final Map<String, String> WIKI_PAGES = Map.of(
+        "/docs.md",     "Home",
+        "/ui-tips.md",  "UI-Tips"
+    );
+
     private static final List<Extension> MD_EXTENSIONS = List.of(TablesExtension.create());
     private static final Parser MD_PARSER = Parser.builder().extensions(MD_EXTENSIONS).build();
     private static final HtmlRenderer MD_RENDERER = HtmlRenderer.builder().extensions(MD_EXTENSIONS).build();
@@ -44,9 +51,10 @@ public class StaticResourceServlet extends HttpServlet
         if (path == null || "/".equals(path))
             path = "/index.html";
 
-        if ("/docs.md".equals(path))
+        String wikiPage = WIKI_PAGES.get(path);
+        if (wikiPage != null)
         {
-            serveWikiHome(resp);
+            serveWikiPage(resp, wikiPage);
             return;
         }
 
@@ -79,10 +87,10 @@ public class StaticResourceServlet extends HttpServlet
         }
     }
 
-    private void serveWikiHome(HttpServletResponse resp) throws IOException
+    private void serveWikiPage(HttpServletResponse resp, String wikiPage) throws IOException
     {
         HttpRequest fetch = HttpRequest.newBuilder()
-            .uri(URI.create(WIKI_RAW_BASE + "Home.md"))
+            .uri(URI.create(WIKI_RAW_BASE + wikiPage + ".md"))
             .timeout(Duration.ofSeconds(10))
             .GET()
             .build();
@@ -104,8 +112,9 @@ public class StaticResourceServlet extends HttpServlet
         }
         String body = MD_RENDERER.render(MD_PARSER.parse(response.body()));
         body = rewriteWikiLinks(body);
+        String title = wikiPage.equals("Home") ? "Documentation" : wikiPage.replace('-', ' ');
         resp.setContentType("text/html; charset=UTF-8");
-        resp.getWriter().write(wrapMarkdownPage(body, "Documentation"));
+        resp.getWriter().write(wrapMarkdownPage(body, title));
     }
 
     private String wrapMarkdownPage(String body, String title) throws IOException
