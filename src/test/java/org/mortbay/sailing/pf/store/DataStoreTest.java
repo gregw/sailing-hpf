@@ -575,6 +575,71 @@ class DataStoreTest {
     }
 
     @Test
+    void mergeDesignsPersistsAliasAndBlocksReimportRecreatingOldDesign(@TempDir Path tempDir) throws Exception {
+        // Mirrors the production path in AdminApiServlet.handleMergeDesigns:
+        //   mergeDesigns -> save -> Aliases.appendDesignMergeAliases -> reloadAliases
+        // After that, a subsequent findOrCreateBoat using the merged-away design name
+        // must resolve to the kept design (not re-create the old one).
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        Design elliot6  = new Design("elliot6",  "Elliot 6",  List.of(), List.of(), null, null);
+        Design elliott6 = new Design("elliott6", "Elliott 6", List.of(), List.of(), null, null);
+        store.putDesign(elliot6);
+        store.putDesign(elliott6);
+
+        Boat boat = new Boat("1-youth1-elliot6", "1", "Youth 1", "elliot6", null,
+                List.of(), List.of("SailSys:Elliot 6"), null, null);
+        store.putBoat(boat);
+
+        // Collect alias names exactly as the API handler does
+        List<String> aliasNames = List.of(elliot6.canonicalName(), elliot6.id());
+
+        DataStore.DesignMergeResult result = store.mergeDesigns("elliott6", List.of("elliot6"));
+        store.save();
+        Aliases.appendDesignMergeAliases(store.configDir(), "elliott6", elliott6.canonicalName(), aliasNames);
+        store.reloadAliases();
+
+        // 1. Boat updated: old designId gone, boat now under elliott6
+        assertEquals(1, result.updatedBoats(), "exactly one boat should have been rewritten");
+        assertFalse(store.boats().containsKey("1-youth1-elliot6"), "old boat id should be gone");
+        Boat moved = store.boats().get("1-youth1-elliott6");
+        assertNotNull(moved, "boat should now be under the kept design id");
+        assertEquals("elliott6", moved.designId());
+
+        // 2. Kept design's in-memory alias list contains the old canonical name
+        Design kept = store.designs().get("elliott6");
+        assertTrue(kept.aliases().stream().anyMatch(a -> a.equalsIgnoreCase("Elliot 6")),
+                "kept design.aliases should contain the merged-away canonical name: " + kept.aliases());
+
+        // 3. Kept design.json on disk also contains the alias (verifies save())
+        String keptJson = Files.readString(tempDir.resolve("imported/designs/elliott6.json"));
+        assertTrue(keptJson.contains("Elliot 6"),
+                "elliott6.json on disk should contain the Elliot 6 alias:\n" + keptJson);
+
+        // 4. Merged-away design file is gone
+        assertFalse(Files.exists(tempDir.resolve("imported/designs/elliot6.json")),
+                "elliot6.json should have been removed from disk");
+
+        // 5. aliases.yaml was written with the design alias entry
+        String aliasesYaml = Files.readString(tempDir.resolve("config/aliases.yaml"));
+        assertTrue(aliasesYaml.contains("elliott6"),
+                "aliases.yaml should have an elliott6 design entry:\n" + aliasesYaml);
+        assertTrue(aliasesYaml.contains("Elliot 6") || aliasesYaml.contains("elliot6"),
+                "aliases.yaml should list the merged-away name/id as an alias:\n" + aliasesYaml);
+
+        // 6. Simulate a re-import: SailSys sees design "Elliot 6" again.
+        //    Must resolve to elliott6 and must NOT recreate the elliot6 design record.
+        Boat reimported = store.findOrCreateBoat("1", "Youth 1", "Elliot 6", LocalDate.of(2026, 4, 1), "SailSys");
+        assertNotNull(reimported, "re-import of the same boat should not fail");
+        assertEquals("elliott6", reimported.designId(),
+                "re-imported boat must resolve to the kept design, not re-create elliot6");
+        assertFalse(store.designs().containsKey("elliot6"),
+                "the old elliot6 design must not be re-created by a subsequent import");
+        assertEquals(1, store.boats().size(), "should still be a single boat after re-import");
+    }
+
+    @Test
     void mergeDesignsBoatWithNullDesignIsUnchanged(@TempDir Path tempDir) {
         DataStore store = new DataStore(tempDir);
         store.start();

@@ -257,7 +257,7 @@ function updateFilterBanner(entity) {
 
 function updateFilterControls(entity) {
     const active = !!state.filter[entity];
-    ['show-excluded-' + entity, 'exclude-nulls-' + entity, 'exclude-empty-' + entity, 'filter-dupe-sails'].forEach(id => {
+    ['show-excluded-' + entity, 'exclude-empty-' + entity, 'filter-dupe-sails'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.disabled = active;
@@ -302,7 +302,7 @@ async function loadList(entity, page) {
     const showExcludedEl = document.getElementById('show-excluded-' + entity);
     if (!f && showExcludedEl && showExcludedEl.checked) url += '&showExcluded=true';
     const excludeNullsEl = document.getElementById('exclude-nulls-' + entity);
-    if (!f && excludeNullsEl && excludeNullsEl.checked) url += '&excludeNulls=true';
+    if (excludeNullsEl && excludeNullsEl.checked) url += '&excludeNulls=true';
     const excludeEmptyEl = document.getElementById('exclude-empty-' + entity);
     if (!f && excludeEmptyEl && excludeEmptyEl.checked) url += '&excludeEmpty=true';
     const data = await fetchJson(url);

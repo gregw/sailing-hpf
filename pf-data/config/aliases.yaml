@@ -239,12 +239,12 @@ designs:
     - "xyachtxp44"
     - "XP-44"
     - "xp44"
-boats:
-  MYC7-daydreaming:
-    canonicalName: "Day Dreaming"
+  elliott6:
+    canonicalName: "Elliott 6"
     aliases:
-    - sailNumber: null
-      name: "Ten Sixty"
+    - "Elliot 6"
+    - "elliot6"
+boats:
   "0404-navyone":
     canonicalName: "Navy One"
     aliases:
@@ -254,6 +254,8 @@ boats:
       name: null
     - sailNumber: "040"
       name: "navyone"
+    - sailNumber: "0404"
+      name: "navybone"
   "1088-nortonwhitecorum":
     canonicalName: "Norton White Corum"
     aliases:
@@ -310,21 +312,6 @@ boats:
     aliases:
     - sailNumber: null
       name: "Manly Sailing SOLACE"
-  JAUS44361AUS4788-okavangodelta:
-    canonicalName: "Okavango Delta"
-    aliases:
-    - sailNumber: "4436"
-      name: null
-    - sailNumber: "4437"
-      name: null
-    - sailNumber: "44364437"
-      name: null
-    - sailNumber: "4788"
-      name: null
-    - sailNumber: "443614437"
-      name: null
-    - sailNumber: "44361AUS4788"
-      name: "okavangodelta"
   "11744-xsmoment":
     canonicalName: "XS MOMENT"
     aliases:
@@ -413,6 +400,8 @@ boats:
     aliases:
     - sailNumber: "44361"
       name: "okavangodelta"
+    - sailNumber: "JAUS44361AUS4788"
+      name: "okavangodelta"
   "44371309-onlyajourney":
     canonicalName: "Only a Journey"
     aliases:
@@ -470,6 +459,8 @@ boats:
     aliases:
     - sailNumber: "MYC7"
       name: "daydreaming"
+    - sailNumber: "MYC7"
+      name: "Ten Sixty"
   "4860-trinity":
     canonicalName: "Trinity"
     aliases:
@@ -535,3 +526,68 @@ boats:
     aliases:
     - sailNumber: "E5584"
       name: "oneoutofthebox"
+  NZL8090-masterpiece:
+    canonicalName: "Masterpiece"
+    aliases:
+    - sailNumber: "NZ8090"
+      name: "masterpiece"
+  "018-phantom377":
+    canonicalName: "Phantom377"
+    aliases:
+    - sailNumber: "018"
+      name: "phantom"
+  "10-guiltypleasures10":
+    canonicalName: "Guilty Pleasures 10"
+    aliases:
+    - sailNumber: "10"
+      name: "guiltypleasuresx"
+  "10001-wildoatsxi":
+    canonicalName: "Wild Oats XI"
+    aliases:
+    - sailNumber: "10001"
+      name: "hamiltonislandwildoats"
+  "10067-ngaiorose":
+    canonicalName: "Ngaio Rose"
+    aliases:
+    - sailNumber: "10067"
+      name: "ngairorose"
+  "10147-dejavu":
+    canonicalName: "Deja Vu"
+    aliases:
+    - sailNumber: "10147"
+      name: "dejavue"
+  "1079-imknotsure":
+    canonicalName: "I'm knot sure"
+    aliases:
+    - sailNumber: "1079"
+      name: "imknotshore"
+  "1163-whiskeytangofoxtrot":
+    canonicalName: "Whiskey Tango Foxtrot"
+    aliases:
+    - sailNumber: "1163"
+      name: "whiskeytangofoxtro"
+  "1211-thebeast":
+    canonicalName: "The Beast"
+    aliases:
+    - sailNumber: "1211"
+      name: "thebeastf"
+  "1368-sirius":
+    canonicalName: "Sirius"
+    aliases:
+    - sailNumber: "1368"
+      name: "sirus"
+  "1387-dospayasos":
+    canonicalName: "Dos Payasos"
+    aliases:
+    - sailNumber: "1387"
+      name: "dospayosos"
+  "139-baahousebaatstudio":
+    canonicalName: "Baahouse + Baatstudio"
+    aliases:
+    - sailNumber: "139"
+      name: "baahousebaastudio"
+  K9596-loco:
+    canonicalName: "Loco"
+    aliases:
+    - sailNumber: "9596"
+      name: "loco"

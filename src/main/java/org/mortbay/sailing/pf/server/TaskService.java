@@ -161,7 +161,8 @@ public class TaskService
         new ImporterEntry("analysis",           "run",  false, false),
         new ImporterEntry("reference-factors",  "run",  false, false),
         new ImporterEntry("build-indexes",      "run",  false, false),
-        new ImporterEntry("pf-optimise",       "run",  false, false)
+        new ImporterEntry("pf-optimise",       "run",  false, false),
+        new ImporterEntry("save-database",      "run",  false, false)
     );
 
     private List<ImporterEntry> importerEntries = new ArrayList<>(DEFAULT_ENTRIES);
@@ -662,6 +663,11 @@ public void stop()
                     cache.refreshPf(pfConfig(), stopRequested::get);
                 else
                     LOG.warn("PF optimise requested but cache is not configured");
+            }
+            case "save-database" ->
+            {
+                store.save();
+                persistConfig();
             }
             default -> throw new IllegalArgumentException("Unknown importer: " + name);
         }

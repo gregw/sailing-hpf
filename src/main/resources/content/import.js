@@ -13,7 +13,8 @@ const DISPLAY_NAMES = {
     'analysis':         'Analyse Certificates',
     'reference-factors':'Calculate Reference Factors',
     'build-indexes':    'Build Indexes',
-    'pf-optimise':     'PF Optimise'
+    'pf-optimise':     'PF Optimise',
+    'save-database':    'Save Database'
 };
 
 let currentEntries = [];
@@ -92,6 +93,7 @@ function taskTip(name) {
         'reference-factors':  'Computes IRC-equivalent reference factors for all boats.',
         'build-indexes':      'Rebuilds navigation indexes (boat→races, design→boats, etc.).',
         'pf-optimise':       'Runs the PF optimiser to produce Performance Factors.',
+        'save-database':      'Flushes the DataStore and rewrites admin.yaml to disk.',
     };
     return tips[name] || name;
 }
@@ -189,6 +191,7 @@ async function stopSchedule() {
 
 async function runScheduleNow() {
     if (!isWriteAllowed()) return;
+    await saveSchedule();
     const resp = await fetch('/api/importers/run-schedule', { method: 'POST' });
     if (resp.status === 409) {
         alert('An import is already running');
@@ -203,6 +206,7 @@ async function runScheduleNow() {
 
 async function runStartupNow() {
     if (!isWriteAllowed()) return;
+    await saveSchedule();
     const resp = await fetch('/api/importers/run-startup', { method: 'POST' });
     if (resp.status === 409) {
         alert('An import is already running, or no tasks are flagged for On Start');

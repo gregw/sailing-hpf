@@ -6,15 +6,15 @@
 importers:
 - name: "orc"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "ams"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "bwps"
   mode: "api"
-  includeInSchedule: true
+  includeInSchedule: false
   runAtStartup: false
 - name: "sailsys-races"
   mode: "run"
@@ -40,16 +40,22 @@ importers:
   mode: "run"
   includeInSchedule: true
   runAtStartup: true
+- name: "save-database"
+  mode: "run"
+  includeInSchedule: false
+  runAtStartup: false
 schedule:
-  days: []
-  time: "08:08:00"
+  days:
+  - "MONDAY"
+  - "FRIDAY"
+  time: "02:00:00"
 targetIrcYear: 2025
 outlierSigma: null
 recentRaceReimportDays: 30
 
 # --- SailSys importer ---
 sailsysNextRaceId: 32414
-sailsysEndRaceId: 41104
+sailsysEndRaceId: 41288
 sailsysYoungCacheMaxAgeDays: 7
 sailsysOldCacheMaxAgeDays: 352
 sailsysYoungRaceMaxAgeDays: 365
