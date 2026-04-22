@@ -1,0 +1,100 @@
+# IMPORTANT: This file is managed by the server.
+# It is overwritten whenever settings are saved via the admin UI.
+# Only edit manually when the server is NOT running.
+
+# --- Server Import and Analysis tasks ---
+importers:
+- name: "orc"
+  mode: "api"
+  includeInSchedule: true
+  runAtStartup: false
+- name: "ams"
+  mode: "api"
+  includeInSchedule: true
+  runAtStartup: false
+- name: "bwps"
+  mode: "api"
+  includeInSchedule: true
+  runAtStartup: false
+- name: "sailsys-races"
+  mode: "run"
+  includeInSchedule: true
+  runAtStartup: false
+- name: "topyacht"
+  mode: "api"
+  includeInSchedule: true
+  runAtStartup: false
+- name: "build-indexes"
+  mode: "run"
+  includeInSchedule: true
+  runAtStartup: true
+- name: "analysis"
+  mode: "run"
+  includeInSchedule: true
+  runAtStartup: true
+- name: "reference-factors"
+  mode: "run"
+  includeInSchedule: true
+  runAtStartup: true
+- name: "pf-optimise"
+  mode: "run"
+  includeInSchedule: true
+  runAtStartup: true
+schedule:
+  days: []
+  time: "08:08:00"
+targetIrcYear: 2025
+outlierSigma: null
+recentRaceReimportDays: 30
+
+# --- SailSys importer ---
+sailsysNextRaceId: 32414
+sailsysEndRaceId: 41104
+sailsysYoungCacheMaxAgeDays: 7
+sailsysOldCacheMaxAgeDays: 352
+sailsysYoungRaceMaxAgeDays: 365
+sailsysHttpDelayMs: 200
+sailsysRecentRaceDays: 14
+
+# --- BWPS importer ---
+bwpsMinYear: 2021
+
+# --- ORC importer ---
+orcListMaxAgeDays: 1
+
+# --- Analysis ---
+minAnalysisR2: 0.5
+clubCertificateWeight: 0.9
+
+# --- PF optimiser ---
+pfLambda: 1.0
+pfOutlierK: 0.5
+pfAsymmetryFactor: 2.5
+pfOuterDampingFactor: 0.3
+pfOuterConvergenceThreshold: 0.275
+pfConvergenceThreshold: 1.0E-4
+pfMaxInnerIterations: 100
+pfMaxOuterIterations: 50
+pfCrossVariantLambda: 0.0
+
+# --- Sliding average / consistency ---
+slidingAverageCount: 8
+slidingAverageDrops: 1
+
+# --- Diversity weights (multi-variant PF) ---
+diversityNonSpinWeight: 0.8
+diversitySpinWeight: 1.0
+diversityTwoHandedWeight: 1.2
+consistencyDropInterval: 11
+
+# --- Authentication ---
+googleClientId: null
+googleClientSecret: null
+authBaseUrl: null
+authAllowedDomain: null
+
+# --- Server ports ---
+adminPort: 8888
+userPort: 8080
+natGatewayIp: null
+

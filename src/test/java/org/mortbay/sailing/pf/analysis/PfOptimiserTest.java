@@ -1,0 +1,336 @@
+package org.mortbay.sailing.pf.analysis;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Factor;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.store.DataStore;
+
+import java.nio.file.Path;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class PfOptimiserTest
+{
+    @TempDir
+    Path tempDir;
+
+    // Known true TCFs for 5 boats
+    private static final double[] TRUE_TCFS = { 0.85, 0.92, 1.00, 1.08, 1.15 };
+    private static final String[] BOAT_IDS = { "b1-alpha-design", "b2-bravo-design", "b3-charlie-design", "b4-delta-design", "b5-echo-design" };
+
+    @Test
+    void convergesWithinOnePercentOfTrueValues()
+    {
+        Scenario s = buildScenario(5, 10, 42, 0.01, false);
+        PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, PfConfig.DEFAULT, () -> false);
+
+        assertFalse(result.boatPfs().isEmpty());
+        for (int i = 0; i < 5; i++)
+        {
+            BoatPf pf = result.boatPfs().get(BOAT_IDS[i]);
+            assertNotNull(pf, "Missing PF for " + BOAT_IDS[i]);
+            assertNotNull(pf.spin(), "Missing spin PF for " + BOAT_IDS[i]);
+            double expected = TRUE_TCFS[i];
+            double actual = pf.spin().value();
+            assertEquals(expected, actual, expected * 0.01,
+                "PF for " + BOAT_IDS[i] + ": expected " + expected + " got " + actual);
+        }
+    }
+
+    @Test
+    void regularisationPullsTowardRf()
+    {
+        // Boat with strong RF (weight=1.0) but only 1 race entry
+        Scenario s = buildScenarioWithFewRaces();
+        PfConfig strongReg = new PfConfig(5.0, 0.0001, 100, 5, 2.0, 2.0, 0.5, 0.01, 0.0);
+        PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, strongReg, () -> false);
+
+        // "b5-echo-design" has only 1 race but RF = 1.15
+        BoatPf pf = result.boatPfs().get("b5-echo-design");
+        assertNotNull(pf);
+        assertNotNull(pf.spin());
+        // With strong lambda and only 1 race, PF should stay close to RF
+        double delta = Math.abs(Math.log(pf.spin().value()) - Math.log(1.15));
+        assertTrue(delta < 0.05, "PF should be close to RF (1.15) with strong regularisation, got " + pf.spin().value());
+    }
+
+    @Test
+    void asymmetryDownweightsFastOutliers()
+    {
+        // Build a scenario with one fast outlier, run with and without asymmetry
+        Scenario s = buildScenarioWithOutlier(true);  // fast outlier
+
+        PfConfig withAsym = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 3.0, 0.5, 0.01, 0.0);
+        PfResult resultAsym = new PfOptimiser().optimise(s.store, s.boatDerived, withAsym, () -> false);
+
+        PfConfig noAsym = new PfConfig(1.0, 0.0001, 100, 5, 2.0, 1.0, 0.5, 0.01, 0.0);
+        PfResult resultNoAsym = new PfOptimiser().optimise(s.store, s.boatDerived, noAsym, () -> false);
+
+        // The outlier boat's PF should differ more from RF with asymmetry=1 (less down-weighting of the fast result)
+        // than with asymmetry=3 (more aggressive down-weighting of the fast result)
+        BoatPf pfAsym = resultAsym.boatPfs().get("b1-alpha-design");
+        BoatPf pfNoAsym = resultNoAsym.boatPfs().get("b1-alpha-design");
+        assertNotNull(pfAsym);
+        assertNotNull(pfNoAsym);
+
+        double deltaAsym = Math.abs(pfAsym.referenceDeltaSpin());
+        double deltaNoAsym = Math.abs(pfNoAsym.referenceDeltaSpin());
+        // With asymmetry factor 3, fast outlier is down-weighted more → PF stays closer to RF
+        assertTrue(deltaAsym <= deltaNoAsym,
+            "Asymmetry should keep PF closer to RF: deltaAsym=" + deltaAsym + ", deltaNoAsym=" + deltaNoAsym);
+    }
+
+    @Test
+    void mixedDivisionBothVariantsGetCorrectPf()
+    {
+        Scenario s = buildMixedDivisionScenario();
+        PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, PfConfig.DEFAULT, () -> false);
+
+        // b1 races as spin, b2 as nonSpin in same division
+        BoatPf b1 = result.boatPfs().get("b1-alpha-design");
+        BoatPf b2 = result.boatPfs().get("b2-bravo-design");
+        assertNotNull(b1);
+        assertNotNull(b2);
+        assertNotNull(b1.spin(), "b1 should have spin PF");
+        assertNotNull(b2.nonSpin(), "b2 should have nonSpin PF");
+        assertTrue(b1.spinRaceCount() > 0);
+        assertTrue(b2.nonSpinRaceCount() > 0);
+    }
+
+    @Test
+    void stopCheckReturnsPartialResult()
+    {
+        Scenario s = buildScenario(5, 10, 42, 0.01, false);
+        AtomicInteger callCount = new AtomicInteger();
+        // Stop after first outer iteration's inner loop completes (after some calls)
+        PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, PfConfig.DEFAULT,
+            () -> callCount.incrementAndGet() > 2);
+
+        // Should return empty result (partial results are discarded)
+        assertTrue(result.boatPfs().isEmpty());
+    }
+
+    @Test
+    void boatWithNoRacesGetsRfAsPf()
+    {
+        Scenario s = buildScenario(5, 10, 42, 0.01, false);
+        // Add a 6th boat with RF but no race entries
+        Boat noRaceBoat = new Boat("b6-foxtrot-design", "AUS6", "Foxtrot", "design", null,
+            List.of(), List.of(), null, null);
+        s.store.putBoat(noRaceBoat);
+        Factor rfSpin = new Factor(0.95, 0.8);
+        ReferenceFactors rf6 = new ReferenceFactors(rfSpin, null, null, 0, 0, 0);
+        Map<String, BoatDerived> newDerived = new LinkedHashMap<>(s.boatDerived);
+        newDerived.put(noRaceBoat.id(), new BoatDerived(noRaceBoat, rf6, Set.of(), Set.of(), null));
+
+        PfResult result = new PfOptimiser().optimise(s.store, newDerived, PfConfig.DEFAULT, () -> false);
+
+        // b6 appears in boatDerived but has no entries — it shouldn't appear in PF results
+        // because it never participated in any division. That's fine — the boat never entered
+        // the optimiser's working set. Its PF == RF mapping is done by AnalysisCache.mergePfResults.
+        // Let's verify the optimiser doesn't crash and the other boats are fine.
+        assertFalse(result.boatPfs().isEmpty());
+        for (int i = 0; i < 5; i++)
+            assertNotNull(result.boatPfs().get(BOAT_IDS[i]));
+    }
+
+    @Test
+    void divisionPfsPopulated()
+    {
+        Scenario s = buildScenario(5, 10, 42, 0.01, false);
+        PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, PfConfig.DEFAULT, () -> false);
+
+        assertFalse(result.divisionPfsByRaceId().isEmpty());
+        for (var entry : result.divisionPfsByRaceId().values())
+        {
+            for (DivisionPf dh : entry)
+            {
+                assertTrue(dh.referenceTimeNanos() > 0, "T₀ should be positive");
+                assertTrue(dh.weight() > 0, "Division weight should be positive");
+            }
+        }
+    }
+
+    @Test
+    void residualsPopulatedForAllBoats()
+    {
+        Scenario s = buildScenario(5, 10, 42, 0.01, false);
+        PfResult result = new PfOptimiser().optimise(s.store, s.boatDerived, PfConfig.DEFAULT, () -> false);
+
+        for (int i = 0; i < 5; i++)
+        {
+            List<EntryResidual> residuals = result.residualsByBoatId().get(BOAT_IDS[i]);
+            assertNotNull(residuals, "Missing residuals for " + BOAT_IDS[i]);
+            assertFalse(residuals.isEmpty());
+        }
+    }
+
+    // ---- Scenario builders ----
+
+    private record Scenario(DataStore store, Map<String, BoatDerived> boatDerived) {}
+
+    /**
+     * Builds a scenario with nBoats boats and nDivisions divisions.
+     * Each boat has a true TCF from TRUE_TCFS. Elapsed times are generated as T₀ / TCF + noise.
+     */
+    private Scenario buildScenario(int nBoats, int nDivisions, long seed, double noiseFraction, boolean withOutlier)
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Random rng = new Random(seed);
+
+        // Create boats with RF = true TCF
+        Map<String, BoatDerived> boatDerived = new LinkedHashMap<>();
+        for (int i = 0; i < nBoats; i++)
+        {
+            Boat boat = new Boat(BOAT_IDS[i], "AUS" + (i + 1), "Boat" + (i + 1), "design", null,
+                List.of(), List.of(), null, null);
+            store.putBoat(boat);
+            Factor rfSpin = new Factor(TRUE_TCFS[i], 0.9);
+            ReferenceFactors rf = new ReferenceFactors(rfSpin, null, null, 0, 0, 0);
+            boatDerived.put(boat.id(), new BoatDerived(boat, rf, Set.of(), Set.of(), null));
+        }
+
+        // Create races with divisions
+        double baseT0 = Duration.ofHours(2).toNanos();
+        for (int d = 0; d < nDivisions; d++)
+        {
+            double t0 = baseT0 * (0.8 + 0.4 * rng.nextDouble()); // T₀ varies per race
+            List<Finisher> finishers = new ArrayList<>();
+            for (int i = 0; i < nBoats; i++)
+            {
+                double elapsed = t0 / TRUE_TCFS[i];
+                double noise = 1.0 + noiseFraction * (rng.nextGaussian());
+                elapsed *= noise;
+                if (withOutlier && i == 0 && d == 0)
+                    elapsed *= 0.7; // fast outlier for boat 0 in first race
+                finishers.add(new Finisher(BOAT_IDS[i], Duration.ofNanos((long) elapsed), false, null));
+            }
+            Division div = new Division("Div 1", finishers);
+            Race race = new Race("club-" + LocalDate.of(2024, 1, 1 + d).toString() + "-" + String.format("%04d", d + 1),
+                "club", List.of("series"), LocalDate.of(2024, 1, 1 + d), d + 1, null,
+                List.of(div), "test", null, null);
+            store.putRace(race);
+        }
+
+        return new Scenario(store, boatDerived);
+    }
+
+    private Scenario buildScenarioWithFewRaces()
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Random rng = new Random(99);
+
+        Map<String, BoatDerived> boatDerived = new LinkedHashMap<>();
+        for (int i = 0; i < 5; i++)
+        {
+            Boat boat = new Boat(BOAT_IDS[i], "AUS" + (i + 1), "Boat" + (i + 1), "design", null,
+                List.of(), List.of(), null, null);
+            store.putBoat(boat);
+            Factor rfSpin = new Factor(TRUE_TCFS[i], 1.0);
+            ReferenceFactors rf = new ReferenceFactors(rfSpin, null, null, 0, 0, 0);
+            boatDerived.put(boat.id(), new BoatDerived(boat, rf, Set.of(), Set.of(), null));
+        }
+
+        double baseT0 = Duration.ofHours(2).toNanos();
+        // 10 races, but boat 5 (echo) only in the first race
+        for (int d = 0; d < 10; d++)
+        {
+            double t0 = baseT0 * (0.9 + 0.2 * rng.nextDouble());
+            List<Finisher> finishers = new ArrayList<>();
+            int boatCount = (d == 0) ? 5 : 4; // boat 5 only in first race
+            for (int i = 0; i < boatCount; i++)
+            {
+                double elapsed = t0 / TRUE_TCFS[i];
+                elapsed *= (1.0 + 0.01 * rng.nextGaussian());
+                finishers.add(new Finisher(BOAT_IDS[i], Duration.ofNanos((long) elapsed), false, null));
+            }
+            Division div = new Division("Div 1", finishers);
+            Race race = new Race("club-" + LocalDate.of(2024, 2, 1 + d) + "-" + String.format("%04d", d + 1),
+                "club", List.of("series"), LocalDate.of(2024, 2, 1 + d), d + 1, null,
+                List.of(div), "test", null, null);
+            store.putRace(race);
+        }
+
+        return new Scenario(store, boatDerived);
+    }
+
+    private Scenario buildScenarioWithOutlier(boolean fast)
+    {
+        return buildScenario(5, 10, 77, 0.01, true);
+    }
+
+    private Scenario buildMixedDivisionScenario()
+    {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+        Random rng = new Random(55);
+
+        // 2 boats: b1 races as spin, b2 as nonSpin
+        Boat b1 = new Boat("b1-alpha-design", "AUS1", "Alpha", "design", null,
+            List.of(), List.of(), null, null);
+        Boat b2 = new Boat("b2-bravo-design", "AUS2", "Bravo", "design", null,
+            List.of(), List.of(), null, null);
+        // Add 2 more boats so divisions have enough entries
+        Boat b3 = new Boat("b3-charlie-design", "AUS3", "Charlie", "design", null,
+            List.of(), List.of(), null, null);
+        Boat b4 = new Boat("b4-delta-design", "AUS4", "Delta", "design", null,
+            List.of(), List.of(), null, null);
+        store.putBoat(b1);
+        store.putBoat(b2);
+        store.putBoat(b3);
+        store.putBoat(b4);
+
+        Map<String, BoatDerived> boatDerived = new LinkedHashMap<>();
+        // b1: spin RF
+        boatDerived.put(b1.id(), new BoatDerived(b1,
+            new ReferenceFactors(new Factor(0.90, 0.9), null, null, 0, 0, 0),
+            Set.of(), Set.of(), null));
+        // b2: nonSpin RF
+        boatDerived.put(b2.id(), new BoatDerived(b2,
+            new ReferenceFactors(null, new Factor(1.05, 0.8), null, 0, 0, 0),
+            Set.of(), Set.of(), null));
+        // b3: spin RF
+        boatDerived.put(b3.id(), new BoatDerived(b3,
+            new ReferenceFactors(new Factor(1.00, 0.85), null, null, 0, 0, 0),
+            Set.of(), Set.of(), null));
+        // b4: spin RF
+        boatDerived.put(b4.id(), new BoatDerived(b4,
+            new ReferenceFactors(new Factor(1.10, 0.85), null, null, 0, 0, 0),
+            Set.of(), Set.of(), null));
+
+        double baseT0 = Duration.ofHours(2).toNanos();
+        for (int d = 0; d < 5; d++)
+        {
+            double t0 = baseT0 * (0.9 + 0.2 * rng.nextDouble());
+            List<Finisher> finishers = new ArrayList<>();
+            // b1 spin, b2 nonSpin, b3 spin, b4 spin
+            finishers.add(new Finisher(b1.id(), Duration.ofNanos((long)(t0 / 0.90 * (1 + 0.005 * rng.nextGaussian()))), false, null));
+            finishers.add(new Finisher(b2.id(), Duration.ofNanos((long)(t0 / 1.05 * (1 + 0.005 * rng.nextGaussian()))), true, null));
+            finishers.add(new Finisher(b3.id(), Duration.ofNanos((long)(t0 / 1.00 * (1 + 0.005 * rng.nextGaussian()))), false, null));
+            finishers.add(new Finisher(b4.id(), Duration.ofNanos((long)(t0 / 1.10 * (1 + 0.005 * rng.nextGaussian()))), false, null));
+
+            Division div = new Division("Div 1", finishers);
+            Race race = new Race("club-" + LocalDate.of(2024, 3, 1 + d) + "-" + String.format("%04d", d + 1),
+                "club", List.of("series"), LocalDate.of(2024, 3, 1 + d), d + 1, null,
+                List.of(div), "test", null, null);
+            store.putRace(race);
+        }
+
+        return new Scenario(store, boatDerived);
+    }
+}

@@ -1,4 +1,4 @@
-// Shared utilities used by all HPF pages
+// Shared utilities used by all PF pages
 
 function esc(val) {
     if (val == null) return '';
@@ -75,12 +75,12 @@ function errorBounds(factor, weight) {
     });
 })();
 
-// Auth state — loaded once per page; fires hpf:authready when done
-window.hpfAuth = { authenticated: false, email: null };
+// Auth state — loaded once per page; fires pf:authready when done
+window.pfAuth = { authenticated: false, email: null };
 (async function loadAuthState() {
     const data = await fetchJson('/auth/status');
     if (!data) return;
-    window.hpfAuth = { authenticated: data.authenticated, email: data.email || null,
+    window.pfAuth = { authenticated: data.authenticated, email: data.email || null,
                        devMode: !!data.devMode };
     const nav = document.querySelector('.site-nav');
     if (nav) {
@@ -94,7 +94,7 @@ window.hpfAuth = { authenticated: false, email: null };
         }
         nav.appendChild(widget);
     }
-    document.dispatchEvent(new CustomEvent('hpf:authready'));
+    document.dispatchEvent(new CustomEvent('pf:authready'));
 })();
 
 // Show an import-running banner on pages that have #import-banner

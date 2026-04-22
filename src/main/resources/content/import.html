@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HPF — Tasks</title>
+  <title>PF — Tasks</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -83,50 +83,50 @@
   </section>
 
   <section>
-    <h2>HPF Parameters <a href="ui-tips.md#configuration" class="info-btn" data-tip="Parameters controlling the HPF optimisation algorithm." target="_blank">ⓘ</a></h2>
+    <h2>PF Parameters <a href="ui-tips.md#configuration" class="info-btn" data-tip="Parameters controlling the PF optimisation algorithm." target="_blank">ⓘ</a></h2>
     <div style="display:grid;grid-template-columns:auto auto;gap:0.3rem 1rem;max-width:420px;align-items:center">
-      <label for="hpf-lambda">
-        Lambda (regularisation) <a href="ui-tips.md#config-hpf-lambda" class="info-btn" data-tip="Regularisation strength: pulls each boat&apos;s HPF toward its reference factor. Higher = more trust in certificates." target="_blank">ⓘ</a>:
+      <label for="pf-lambda">
+        Lambda (regularisation) <a href="ui-tips.md#config-pf-lambda" class="info-btn" data-tip="Regularisation strength: pulls each boat&apos;s PF toward its reference factor. Higher = more trust in certificates." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-lambda" step="0.1" min="0" style="width:6em">
+      <input type="number" id="pf-lambda" step="0.1" min="0" style="width:6em">
 
-      <label for="hpf-convergence">
-        Convergence threshold <a href="ui-tips.md#config-hpf-convergence" class="info-btn" data-tip="Inner loop stops when max change to any boat&apos;s log(HPF) is below this. Smaller = tighter but slower." target="_blank">ⓘ</a>:
+      <label for="pf-convergence">
+        Convergence threshold <a href="ui-tips.md#config-pf-convergence" class="info-btn" data-tip="Inner loop stops when max change to any boat&apos;s log(PF) is below this. Smaller = tighter but slower." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-convergence" step="0.00001" min="0" style="width:8em">
+      <input type="number" id="pf-convergence" step="0.00001" min="0" style="width:8em">
 
-      <label for="hpf-max-inner">
-        Max inner iterations <a href="ui-tips.md#config-hpf-max-inner" class="info-btn" data-tip="Maximum ALS iterations per reweighting cycle. Increase if the inner loop does not converge." target="_blank">ⓘ</a>:
+      <label for="pf-max-inner">
+        Max inner iterations <a href="ui-tips.md#config-pf-max-inner" class="info-btn" data-tip="Maximum ALS iterations per reweighting cycle. Increase if the inner loop does not converge." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-max-inner" step="1" min="1" style="width:6em">
+      <input type="number" id="pf-max-inner" step="1" min="1" style="width:6em">
 
-      <label for="hpf-max-outer">
-        Max outer iterations <a href="ui-tips.md#config-hpf-max-outer" class="info-btn" data-tip="Maximum number of outlier-reweighting cycles. Increase if the outer loop does not converge." target="_blank">ⓘ</a>:
+      <label for="pf-max-outer">
+        Max outer iterations <a href="ui-tips.md#config-pf-max-outer" class="info-btn" data-tip="Maximum number of outlier-reweighting cycles. Increase if the outer loop does not converge." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-max-outer" step="1" min="1" style="width:6em">
+      <input type="number" id="pf-max-outer" step="1" min="1" style="width:6em">
 
-      <label for="hpf-outlier-k">
-        Outlier K (IQR multiplier) <a href="ui-tips.md#config-hpf-outlier-k" class="info-btn" data-tip="IQR multiplier for Cauchy outlier down-weighting. Lower = more aggressive outlier suppression." target="_blank">ⓘ</a>:
+      <label for="pf-outlier-k">
+        Outlier K (IQR multiplier) <a href="ui-tips.md#config-pf-outlier-k" class="info-btn" data-tip="IQR multiplier for Cauchy outlier down-weighting. Lower = more aggressive outlier suppression." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-outlier-k" step="0.1" min="0" style="width:6em">
+      <input type="number" id="pf-outlier-k" step="0.1" min="0" style="width:6em">
 
-      <label for="hpf-asymmetry">
-        Asymmetry factor <a href="ui-tips.md#config-hpf-asymmetry" class="info-btn" data-tip="Extra penalty for boats finishing faster than predicted. Higher = trust unusually fast finishers less." target="_blank">ⓘ</a>:
+      <label for="pf-asymmetry">
+        Asymmetry factor <a href="ui-tips.md#config-pf-asymmetry" class="info-btn" data-tip="Extra penalty for boats finishing faster than predicted. Higher = trust unusually fast finishers less." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-asymmetry" step="0.1" min="0" style="width:6em">
+      <input type="number" id="pf-asymmetry" step="0.1" min="0" style="width:6em">
 
-      <label for="hpf-outer-damping">
-        Outer damping factor <a href="ui-tips.md#config-hpf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles (0–1). Lower values damp oscillation; 1.0 = no damping. Default 0.5." target="_blank">ⓘ</a>:
+      <label for="pf-outer-damping">
+        Outer damping factor <a href="ui-tips.md#config-pf-outer-damping" class="info-btn" data-tip="Blend fraction for weight updates between outer reweighting cycles (0–1). Lower values damp oscillation; 1.0 = no damping. Default 0.5." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-outer-damping" step="0.05" min="0.05" max="1.0" style="width:6em">
+      <input type="number" id="pf-outer-damping" step="0.05" min="0.05" max="1.0" style="width:6em">
 
-      <label for="hpf-outer-convergence">
-        Outer convergence threshold <a href="ui-tips.md#config-hpf-outer-convergence" class="info-btn" data-tip="Outer loop stops when max entry weight change is below this. Set higher (e.g. 0.3) if the dataset cannot reach the default 0.01." target="_blank">ⓘ</a>:
+      <label for="pf-outer-convergence">
+        Outer convergence threshold <a href="ui-tips.md#config-pf-outer-convergence" class="info-btn" data-tip="Outer loop stops when max entry weight change is below this. Set higher (e.g. 0.3) if the dataset cannot reach the default 0.01." target="_blank">ⓘ</a>:
       </label>
-      <input type="number" id="hpf-outer-convergence" step="0.01" min="0" style="width:8em">
+      <input type="number" id="pf-outer-convergence" step="0.01" min="0" style="width:8em">
     </div>
     <button onclick="saveSchedule()" style="margin-top:0.5rem"
-            title="Save all HPF parameters">Save</button>
+            title="Save all PF parameters">Save</button>
   </section>
 
   <script src="common.js"></script>

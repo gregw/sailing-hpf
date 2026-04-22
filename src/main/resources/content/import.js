@@ -13,7 +13,7 @@ const DISPLAY_NAMES = {
     'analysis':         'Analyse Certificates',
     'reference-factors':'Calculate Reference Factors',
     'build-indexes':    'Build Indexes',
-    'hpf-optimise':     'HPF Optimise'
+    'pf-optimise':     'PF Optimise'
 };
 
 let currentEntries = [];
@@ -21,7 +21,7 @@ let statusPoller = null;
 let prevRunningName = null;
 let prevRunningMode = null;
 
-function isWriteAllowed() { return window.hpfAuth?.authenticated; }
+function isWriteAllowed() { return window.pfAuth?.authenticated; }
 
 function applyAuthState() {
     const ok = isWriteAllowed();
@@ -57,15 +57,15 @@ async function loadImporters() {
     if (data.sailsysEndId != null)
         document.getElementById('sailsys-end-id').value = data.sailsysEndId;
 
-    if (data.hpfConfig) {
-        document.getElementById('hpf-lambda').value = data.hpfConfig.lambda;
-        document.getElementById('hpf-convergence').value = data.hpfConfig.convergenceThreshold;
-        document.getElementById('hpf-max-inner').value = data.hpfConfig.maxInnerIterations;
-        document.getElementById('hpf-max-outer').value = data.hpfConfig.maxOuterIterations;
-        document.getElementById('hpf-outlier-k').value = data.hpfConfig.outlierK;
-        document.getElementById('hpf-asymmetry').value = data.hpfConfig.asymmetryFactor;
-        document.getElementById('hpf-outer-damping').value = data.hpfConfig.outerDampingFactor;
-        document.getElementById('hpf-outer-convergence').value = data.hpfConfig.outerConvergenceThreshold;
+    if (data.pfConfig) {
+        document.getElementById('pf-lambda').value = data.pfConfig.lambda;
+        document.getElementById('pf-convergence').value = data.pfConfig.convergenceThreshold;
+        document.getElementById('pf-max-inner').value = data.pfConfig.maxInnerIterations;
+        document.getElementById('pf-max-outer').value = data.pfConfig.maxOuterIterations;
+        document.getElementById('pf-outlier-k').value = data.pfConfig.outlierK;
+        document.getElementById('pf-asymmetry').value = data.pfConfig.asymmetryFactor;
+        document.getElementById('pf-outer-damping').value = data.pfConfig.outerDampingFactor;
+        document.getElementById('pf-outer-convergence').value = data.pfConfig.outerConvergenceThreshold;
     }
 
     const anyRunning = currentEntries.some(e => e.status === 'running');
@@ -91,7 +91,7 @@ function taskTip(name) {
         'analysis':           'Builds the ConversionGraph from paired handicap observations.',
         'reference-factors':  'Computes IRC-equivalent reference factors for all boats.',
         'build-indexes':      'Rebuilds navigation indexes (boat→races, design→boats, etc.).',
-        'hpf-optimise':       'Runs the HPF optimiser to produce Historical Performance Factors.',
+        'pf-optimise':       'Runs the PF optimiser to produce Performance Factors.',
     };
     return tips[name] || name;
 }
@@ -156,7 +156,7 @@ function buildDayPicker(scheduledDays) {
     ).join('');
 }
 
-document.addEventListener('hpf:authready', applyAuthState);
+document.addEventListener('pf:authready', applyAuthState);
 
 async function runImporter(name, mode) {
     if (!isWriteAllowed()) return;
@@ -234,20 +234,20 @@ async function saveSchedule() {
     const sailsysEndId = sailsysEndVal > 0 ? sailsysEndVal : null;
     const yearVal = parseInt(document.getElementById('target-irc-year').value, 10);
     const targetIrcYear = yearVal > 0 ? yearVal : null;
-    const hpfLambda = parseFloat(document.getElementById('hpf-lambda').value) || null;
-    const hpfConvergenceThreshold = parseFloat(document.getElementById('hpf-convergence').value) || null;
-    const hpfMaxInnerIterations = parseInt(document.getElementById('hpf-max-inner').value, 10) || null;
-    const hpfMaxOuterIterations = parseInt(document.getElementById('hpf-max-outer').value, 10) || null;
-    const hpfOutlierK = parseFloat(document.getElementById('hpf-outlier-k').value) || null;
-    const hpfAsymmetryFactor = parseFloat(document.getElementById('hpf-asymmetry').value) || null;
-    const hpfOuterDampingFactor = parseFloat(document.getElementById('hpf-outer-damping').value) || null;
-    const hpfOuterConvergenceThreshold = parseFloat(document.getElementById('hpf-outer-convergence').value) || null;
+    const pfLambda = parseFloat(document.getElementById('pf-lambda').value) || null;
+    const pfConvergenceThreshold = parseFloat(document.getElementById('pf-convergence').value) || null;
+    const pfMaxInnerIterations = parseInt(document.getElementById('pf-max-inner').value, 10) || null;
+    const pfMaxOuterIterations = parseInt(document.getElementById('pf-max-outer').value, 10) || null;
+    const pfOutlierK = parseFloat(document.getElementById('pf-outlier-k').value) || null;
+    const pfAsymmetryFactor = parseFloat(document.getElementById('pf-asymmetry').value) || null;
+    const pfOuterDampingFactor = parseFloat(document.getElementById('pf-outer-damping').value) || null;
+    const pfOuterConvergenceThreshold = parseFloat(document.getElementById('pf-outer-convergence').value) || null;
     const resp = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ days, time, importers, sailsysStartId, sailsysEndId, targetIrcYear,
-            hpfLambda, hpfConvergenceThreshold, hpfMaxInnerIterations, hpfMaxOuterIterations,
-            hpfOutlierK, hpfAsymmetryFactor, hpfOuterDampingFactor, hpfOuterConvergenceThreshold })
+            pfLambda, pfConvergenceThreshold, pfMaxInnerIterations, pfMaxOuterIterations,
+            pfOutlierK, pfAsymmetryFactor, pfOuterDampingFactor, pfOuterConvergenceThreshold })
     });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: 'unknown error' }));

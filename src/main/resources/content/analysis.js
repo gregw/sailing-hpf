@@ -621,12 +621,12 @@ function renderNetworkGraph(data) {
     });
 }
 
-async function loadHpfQuality() {
+async function loadPfQuality() {
     try {
-        const resp = await fetch('/api/hpf/quality');
-        if (resp.status === 404) { document.getElementById('hpf-quality').style.display = 'none'; return; }
+        const resp = await fetch('/api/pf/quality');
+        if (resp.status === 404) { document.getElementById('pf-quality').style.display = 'none'; return; }
         if (!resp.ok) return;
-        renderHpfQuality(await resp.json());
+        renderPfQuality(await resp.json());
     } catch (e) { /* ignore */ }
 }
 
@@ -637,8 +637,8 @@ function fmtTrace(trace) {
     return [...trace.slice(0, 3).map(f), '\u2026', ...trace.slice(-3).map(f)].join(' → ');
 }
 
-function renderHpfQuality(q) {
-    const section = document.getElementById('hpf-quality');
+function renderPfQuality(q) {
+    const section = document.getElementById('pf-quality');
     section.style.display = '';
     const innerStatus = q.innerConverged
         ? `converged in ${q.innerIterations} iterations (max\u0394=${fmt(q.finalMaxDelta)})`
@@ -653,17 +653,17 @@ function renderHpfQuality(q) {
     const medRes = q.medianResidual;
     const fitColour = medRes < 0.03 ? '#2e7d32' : medRes < 0.08 ? '#f57f17' : '#c62828';
     const dwPct = q.totalEntries > 0 ? (100 * q.downWeightedEntries / q.totalEntries).toFixed(1) : '0';
-    document.getElementById('hpf-quality-content').innerHTML = `
+    document.getElementById('pf-quality-content').innerHTML = `
       <table style="border-collapse:collapse;font-size:0.95em">
-        <tr><td style="padding:2px 1em"><b>Convergence</b> ${infoBtn('hpf-quality-convergence','Whether the inner (factor) and outer (weight) iteration loops converged within the allowed number of iterations.')}</td>
+        <tr><td style="padding:2px 1em"><b>Convergence</b> ${infoBtn('pf-quality-convergence','Whether the inner (factor) and outer (weight) iteration loops converged within the allowed number of iterations.')}</td>
             <td>Inner: ${innerStatus} | Outer: ${outerStatus}</td></tr>
-        <tr><td style="padding:2px 1em"><b>Scale</b> ${infoBtn('hpf-quality-scale','Number of boats, race divisions, and individual race entries used in the most recent HPF optimisation run.')}</td>
-            <td>${q.boatsWithHpf} boats, ${q.divisionsUsed} divisions, ${q.totalEntries} entries</td></tr>
-        <tr><td style="padding:2px 1em"><b>Fit quality</b> ${infoBtn('hpf-quality-fit','Median absolute residual and spread of residuals across all race entries. Lower values indicate a better fit between predicted and observed factors.')}</td>
+        <tr><td style="padding:2px 1em"><b>Scale</b> ${infoBtn('pf-quality-scale','Number of boats, race divisions, and individual race entries used in the most recent PF optimisation run.')}</td>
+            <td>${q.boatsWithPf} boats, ${q.divisionsUsed} divisions, ${q.totalEntries} entries</td></tr>
+        <tr><td style="padding:2px 1em"><b>Fit quality</b> ${infoBtn('pf-quality-fit','Median absolute residual and spread of residuals across all race entries. Lower values indicate a better fit between predicted and observed factors.')}</td>
             <td style="color:${fitColour}">Median |residual|: ${fmt(medRes)} (residual IQR: ${fmt(q.iqrResidual)}, |residual| P95: ${fmt(q.pct95Residual)})</td></tr>
-        <tr><td style="padding:2px 1em"><b>Outliers</b> ${infoBtn('hpf-quality-outliers','Entries assigned reduced weight due to large residuals, and divisions with high internal spread. Outlier down-weighting reduces their influence on the optimised HPF values.')}</td>
+        <tr><td style="padding:2px 1em"><b>Outliers</b> ${infoBtn('pf-quality-outliers','Entries assigned reduced weight due to large residuals, and divisions with high internal spread. Outlier down-weighting reduces their influence on the optimised PF values.')}</td>
             <td>${q.downWeightedEntries} entries down-weighted (${dwPct}%), ${q.highDispersionDivisions} high-dispersion divisions</td></tr>
-        <tr><td style="padding:2px 1em"><b>Confidence</b> ${infoBtn('hpf-quality-confidence','Median boat confidence score, reflecting the quantity and quality of race data available per boat. Higher confidence means the HPF estimate is better supported by data.')}</td>
+        <tr><td style="padding:2px 1em"><b>Confidence</b> ${infoBtn('pf-quality-confidence','Median boat confidence score, reflecting the quantity and quality of race data available per boat. Higher confidence means the PF estimate is better supported by data.')}</td>
             <td>Median boat confidence: ${fmt(q.medianBoatConfidence)}</td></tr>
       </table>`;
 }
@@ -676,4 +676,4 @@ function fmt(v) {
 
 loadAnalysisList();
 loadNetwork();
-loadHpfQuality();
+loadPfQuality();

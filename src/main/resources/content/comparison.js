@@ -6,14 +6,14 @@ const PALETTE = [
     '#f39c12', '#1abc9c'
 ];
 
-const STORAGE_KEY = 'hpf-comparison-items';
+const STORAGE_KEY = 'pf-comparison-items';
 
 let selectedItems   = [];   // {type:'boat', id, label, color}
 let allAvailable    = false;
 let selectedVariant = 'spin';
 let showErrorBars    = false;
 let showRfLine       = true;
-let showHpfLine      = true;
+let showPfLine      = true;
 let showTrendLinear  = true;
 let showTrendSliding = true;
 let hideLegend       = false;
@@ -25,7 +25,7 @@ let candidateBoats  = [];
 let focusedBoatId   = null;
 let boatDebounce    = null;
 let lastChartData   = null;
-let calcSort        = { col: 'hpf', dir: 'desc' }; // handicap calculator sort state
+let calcSort        = { col: 'pf', dir: 'desc' }; // handicap calculator sort state
 
 function nextColor() {
     return PALETTE[selectedItems.length % PALETTE.length];
@@ -201,7 +201,7 @@ function slidingAverage(entries, n, drops, seed) {
     const pts = [...entries].sort((a, b) => a.date.localeCompare(b.date));
     const xs = [], ys = [];
     const keep = Math.max(1, n - (drops || 0));
-    // Build N virtual seed entries at the HPF value so the average is fully initialised
+    // Build N virtual seed entries at the PF value so the average is fully initialised
     // from race 1; these are not plotted but fill the window before real data.
     const virtual = seed != null
         ? Array.from({ length: n }, () => ({ backCalcFactor: seed }))
@@ -228,7 +228,7 @@ async function loadChart() {
     if (boatIds.length === 0) {
         Plotly.purge('comparison-chart');
         lastChartData = null;
-        document.getElementById('hpf-calc').style.display = 'none';
+        document.getElementById('pf-calc').style.display = 'none';
         return;
     }
 
@@ -312,8 +312,8 @@ function renderChart(data) {
 
         const rfFactor  = selectedVariant === 'nonSpin' ? boat.rfNonSpin
             : selectedVariant === 'twoHanded' ? null : boat.rfSpin;
-        const hpfFactor = selectedVariant === 'nonSpin' ? boat.hpfNonSpin
-            : selectedVariant === 'twoHanded' ? boat.hpfTwoHanded : boat.hpfSpin;
+        const pfFactor = selectedVariant === 'nonSpin' ? boat.pfNonSpin
+            : selectedVariant === 'twoHanded' ? boat.pfTwoHanded : boat.pfSpin;
 
         if (showRfLine && rfFactor) {
             traces.push({
@@ -325,14 +325,14 @@ function renderChart(data) {
                 hovertemplate: `${esc(name)} RF: %{y:.4f}<extra></extra>`
             });
         }
-        if (showHpfLine && hpfFactor) {
+        if (showPfLine && pfFactor) {
             traces.push({
-                x: lineX, y: [hpfFactor.value, hpfFactor.value],
+                x: lineX, y: [pfFactor.value, pfFactor.value],
                 type: 'scatter', mode: 'lines',
-                name: `${name} HPF`,
+                name: `${name} PF`,
                 line: { color, dash: 'solid', width: 2 },
                 legendgroup: boat.id,
-                hovertemplate: `${esc(name)} HPF: %{y:.4f}<extra></extra>`
+                hovertemplate: `${esc(name)} PF: %{y:.4f}<extra></extra>`
             });
         }
 
@@ -383,8 +383,8 @@ function renderChart(data) {
                 });
             }
             if (showTrendSliding) {
-                const hpfSeed = hpfFactor ? hpfFactor.value : null;
-                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, hpfSeed);
+                const pfSeed = pfFactor ? pfFactor.value : null;
+                const s = slidingAverage(entries, slidingAverageCount, slidingAverageDrops, pfSeed);
                 const best = slidingAverageCount - slidingAverageDrops;
                 const avgLabel = slidingAverageDrops > 0
                     ? `best ${best} of ${slidingAverageCount} avg`
@@ -430,12 +430,12 @@ function renderChart(data) {
 // ---- Handicap calculator ----
 
 function renderHandicapCalc(data) {
-    const section = document.getElementById('hpf-calc');
+    const section = document.getElementById('pf-calc');
     const table   = section.querySelector('table');
 
     // Snapshot any values the user has typed so a re-render (e.g. sort click) doesn't wipe them.
     const enteredValues = new Map();
-    document.querySelectorAll('.hpf-calc-input').forEach(inp => {
+    document.querySelectorAll('.pf-calc-input').forEach(inp => {
         if (inp.value !== '') enteredValues.set(inp.dataset.boatId, inp.value);
     });
 
@@ -446,9 +446,9 @@ function renderHandicapCalc(data) {
         const color = item ? item.color : '#888';
         const name  = item ? item.label : (b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name);
 
-        const hpfFactor = selectedVariant === 'nonSpin'   ? b.hpfNonSpin
-                        : selectedVariant === 'twoHanded' ? b.hpfTwoHanded
-                        : b.hpfSpin;
+        const pfFactor = selectedVariant === 'nonSpin'   ? b.pfNonSpin
+                        : selectedVariant === 'twoHanded' ? b.pfTwoHanded
+                        : b.pfSpin;
         const rfFactor  = selectedVariant === 'nonSpin'   ? b.rfNonSpin
                         : selectedVariant === 'twoHanded' ? null
                         : b.rfSpin;
@@ -463,11 +463,11 @@ function renderHandicapCalc(data) {
 
         return {
             id: b.id, name, color,
-            hpf:     hpfFactor ? hpfFactor.value : null,
+            pf:     pfFactor ? pfFactor.value : null,
             rf:      rfFactor  ? rfFactor.value  : null,
             bestFit
         };
-    }).filter(b => b.hpf != null);
+    }).filter(b => b.pf != null);
 
     if (calcBoats.length === 0) {
         section.style.display = 'none';
@@ -477,19 +477,19 @@ function renderHandicapCalc(data) {
     section.style.display = '';
     table.innerHTML = '';
 
-    const factorTypes = showBestFit ? ['hpf', 'rf', 'bestFit'] : ['hpf', 'rf'];
+    const factorTypes = showBestFit ? ['pf', 'rf', 'bestFit'] : ['pf', 'rf'];
 
     // Column definitions: { key, label, align }. key matches dataset.factorType for value columns,
     // 'name' for the boat-name column, 'input' for the entered handicap.
     const cols = [
         { key: 'name',  label: 'Boat',           align: 'left'   },
         { key: 'input', label: 'Enter handicap', align: 'center' },
-        { key: 'hpf',   label: 'HPF',            align: 'right'  },
+        { key: 'pf',   label: 'PF',            align: 'right'  },
         { key: 'rf',    label: 'RF',             align: 'right'  },
     ];
     if (showBestFit) cols.push({ key: 'bestFit', label: 'Best Fit', align: 'right' });
 
-    if (!cols.some(c => c.key === calcSort.col)) calcSort = { col: 'hpf', dir: 'desc' };
+    if (!cols.some(c => c.key === calcSort.col)) calcSort = { col: 'pf', dir: 'desc' };
 
     sortCalcBoats(calcBoats);
 
@@ -532,7 +532,7 @@ function renderHandicapCalc(data) {
                 input.step = '0.0001';
                 input.min  = '0.1';
                 input.max  = '2.0';
-                input.className = 'hpf-calc-input';
+                input.className = 'pf-calc-input';
                 input.dataset.boatId = b.id;
                 input.placeholder = 'enter…';
                 input.style.cssText = 'width:90px;font-family:monospace;text-align:right;';
@@ -542,7 +542,7 @@ function renderHandicapCalc(data) {
                 tr.appendChild(tdInput);
             } else {
                 const td = document.createElement('td');
-                td.className = 'hpf-calc-value';
+                td.className = 'pf-calc-value';
                 td.style.cssText = 'font-family:monospace;padding:2px 8px;text-align:right;';
                 const v = b[c.key];
                 td.textContent = v != null ? v.toFixed(4) : '—';
@@ -566,8 +566,8 @@ function sortCalcBoats(calcBoats) {
     if (col === 'name') {
         calcBoats.sort((a, b) => mul * a.name.localeCompare(b.name));
     } else if (col === 'input') {
-        // No entered values yet at render time; fall back to HPF order so rows aren't arbitrary.
-        calcBoats.sort((a, b) => mul * ((a.hpf ?? 0) - (b.hpf ?? 0)));
+        // No entered values yet at render time; fall back to PF order so rows aren't arbitrary.
+        calcBoats.sort((a, b) => mul * ((a.pf ?? 0) - (b.pf ?? 0)));
     } else {
         calcBoats.sort((a, b) => {
             const av = a[col], bv = b[col];
@@ -611,7 +611,7 @@ function confidenceLabel(cv) {
 }
 
 function restoreAll() {
-    document.querySelectorAll('.hpf-calc-value').forEach(td => {
+    document.querySelectorAll('.pf-calc-value').forEach(td => {
         const origStr = td.dataset.origValue;
         td.textContent = origStr ? parseFloat(origStr).toFixed(4) : '—';
         td.style.color = '';
@@ -620,7 +620,7 @@ function restoreAll() {
 }
 
 function scaleSingle(anchor, calcBoats) {
-    document.querySelectorAll('.hpf-calc-value').forEach(td => {
+    document.querySelectorAll('.pf-calc-value').forEach(td => {
         const ft      = td.dataset.factorType;
         const origStr = td.dataset.origValue;
         if (!origStr) return;
@@ -648,7 +648,7 @@ function scaleMulti(anchors, calcBoats) {
 
     // Collect factor types from the cells
     const ftSet = new Set();
-    document.querySelectorAll('.hpf-calc-value').forEach(td => ftSet.add(td.dataset.factorType));
+    document.querySelectorAll('.pf-calc-value').forEach(td => ftSet.add(td.dataset.factorType));
 
     // Per factor type: compute ratios, mean, stddev
     const ftStats = {};
@@ -671,7 +671,7 @@ function scaleMulti(anchors, calcBoats) {
     }
 
     // Update all value cells
-    document.querySelectorAll('.hpf-calc-value').forEach(td => {
+    document.querySelectorAll('.pf-calc-value').forEach(td => {
         const ft      = td.dataset.factorType;
         const boatId  = td.dataset.boatId;
         const origStr = td.dataset.origValue;
@@ -722,7 +722,7 @@ function scaleMulti(anchors, calcBoats) {
 
 function recalcAll(calcBoats) {
     const anchors = [];
-    document.querySelectorAll('.hpf-calc-input').forEach(inp => {
+    document.querySelectorAll('.pf-calc-input').forEach(inp => {
         const v = parseFloat(inp.value);
         if (!isNaN(v)) {
             const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
@@ -863,18 +863,18 @@ function renderElapsedChart(divId, data, colorA, colorB) {
         });
     }
 
-    // Expected HPF ratio line (through origin)
-    const hpfA = selectedVariant === 'nonSpin' ? data.boatA.hpfNonSpin
-               : selectedVariant === 'twoHanded' ? data.boatA.hpfTwoHanded : data.boatA.hpfSpin;
-    const hpfB = selectedVariant === 'nonSpin' ? data.boatB.hpfNonSpin
-               : selectedVariant === 'twoHanded' ? data.boatB.hpfTwoHanded : data.boatB.hpfSpin;
-    if (hpfA && hpfB && hpfA.value && hpfB.value) {
-        const slope = hpfB.value / hpfA.value;
+    // Expected PF ratio line (through origin)
+    const pfA = selectedVariant === 'nonSpin' ? data.boatA.pfNonSpin
+               : selectedVariant === 'twoHanded' ? data.boatA.pfTwoHanded : data.boatA.pfSpin;
+    const pfB = selectedVariant === 'nonSpin' ? data.boatB.pfNonSpin
+               : selectedVariant === 'twoHanded' ? data.boatB.pfTwoHanded : data.boatB.pfSpin;
+    if (pfA && pfB && pfA.value && pfB.value) {
+        const slope = pfB.value / pfA.value;
         traces.push({
             x: [x0, x1],
             y: [0, slope * x1],
             type: 'scatter', mode: 'lines',
-            name: `HPF ratio (${hpfB.value.toFixed(4)} / ${hpfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
+            name: `PF ratio (${pfB.value.toFixed(4)} / ${pfA.value.toFixed(4)} = ${slope.toFixed(4)})`,
             line: { color: colorB, width: 2, dash: 'dash' }
         });
     }
@@ -945,7 +945,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('variant-selector').addEventListener('change', onVariantChange);
     document.getElementById('show-rf-line')       .addEventListener('change', e => { showRfLine          = e.target.checked; if (lastChartData) renderChart(lastChartData); });
-    document.getElementById('show-hpf-line')      .addEventListener('change', e => { showHpfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
+    document.getElementById('show-pf-line')      .addEventListener('change', e => { showPfLine         = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-linear') .addEventListener('change', e => { showTrendLinear    = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('show-trend-sliding').addEventListener('change', e => { showTrendSliding   = e.target.checked; if (lastChartData) renderChart(lastChartData); });
     document.getElementById('hide-legend')       .addEventListener('change', e => { hideLegend         = e.target.checked; if (lastChartData) renderChart(lastChartData); loadElapsedCharts(); });

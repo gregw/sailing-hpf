@@ -72,11 +72,11 @@ const COLUMNS = {
                   ? weightSpan(v.value, v.value.toFixed(4), v.weight)
                   : '<span style="color:#bbb">—</span>';
           } },
-        { label: 'HPF', anchor: 'col-boat-hpf', sortKey: 'hpf',
-          tip: 'Historical Performance Factor for the selected variant — back-calculated time correction factor optimized over this boat\'s racing history. Colour: green = high confidence, red = low.',
+        { label: 'PF', anchor: 'col-boat-pf', sortKey: 'pf',
+          tip: 'Performance Factor for the selected variant — back-calculated time correction factor optimized over this boat\'s racing history. Colour: green = high confidence, red = low.',
           render: item => {
-              const v = boatVariant === 'nonSpin' ? item.hpfNonSpin
-                      : boatVariant === 'twoHanded' ? item.hpfTwoHanded : item.hpf;
+              const v = boatVariant === 'nonSpin' ? item.pfNonSpin
+                      : boatVariant === 'twoHanded' ? item.pfTwoHanded : item.pf;
               return v && v.value != null
                   ? weightSpan(v.value, v.value.toFixed(4), v.weight)
                   : '<span style="color:#bbb">—</span>';
@@ -152,7 +152,7 @@ const COLUMNS = {
           render: item => item.races != null ? String(item.races) : '',
           action: item => { setFilter('races', 'seriesId', item.id, 'Series: ' + (item.name || item.id)); switchTab('races'); } },
         { label: 'Excl',      key: 'excluded', type: 'toggle', anchor: 'col-series-excl',
-          tip: 'Excluded series — all races in this series are excluded from HPF calculations.' },
+          tip: 'Excluded series — all races in this series are excluded from PF calculations.' },
     ],
     races: [
         { label: 'ID',        key: 'id',        anchor: 'col-race-id',        tip: 'Unique race identifier: clubId–date–number.', cls: 'id-col' },
@@ -167,7 +167,7 @@ const COLUMNS = {
         { label: 'Race',      key: 'name',      anchor: 'col-race-name',      tip: 'Race name or number within the series.' },
         { label: 'Finishers', key: 'finishers',    anchor: 'col-race-finishers',   tip: 'Total finishers across all divisions in this race.' },
         { label: 'Excl',      key: 'excluded',  type: 'toggle', anchor: 'col-race-excl',
-          tip: 'Excluded races are not used in HPF calculations.' },
+          tip: 'Excluded races are not used in PF calculations.' },
     ],
 };
 
@@ -176,9 +176,9 @@ let boatVariant = 'spin';
 function setBoatVariant(v) {
     boatVariant = v;
     const rfCol  = COLUMNS.boats.find(c => c.anchor === 'col-boat-rf');
-    const hpfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-hpf');
+    const pfCol = COLUMNS.boats.find(c => c.anchor === 'col-boat-pf');
     if (rfCol)  rfCol.sortKey  = v === 'nonSpin' ? 'nonSpinRef'   : v === 'twoHanded' ? 'twoHandedRef' : 'spinRef';
-    if (hpfCol) hpfCol.sortKey = v === 'nonSpin' ? 'hpfNonSpin'   : v === 'twoHanded' ? 'hpfTwoHanded' : 'hpf';
+    if (pfCol) pfCol.sortKey = v === 'nonSpin' ? 'pfNonSpin'   : v === 'twoHanded' ? 'pfTwoHanded' : 'pf';
     loadList('boats', 0);
 }
 
@@ -209,7 +209,7 @@ let showRaceTrendLine = false;
 let showRaceRfLine    = true;
 let preferredDivision = null;
 
-function isWriteAllowed() { return window.hpfAuth?.authenticated; }
+function isWriteAllowed() { return window.pfAuth?.authenticated; }
 
 function switchTab(entity) {
     ['clubs', 'boats', 'designs', 'series', 'races'].forEach(e => {
@@ -468,10 +468,10 @@ async function loadDetail(entity, id) {
 
     if (entity === 'boats') {
         document.getElementById('ref-factors-boats').innerHTML = '';
-        const hpfDiv = document.getElementById('hpf-detail-boats');
-        hpfDiv.innerHTML = '<em>Loading…</em>';
-        const hpfData = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/hpf');
-        hpfDiv.innerHTML = hpfData ? renderBoatHpf(hpfData) : '<em>No HPF data available</em>';
+        const pfDiv = document.getElementById('pf-detail-boats');
+        pfDiv.innerHTML = '<em>Loading…</em>';
+        const pfData = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/pf');
+        pfDiv.innerHTML = pfData ? renderBoatPf(pfData) : '<em>No PF data available</em>';
 
         const aliasDiv = document.getElementById('aliases-boats');
         const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
@@ -489,7 +489,7 @@ async function loadDetail(entity, id) {
     if (entity === 'races') {
         document.getElementById('division-section-races').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (entity === 'boats') {
-        const heading = document.getElementById('hpf-boat-heading');
+        const heading = document.getElementById('pf-boat-heading');
         if (heading) window.scrollTo(0, heading.getBoundingClientRect().top + window.scrollY);
     } else {
         panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -510,26 +510,26 @@ function renderBoatAliases(aliases) {
       </table>`;
 }
 
-function renderBoatHpf(data) {
-    const boatHeading = `<div id="hpf-boat-heading" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;">${data.boatName ? esc(data.boatName) : ''}</div>`;
+function renderBoatPf(data) {
+    const boatHeading = `<div id="pf-boat-heading" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;">${data.boatName ? esc(data.boatName) : ''}</div>`;
 
-    function row(label, hpf, rf) {
-        if (!hpf && !rf) return `<tr><td>${label}</td><td colspan="7" style="color:#999">—</td></tr>`;
+    function row(label, pf, rf) {
+        if (!pf && !rf) return `<tr><td>${label}</td><td colspan="7" style="color:#999">—</td></tr>`;
         const rfVal    = rf  ? rf.value.toFixed(4)   : '—';
         const rfWt     = rf  ? rf.weight.toFixed(3)  : '—';
         const rfGen    = rf  && rf.generation != null ? rf.generation : '—';
-        const hpfVal   = hpf ? hpf.value.toFixed(4)  : '—';
-        const hpfWt    = hpf ? hpf.weight.toFixed(3) : '—';
-        const delta    = hpf && hpf.referenceDelta != null
-            ? (hpf.referenceDelta >= 0 ? '+' : '') + hpf.referenceDelta.toFixed(4) : '—';
-        const races    = hpf ? hpf.raceCount : '—';
+        const pfVal   = pf ? pf.value.toFixed(4)  : '—';
+        const pfWt    = pf ? pf.weight.toFixed(3) : '—';
+        const delta    = pf && pf.referenceDelta != null
+            ? (pf.referenceDelta >= 0 ? '+' : '') + pf.referenceDelta.toFixed(4) : '—';
+        const races    = pf ? pf.raceCount : '—';
         return `<tr>
           <td>${label}</td>
           <td>${rfVal}</td>
           <td>${rfWt}</td>
           <td>${rfGen}</td>
-          <td>${hpfVal}</td>
-          <td>${hpfWt}</td>
+          <td>${pfVal}</td>
+          <td>${pfWt}</td>
           <td>${delta}</td>
           <td>${races}</td>
         </tr>`;
@@ -538,14 +538,14 @@ function renderBoatHpf(data) {
     let html = boatHeading + `<strong>Performance factors (${data.currentYear})</strong>
       <table style="width:auto;margin-top:0.4rem;">
         <thead><tr>
-          <th>Variant${infoBtn('col-hpf-variant','Spin, Non-Spin, or Two-Handed handicap variant.')}</th>
-          <th>RF${infoBtn('col-hpf-rf','Reference Factor — IRC-equivalent handicap derived from certificates.')}</th>
+          <th>Variant${infoBtn('col-pf-variant','Spin, Non-Spin, or Two-Handed handicap variant.')}</th>
+          <th>RF${infoBtn('col-pf-rf','Reference Factor — IRC-equivalent handicap derived from certificates.')}</th>
           <th>RF Wt${infoBtn('col-ref-weight','RF confidence weight: 1.0 = direct certificate, lower = inferred or multi-hop conversion.')}</th>
           <th>Gen${infoBtn('col-rf-gen','RF generation — the pipeline step that assigned this factor. Lower = earlier/more-direct; higher = later propagation or cross-variant fill.')}</th>
-          <th>HPF${infoBtn('col-hpf-value','Historical Performance Factor — back-calculated handicap averaged across this boat\'s race history.')}</th>
-          <th>HPF Wt${infoBtn('col-hpf-weight','HPF confidence weight — proportional to number of informative races.')}</th>
-          <th>Delta${infoBtn('col-hpf-delta','HPF minus RF. Near zero = race history is consistent with the certificate.')}</th>
-          <th>Races${infoBtn('col-hpf-races','Number of races contributing to this HPF estimate.')}</th>
+          <th>PF${infoBtn('col-pf-value','Performance Factor — back-calculated handicap averaged across this boat\'s race history.')}</th>
+          <th>PF Wt${infoBtn('col-pf-weight','PF confidence weight — proportional to number of informative races.')}</th>
+          <th>Delta${infoBtn('col-pf-delta','PF minus RF. Near zero = race history is consistent with the certificate.')}</th>
+          <th>Races${infoBtn('col-pf-races','Number of races contributing to this PF estimate.')}</th>
         </tr></thead>
         <tbody>
           ${row('Spin',       data.spin,      data.rfSpin)}
@@ -558,7 +558,7 @@ function renderBoatHpf(data) {
         const score = data.profile.overallScore != null ? data.profile.overallScore.toFixed(3) : '—';
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile','Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. NonChaotic: whether inconsistency correlates with fleet-wide conditions. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
         html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
-        html += `  <div id="hpf-profile-chart"></div>`;
+        html += `  <div id="pf-profile-chart"></div>`;
         html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">Overall: ${score}</div>`;
         html += `</div>`;
         setTimeout(() => renderProfileChart(data.profile), 0);
@@ -570,9 +570,9 @@ function renderBoatHpf(data) {
     </div>`;
 
     if (data.residuals && data.residuals.length > 0) {
-        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the HPF optimiser. Points close to zero indicate the boat raced close to its HPF.')}</div>`;
+        html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">Per-race residuals ${infoBtn('chart-residuals','Scatter plot of back-calculated factor per race over time. Each point is one race division; colour intensity reflects the entry weight used in the PF optimiser. Points close to zero indicate the boat raced close to its PF.')}</div>`;
         html += `<label style="font-size:0.85rem;font-weight:normal;"><input type="checkbox" id="residual-last12" onchange="window._residualLast12=this.checked; renderResidualChart(window._lastResiduals)"> Last 12 months only</label>`;
-        html += '<div id="hpf-residual-chart"></div>';
+        html += '<div id="pf-residual-chart"></div>';
         setTimeout(() => {
             // Restore checkbox state across prev/next navigation
             const cb = document.getElementById('residual-last12');
@@ -585,7 +585,7 @@ function renderBoatHpf(data) {
 }
 
 function renderResidualChart(residuals) {
-    const container = document.getElementById('hpf-residual-chart');
+    const container = document.getElementById('pf-residual-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
     const cb = document.getElementById('residual-last12');
@@ -600,7 +600,7 @@ function renderResidualChart(residuals) {
     const nonSpin = residuals.filter(r => r.nonSpinnaker);
 
     // Negate residuals so faster/better results plot above the zero line.
-    // Raw residual = log(elapsed) + log(HPF) - log(T_div); positive means slower than reference.
+    // Raw residual = log(elapsed) + log(PF) - log(T_div); positive means slower than reference.
     function makeTrace(entries, name, baseColor) {
         return {
             x: entries.map(e => e.date),
@@ -656,7 +656,7 @@ function renderResidualChart(residuals) {
 }
 
 function renderProfileChart(profile) {
-    const container = document.getElementById('hpf-profile-chart');
+    const container = document.getElementById('pf-profile-chart');
     if (!container || typeof Plotly === 'undefined') return;
 
     // Spoke order matches polygon area calculation: Frequency, Consistency, Diversity, NonChaotic, Stability
@@ -753,7 +753,7 @@ function hideMergePanel(entity) {
     document.getElementById('merge-panel-' + entity).style.display = 'none';
 }
 
-document.addEventListener('hpf:authready', () => {
+document.addEventListener('pf:authready', () => {
     loadList(state.activeTab, 0);
     applyMergeAuthState();
 });
@@ -1139,16 +1139,16 @@ async function loadRaceDivChart(raceId, divisionName) {
     if (labelEl) labelEl.textContent = 'Variant: ' + (VARIANT_LABELS[data.divisionVariant] ?? data.divisionVariant ?? '');
 
     // Show note about excluded finishers
-    const plotted = data.finishers.filter(f => f.hpf != null && f.elapsed > 0).length;
+    const plotted = data.finishers.filter(f => f.pf != null && f.elapsed > 0).length;
     const noteEl = document.getElementById('race-division-note');
     if (noteEl) {
         const total = data.totalFinishers ?? data.finishers.length;
         if (plotted < total) {
             const apiExcluded = total - data.finishers.length;
-            const noHpf = data.finishers.length - plotted;
+            const noPf = data.finishers.length - plotted;
             let parts = [];
             if (apiExcluded > 0) parts.push(apiExcluded + ' no data');
-            if (noHpf > 0) parts.push(noHpf + ' no HPF');
+            if (noPf > 0) parts.push(noPf + ' no PF');
             noteEl.textContent = 'Showing ' + plotted + ' of ' + total + ' finishers (' + parts.join(', ') + ')';
         } else {
             noteEl.textContent = '';
@@ -1159,17 +1159,17 @@ async function loadRaceDivChart(raceId, divisionName) {
 }
 
 function renderDivisionChart(data) {
-    const finishers = data.finishers.filter(f => f.hpf != null && f.elapsed > 0);
+    const finishers = data.finishers.filter(f => f.pf != null && f.elapsed > 0);
     if (finishers.length === 0) return;
 
-    const xs      = finishers.map(f => f.hpf);
+    const xs      = finishers.map(f => f.pf);
     const names   = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
     const elapsed = finishers.map(f => f.elapsed / 60);
-    const hpfCorr = finishers.map(f => f.hpfCorrected != null ? f.hpfCorrected / 60 : null);
+    const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
     const rfCorr  = finishers.map(f => f.rfCorrected  != null ? f.rfCorrected  / 60 : null);
 
     // Vertical error bars on corrected times: factor uncertainty propagates multiplicatively
-    // to the corrected time — e.g. HPF_upper_time = elapsed * hpf_upper / 60
+    // to the corrected time — e.g. PF_upper_time = elapsed * pf_upper / 60
     function yErrArrays(finishers, factorKey, weightKey) {
         const plus  = finishers.map(f => {
             if (!showRaceErrorBars || !f[weightKey] || !f[factorKey]) return 0;
@@ -1194,10 +1194,10 @@ function renderDivisionChart(data) {
         { x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
           line: { dash: 'dash', color: '#555', width: 1.5 }, marker: { size: 7 },
           text: hoverTexts('Elapsed', elapsed), hoverinfo: 'text' },
-        { x: xs, y: hpfCorr, mode: 'lines+markers', type: 'scatter', name: 'HPF corrected',
+        { x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
           line: { dash: 'solid', color: '#2255aa', width: 2 }, marker: { size: 7 },
-          error_y: yErrArrays(finishers, 'hpf', 'rfWeight'),
-          text: hoverTexts('HPF corrected', hpfCorr), hoverinfo: 'text' },
+          error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
+          text: hoverTexts('PF corrected', pfCorr), hoverinfo: 'text' },
         ...(showRaceRfLine ? [{ x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
           line: { dash: 'dot', color: '#c47900', width: 1.5 }, marker: { size: 7 },
           error_y: yErrArrays(finishers, 'rf', 'rfWeight'),
@@ -1205,8 +1205,8 @@ function renderDivisionChart(data) {
     ];
 
     if (showRaceTrendLine) {
-        // Linear regression of hpfCorrected times vs HPF, excluding nulls
-        const pts = finishers.map((f, i) => ({ x: xs[i], y: hpfCorr[i] }))
+        // Linear regression of pfCorrected times vs PF, excluding nulls
+        const pts = finishers.map((f, i) => ({ x: xs[i], y: pfCorr[i] }))
                              .filter(p => p.y != null);
         if (pts.length >= 2) {
             const n   = pts.length;
@@ -1223,7 +1223,7 @@ function renderDivisionChart(data) {
                 traces.push({
                     x: [xMin, xMax],
                     y: [slope * xMin + intercept, slope * xMax + intercept],
-                    mode: 'lines', type: 'scatter', name: 'HPF corr trend',
+                    mode: 'lines', type: 'scatter', name: 'PF corr trend',
                     line: { dash: 'dashdot', color: '#2255aa', width: 2 },
                     hoverinfo: 'skip'
                 });
@@ -1234,7 +1234,7 @@ function renderDivisionChart(data) {
     // Boat name labels: vertical text at each finisher's lowest time point
     // (lowest time = topmost on chart since y-axis is reversed)
     const annotations = finishers.map((f, i) => {
-        const ys = [elapsed[i], hpfCorr[i], rfCorr[i]].filter(v => v != null);
+        const ys = [elapsed[i], pfCorr[i], rfCorr[i]].filter(v => v != null);
         const minY = Math.min(...ys);
         return {
             x: xs[i], y: minY,
@@ -1250,7 +1250,7 @@ function renderDivisionChart(data) {
     });
 
     const layout = {
-        xaxis: { title: 'HPF' },
+        xaxis: { title: 'PF' },
         yaxis: { title: 'Time (min)', tickformat: '.1f', autorange: 'reversed' },
         legend: { orientation: 'h', y: -0.18 },
         margin: { t: 120, b: 80, l: 60, r: 20 },
@@ -1261,7 +1261,7 @@ function renderDivisionChart(data) {
     document.getElementById('division-section-races').style.display = '';
     Plotly.react('race-division-chart', traces, layout, { responsive: true });
 
-    // Compare button: include all finishers with a boatId (not just HPF-filtered ones)
+    // Compare button: include all finishers with a boatId (not just PF-filtered ones)
     const compareBoats = (data.finishers || [])
         .filter(f => f.boatId)
         .map(f => ({ id: f.boatId, label: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name }));
@@ -1291,7 +1291,7 @@ function addCompareButton(containerId, boats) {
             label: b.label,
             color: COMPARE_COLORS[i % COMPARE_COLORS.length]
         }));
-        sessionStorage.setItem('hpf-comparison-items', JSON.stringify(items));
+        sessionStorage.setItem('pf-comparison-items', JSON.stringify(items));
         window.location.href = '/comparison.html';
     };
     container.appendChild(btn);
@@ -1358,18 +1358,18 @@ function renderSeriesChartForDivision(divName) {
         const div = race.divisions.find(d => (d.name || '') === divName);
         if (!div) return;
 
-        const finishers = div.finishers.filter(f => f.hpf != null && f.hpfCorrected != null);
+        const finishers = div.finishers.filter(f => f.pf != null && f.pfCorrected != null);
         if (finishers.length === 0) return;
 
-        // Find the indices of the 3 fastest HPF-corrected times
-        const sorted = finishers.map((f, i) => ({ i, t: f.hpfCorrected }))
+        // Find the indices of the 3 fastest PF-corrected times
+        const sorted = finishers.map((f, i) => ({ i, t: f.pfCorrected }))
             .sort((a, b) => a.t - b.t);
         const podiumSet = new Set(sorted.slice(0, 3).map(s => s.i));
 
-        const xs = finishers.map(f => f.hpf);
-        const ys = finishers.map(f => f.hpfCorrected / 60);
+        const xs = finishers.map(f => f.pf);
+        const ys = finishers.map(f => f.pfCorrected / 60);
         const texts = finishers.map(f =>
-            `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>HPF corrected: ${fmtTime(f.hpfCorrected)}`
+            `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>PF corrected: ${fmtTime(f.pfCorrected)}`
         );
 
         traces.push({
@@ -1386,7 +1386,7 @@ function renderSeriesChartForDivision(divName) {
         for (let p = 0; p < Math.min(3, sorted.length); p++) {
             const f = finishers[sorted[p].i];
             traces.push({
-                x: [f.hpf], y: [f.hpfCorrected / 60],
+                x: [f.pf], y: [f.pfCorrected / 60],
                 mode: 'markers', type: 'scatter',
                 name: podiumLabels[p],
                 legendgroup: podiumLabels[p],
@@ -1396,7 +1396,7 @@ function renderSeriesChartForDivision(divName) {
                     color: color,
                     line: { color: '#fff', width: 1.5 }
                 },
-                text: [`${podiumLabels[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>HPF corrected: ${fmtTime(f.hpfCorrected)}`],
+                text: [`${podiumLabels[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>PF corrected: ${fmtTime(f.pfCorrected)}`],
                 hoverinfo: 'text'
             });
         }
@@ -1408,8 +1408,8 @@ function renderSeriesChartForDivision(divName) {
     }
 
     const layout = {
-        xaxis: { title: 'HPF' },
-        yaxis: { title: 'HPF Corrected Time (min)', tickformat: '.1f', autorange: 'reversed' },
+        xaxis: { title: 'PF' },
+        yaxis: { title: 'PF Corrected Time (min)', tickformat: '.1f', autorange: 'reversed' },
         legend: { orientation: 'h', y: -0.25 },
         margin: { t: 30, b: 80, l: 60, r: 20 },
         hovermode: 'closest'

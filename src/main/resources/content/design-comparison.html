@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HPF — Design Comparison</title>
+  <title>PF — Design Comparison</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
@@ -46,9 +46,9 @@
   <div id="design-comparison-chart" class="chart-med" style="width:100%;height:520px;margin-top:0.5rem;"></div>
 
   <div id="design-calc" style="display:none; margin-top:1.25rem;">
-    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-hpf-calc" class="info-btn" data-tip="Calculator to generate handicaps based on the RF ratio of designs. Enter a handicap for Design A to compute the equivalent for Design B using RF ratio and best-fit conversion." target="_blank">ⓘ</a></h3>
+    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Calculator to generate handicaps based on the RF ratio of designs. Enter a handicap for Design A to compute the equivalent for Design B using RF ratio and best-fit conversion." target="_blank">ⓘ</a></h3>
     <p id="calc-ratios" style="margin:0 0 0.75rem;color:#666;font-size:0.85rem;"></p>
-    <table class="hpf-calc-table">
+    <table class="pf-calc-table">
       <thead>
         <tr>
           <th></th>
@@ -65,11 +65,11 @@
         <tr>
           <td>Enter handicap</td>
           <td><input type="number" id="calc-input-a" step="0.0001" min="0.1" max="2.0"
-                     class="hpf-calc-input" placeholder="enter…"
+                     class="pf-calc-input" placeholder="enter…"
                      style="width:90px;font-family:monospace;text-align:right;"
                      oninput="onCalcInput('a')"></td>
           <td><input type="number" id="calc-input-b" step="0.0001" min="0.1" max="2.0"
-                     class="hpf-calc-input" placeholder="enter…"
+                     class="pf-calc-input" placeholder="enter…"
                      style="width:90px;font-family:monospace;text-align:right;"
                      oninput="onCalcInput('b')"></td>
         </tr>

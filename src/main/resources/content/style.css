@@ -1,4 +1,4 @@
-/* Shared styles for all HPF pages */
+/* Shared styles for all PF pages */
 body { font-family: monospace; margin: 0 auto; padding: 0 1.5rem 2rem; background: #fff; }
 h1 { margin-bottom: 0.5rem; }
 h2 { margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
@@ -186,9 +186,9 @@ pre { background: #f5f5f5; padding: 1rem; overflow: auto; max-height: 400px; fon
 .division-nav h2 { margin: 0; flex: 1; font-size: 1.1rem; text-align: center; }
 .division-nav button { white-space: nowrap; }
 
-/* HPF calculator */
-.hpf-calc-table { width: auto; border-collapse: collapse; }
-.hpf-calc-table td { padding: 3px 8px; vertical-align: middle; }
+/* PF calculator */
+.pf-calc-table { width: auto; border-collapse: collapse; }
+.pf-calc-table td { padding: 3px 8px; vertical-align: middle; }
 
 /* Info button (ⓘ) — tooltip on hover, links to docs on click */
 .info-btn {

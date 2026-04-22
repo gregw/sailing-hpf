@@ -1,7 +1,7 @@
 # project
 OLD
-hpf-data/*
-!hpf-data/config
+pf-data/*
+!pf-data/config
 
 # eclipse
 .classpath

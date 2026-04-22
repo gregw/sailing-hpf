@@ -5,7 +5,7 @@
 This project has three distinct components with different licence treatment:
 
 1. **Software** — all source code in this repository. Licensed under Apache 2.0.
-2. **Derived data** — computed outputs of the software, specifically HPF (Historical Performance Factor) values, reference factors, and other analytical outputs produced by the optimisation pipeline. Licensed under CC BY-SA 4.0.
+2. **Derived data** — computed outputs of the software, specifically PF (Performance Factor) values, reference factors, and other analytical outputs produced by the optimisation pipeline. Licensed under CC BY-SA 4.0.
 3. **Raw race data** — elapsed times, boat entries, and handicap values reproduced from publicly published club race results. This project makes no copyright claim over this data; it is reproduced as a matter of public record. See the Raw Data Provenance statement below.
 
 ---
@@ -24,7 +24,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 
 ## 2. Derived Data Licence — Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
 
-The derived data published by this project — including but not limited to HPF values, reference factors, race dispersion metrics, and boat performance estimates — is licensed under the Creative Commons Attribution-ShareAlike 4.0 International License.
+The derived data published by this project — including but not limited to PF values, reference factors, race dispersion metrics, and boat performance estimates — is licensed under the Creative Commons Attribution-ShareAlike 4.0 International License.
 
 You are free to:
 - **Share** — copy and redistribute the derived data in any medium or format
@@ -36,7 +36,7 @@ Under the following terms:
 
 Full licence text: https://creativecommons.org/licenses/by-sa/4.0/
 
-**Suggested attribution:** "HPF data derived from the Australian Yacht Racing Elapsed Time Database, © Mort Bay Consulting Pty. Ltd. (https://github.com/[repo]), licensed CC BY-SA 4.0."
+**Suggested attribution:** "PF data derived from the Australian Yacht Racing Elapsed Time Database, © Mort Bay Consulting Pty. Ltd. (https://github.com/[repo]), licensed CC BY-SA 4.0."
 
 ---
 
@@ -57,7 +57,7 @@ IRC certificate values, where present, are sourced exclusively from publicly pub
 | Component | Licence |
 |---|---|
 | Source code | Apache 2.0 |
-| Derived data (HPF, reference factors, etc.) | CC BY-SA 4.0 |
+| Derived data (PF, reference factors, etc.) | CC BY-SA 4.0 |
 | Raw race results (elapsed times, entries) | No claim — public record, provenance above |
 | ORC certificate data | ORC open data policy |
 | IRC values from race results | No claim — publicly published race data |

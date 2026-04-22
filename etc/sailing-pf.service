@@ -1,0 +1,24 @@
+[Unit]
+Description=Sailing PF Server
+Documentation=https://github.com/gregw/sailing-pf
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=sailing-pf
+Group=sailing-pf
+WorkingDirectory=/opt/sailing-pf
+Environment=HOME=/var/lib/sailing-pf
+ExecStart=/usr/bin/mvn --batch-mode -Dmaven.repo.local=/var/lib/sailing-pf/.m2/repository exec:java -Dpf-data=/var/lib/sailing-pf
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sailing-pf
+
+# Prevent the service from acquiring new privileges
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

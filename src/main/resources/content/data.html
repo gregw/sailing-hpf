@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HPF — Data Browser</title>
+  <title>PF — Data Browser</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
 
   <div class="tabs">
     <div class="tab active" id="tab-btn-clubs" onclick="switchTab('clubs')">Clubs <a href="ui-tips.md#table-clubs" class="info-btn" data-tip="Sailing clubs: source of race data; club ID is the club's website domain." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
-    <div class="tab" id="tab-btn-boats" onclick="switchTab('boats')">Boats <a href="ui-tips.md#table-boats" class="info-btn" data-tip="All boats in the database: sail number, name, design, reference factor and HPF." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
+    <div class="tab" id="tab-btn-boats" onclick="switchTab('boats')">Boats <a href="ui-tips.md#table-boats" class="info-btn" data-tip="All boats in the database: sail number, name, design, reference factor and PF." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
     <div class="tab" id="tab-btn-designs" onclick="switchTab('designs')">Designs <a href="ui-tips.md#table-designs" class="info-btn" data-tip="Boat designs (classes): canonical name, design-level reference factor, and maker." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
     <div class="tab" id="tab-btn-series" onclick="switchTab('series')">Series <a href="ui-tips.md#table-series" class="info-btn" data-tip="Named series of races: club, name, date range and race count." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
     <div class="tab" id="tab-btn-races" onclick="switchTab('races')">Races <a href="ui-tips.md#table-races" class="info-btn" data-tip="Individual race results imported from SailSys, TopYacht, and BWPS." target="_blank" onclick="event.stopPropagation()">ⓘ</a></div>
@@ -70,7 +70,7 @@
 
     <div class="detail-panel" id="detail-boats">
       <div id="ref-factors-boats" style="margin-bottom:0.75rem;"></div>
-      <div id="hpf-detail-boats" style="margin-bottom:0.75rem;"></div>
+      <div id="pf-detail-boats" style="margin-bottom:0.75rem;"></div>
       <div id="aliases-boats" style="margin-bottom:0.75rem;"></div>
       <div id="edit-btn-container" style="margin-bottom:0.75rem;display:none;"><button onclick="showEditPanel()">Edit boat…</button></div>
       <div id="edit-panel-boats" style="display:none; margin-bottom:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
@@ -178,7 +178,7 @@
 
     <div id="division-section-races" style="display:none; margin-top:1rem;">
       <div id="race-series-race-label" style="font-size:1.05rem;font-weight:bold;margin-bottom:0.4rem;"></div>
-      <div style="font-weight:bold;margin-bottom:0.25rem;">Division Chart <a href="ui-tips.md#chart-division" class="info-btn" data-tip="Bar chart of elapsed and  RF/HPF corrected times for each finisher in the selected division against the HPF.  Elapsed time line should slope up with higher HPF; the corrected time lines should be level if the Factor was correct for this race." target="_blank">ⓘ</a></div>
+      <div style="font-weight:bold;margin-bottom:0.25rem;">Division Chart <a href="ui-tips.md#chart-division" class="info-btn" data-tip="Bar chart of elapsed and  RF/PF corrected times for each finisher in the selected division against the PF.  Elapsed time line should slope up with higher PF; the corrected time lines should be level if the Factor was correct for this race." target="_blank">ⓘ</a></div>
       <div style="display:flex;gap:1.5rem;align-items:center;margin:0.5rem 0;">
         <label>Division: <select id="race-division-select" onchange="onRaceDivisionChange()"></select></label>
         <span id="race-variant-label" style="font-size:0.9rem;color:#555;"></span>

@@ -3,13 +3,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>org.example</groupId>
-  <artifactId>sailing-hpf</artifactId>
+  <artifactId>sailing-pf</artifactId>
   <version>1.0-SNAPSHOT</version>
 
   <scm>
-    <url>https://github.com/gregw/sailing-hpf</url>
-    <connection>scm:git:https://github.com/gregw/sailing-hpf.git</connection>
-    <developerConnection>scm:git:git@github.com:gregw/sailing-hpf.git</developerConnection>
+    <url>https://github.com/gregw/sailing-pf</url>
+    <connection>scm:git:https://github.com/gregw/sailing-pf.git</connection>
+    <developerConnection>scm:git:git@github.com:gregw/sailing-pf.git</developerConnection>
   </scm>
 
   <properties>
@@ -19,7 +19,7 @@
     <junit.version>5.13.4</junit.version>
     <hamcrest.version>3.0</hamcrest.version>
     <jetty.version>12.1.6</jetty.version>
-    <hpf-data>hpf-data</hpf-data>
+    <pf-data>pf-data</pf-data>
   </properties>
 
   <dependencies>
@@ -104,8 +104,8 @@
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.5.0</version>
         <configuration>
-          <mainClass>org.mortbay.sailing.hpf.server.HpfServer</mainClass>
-          <commandlineArgs>${hpf-data}</commandlineArgs>
+          <mainClass>org.mortbay.sailing.pf.server.PfServer</mainClass>
+          <commandlineArgs>${pf-data}</commandlineArgs>
         </configuration>
       </plugin>
     </plugins>

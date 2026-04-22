@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HPF — Boat Comparison</title>
+  <title>PF — Boat Comparison</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 </head>
@@ -44,8 +44,8 @@
       <label title="Show RF (Reference Factor) horizontal line per boat">
         <input type="checkbox" id="show-rf-line" checked> RF line
       </label>
-      <label title="Show HPF (Historical Performance Factor) horizontal line per boat">
-        <input type="checkbox" id="show-hpf-line" checked> HPF line
+      <label title="Show PF (Performance Factor) horizontal line per boat">
+        <input type="checkbox" id="show-pf-line" checked> PF line
       </label>
       <label title="Show weighted linear trend line per boat">
         <input type="checkbox" id="show-trend-linear" checked> Linear trend
@@ -70,12 +70,12 @@
   <div style="font-weight:bold;margin-bottom:0.25rem;">Back Calculated Factor Comparison <a href="ui-tips.md#chart-comparison" class="info-btn" data-tip="Scatter plot of back-calculated factor per race over time for each comparison boat. Each dot is one race result; hover for details." target="_blank">ⓘ</a></div>
   <div id="comparison-chart" class="chart-tall" style="width:100%;height:960px;margin-top:0.5rem;"></div>
 
-  <div id="hpf-calc" style="display:none; margin-top:1.25rem;">
-    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-hpf-calc" class="info-btn" data-tip="Enter a handicap for any boat — HPF, RF, and Best Fit columns for all boats are scaled by ratio. Each column uses its own per-boat ratio. Best Fit uses the latest point on the weighted linear trend through back-calculated factors." target="_blank">ⓘ</a></h3>
+  <div id="pf-calc" style="display:none; margin-top:1.25rem;">
+    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Enter a handicap for any boat — PF, RF, and Best Fit columns for all boats are scaled by ratio. Each column uses its own per-boat ratio. Best Fit uses the latest point on the weighted linear trend through back-calculated factors." target="_blank">ⓘ</a></h3>
     <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
       Enter a handicap for any boat — all three columns are scaled accordingly.
     </p>
-    <table class="hpf-calc-table"></table>
+    <table class="pf-calc-table"></table>
   </div>
 
   <div id="elapsed-charts-section" style="display:none; margin-top:1.5rem;">
