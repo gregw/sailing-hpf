@@ -118,8 +118,8 @@ const COLUMNS = {
                   ? weightSpan(v.value, v.value.toFixed(4), v.weight)
                   : '<span style="color:#bbb">—</span>';
           } },
-        { label: 'Overall', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
-          tip: 'Performance profile overall score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, NonChaotic and Stability spokes (last 12 months).',
+        { label: 'PP', key: 'profile', sortKey: 'profile', anchor: 'col-boat-profile',
+          tip: 'Performance profile score — fleet-relative percentile polygon area across Frequency, Consistency, Diversity, NonChaotic and Stability spokes (last 12 months).',
           render: v => v != null ? v.toFixed(3) : '<span style="color:#bbb">—</span>' },
         clubColumn('col-boat-club', 'clubId'),
         { label: 'Finishes', type: 'action', sortKey: 'finishes', anchor: 'col-boat-finishes',
@@ -571,7 +571,7 @@ function renderBoatPf(data) {
         html += `<div style="margin-top:0.75rem;font-weight:bold;font-size:0.9rem;">${data.boatName ? esc(data.boatName) + ' — ' : ''}Performance Profile ${infoBtn('chart-profile','Radar chart: five fleet-relative percentile scores based on the last 12 months. Frequency: how often the boat races. Consistency: how tight the residuals are. Diversity: distinct opponents raced. NonChaotic: whether inconsistency correlates with fleet-wide conditions. Stability: flatness of trend (level=best, declining=worst).')}</div>`;
         html += `<div style="display:inline-block;vertical-align:top;text-align:left;">`;
         html += `  <div id="pf-profile-chart"></div>`;
-        html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">Overall: ${score}</div>`;
+        html += `  <div style="text-align:center;font-size:0.85rem;color:#555;margin-top:0.1rem;">PP: ${score}</div>`;
         html += `</div>`;
         setTimeout(() => renderProfileChart(data.profile), 0);
     }

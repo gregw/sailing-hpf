@@ -139,6 +139,55 @@ class SailNumberNameLoaderTest
         assertTrue(empty.lookupBoat("1234", "someboat").isEmpty());
     }
 
+    /**
+     * Regression: when the alias entry shares its canonical sail number with the alias's
+     * own sail number (e.g. canonical (10001, wildoatsxi) with alias (10001, hamiltonislandwildoats)),
+     * the sail-index skips that entry — so the only lookup path is the name branch. The
+     * name branch must still honour AUS-prefix equivalence on the sail number, otherwise
+     * an input of "AUS10001" falls through to the implicit prefix-strip with the raw name
+     * and a fresh duplicate boat record gets created.
+     */
+    @Test
+    void lookupBoatMatchesNameAliasAcrossAusPrefix(@TempDir Path tempDir) throws Exception
+    {
+        Aliases.addAliases(tempDir, "10001", "Wild Oats XI",
+            List.of(new Aliases.SailNumberName("10001", "hamiltonislandwildoats")));
+
+        Aliases.Loaded seed = Aliases.load(tempDir);
+
+        // Without AUS prefix — this worked before too.
+        Optional<Aliases.BoatMatch> plain = seed.lookupBoat("10001", "hamiltonislandwildoats");
+        assertTrue(plain.isPresent());
+        assertEquals("10001", plain.get().normSailNumber());
+        assertEquals("wildoatsxi", plain.get().normName());
+        assertEquals("Wild Oats XI", plain.get().canonicalDisplayName());
+
+        // With AUS prefix — this was the broken case.
+        Optional<Aliases.BoatMatch> prefixed = seed.lookupBoat("AUS10001", "hamiltonislandwildoats");
+        assertTrue(prefixed.isPresent(), "AUS-prefixed sail should still resolve via the alias");
+        assertEquals("10001", prefixed.get().normSailNumber());
+        assertEquals("wildoatsxi", prefixed.get().normName(),
+            "name must be canonicalised, not left as hamiltonislandwildoats");
+        assertEquals("Wild Oats XI", prefixed.get().canonicalDisplayName());
+    }
+
+    /**
+     * Symmetric case: alias stored with AUS prefix, input without it. Fix should handle
+     * both directions since stripPrefix is applied to both sides of the comparison.
+     */
+    @Test
+    void lookupBoatMatchesNameAliasAcrossAusPrefixInverted(@TempDir Path tempDir) throws Exception
+    {
+        Aliases.addAliases(tempDir, "10001", "Wild Oats XI",
+            List.of(new Aliases.SailNumberName("AUS10001", "hamiltonislandwildoats")));
+
+        Aliases.Loaded seed = Aliases.load(tempDir);
+
+        Optional<Aliases.BoatMatch> plain = seed.lookupBoat("10001", "hamiltonislandwildoats");
+        assertTrue(plain.isPresent());
+        assertEquals("wildoatsxi", plain.get().normName());
+    }
+
     @Test
     void lookupBoatPrefixOnlyNoDigitsDoesNotStrip()
     {

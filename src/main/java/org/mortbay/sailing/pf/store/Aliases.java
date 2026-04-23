@@ -299,15 +299,24 @@ public class Aliases
                 }
             }
 
-            // Look up name and then check the sail number.
+            // Look up name and then check the sail number. Match with AUS-prefix stripping
+            // on both sides so that an alias stored as ("10001", "hamiltonislandwildoats")
+            // still matches an input sail of "AUS10001". Without this, an alias keyed under
+            // the *same* sail number as its canonical (so skipped from sailNo2Aliases) can
+            // only be reached via this name branch, and the implicit prefix-strip below
+            // would otherwise return an uncanonicalised name.
             entries = name2Aliases.get(normName);
             if (entries != null && !entries.isEmpty())
             {
+                String inputStripped = stripPrefix(normSailNumber);
                 for (IndexedBoat ib : entries)
                 {
                     for (SailNumberName alias : ib.entry.aliases())
                     {
-                        if (alias.sailNumber != null && alias.sailNumber.equalsIgnoreCase(normSailNumber))
+                        if (alias.sailNumber == null) continue;
+                        String aliasStripped = stripPrefix(alias.sailNumber);
+                        if (alias.sailNumber.equalsIgnoreCase(normSailNumber)
+                            || aliasStripped.equalsIgnoreCase(inputStripped))
                             return Optional.of(new BoatMatch(
                                 ib.canonical.sailNumber(), ib.canonical.name(), ib.entry.canonicalName()));
                     }
