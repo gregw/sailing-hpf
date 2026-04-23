@@ -101,6 +101,61 @@ class Designs
         }
     }
 
+    /** Enumerates the toggleable design-catalogue flag fields in {@code design.yaml}. */
+    enum Flag { EXCLUDED, IGNORED }
+
+    /**
+     * Reads {@code design.yaml}, toggles {@code designId} on or off the specified flag list,
+     * and writes the file back. This is the canonical persistence path for design-level
+     * excluded/ignored state; runtime state in {@link DataStore} is kept in sync via
+     * {@link DataStore#reloadDesignCatalogue()} after a write.
+     */
+    static void setFlag(Path configDir, String designId, Flag flag, boolean set)
+    {
+        if (designId == null || designId.isBlank()) return;
+        Path file = configDir.resolve(FILENAME);
+        CatalogueFile catalogue = null;
+        if (Files.exists(file))
+        {
+            try { catalogue = YAML_MAPPER.readValue(file.toFile(), CatalogueFile.class); }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for flag update: {}", file, e.getMessage());
+                return;
+            }
+        }
+        if (catalogue == null) catalogue = new CatalogueFile();
+        List<String> list = flag == Flag.EXCLUDED ? catalogue.excluded : catalogue.ignored;
+        if (list == null)
+        {
+            list = new ArrayList<>();
+            if (flag == Flag.EXCLUDED) catalogue.excluded = list;
+            else                       catalogue.ignored  = list;
+        }
+        // Compare by normalised id so "Foo 36", "foo36", "Foo-36" match a single entry.
+        String normTarget = IdGenerator.normaliseDesignName(designId);
+        boolean present = list.stream()
+            .anyMatch(x -> x != null && IdGenerator.normaliseDesignName(x).equalsIgnoreCase(normTarget));
+        if (set && !present)
+            list.add(designId);
+        else if (!set && present)
+            list.removeIf(x -> x != null && IdGenerator.normaliseDesignName(x).equalsIgnoreCase(normTarget));
+        else
+            return;  // already in the desired state
+
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), catalogue);
+            LOG.info("Updated {} — design {} {} {}",
+                file, designId, flag.name().toLowerCase(), set ? "set" : "cleared");
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+        }
+    }
+
     static DesignCatalogue load(Path configDir)
     {
         InputStream stream = openStream(configDir, FILENAME);

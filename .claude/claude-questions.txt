@@ -1,1 +1,6 @@
+❯There is still an issue with importing boats that should get merged when importing into an empty DataStore
+I see both 6333-georgiaexpress-farr36 with sources: "ORC:MUMM 36", "ORC", "BWPS"
+and 6333-georgiaexpress with sources: "TopYacht:D1", "TopYacht"
+
+Make the normalization of sail numbers strip leading zeros so 020 will match 20
 

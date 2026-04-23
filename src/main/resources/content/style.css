@@ -71,6 +71,9 @@ tr.excluded td { color: #aaa; }
 .link-btn.excluded-link { color: #7a8fb0; }
 .link-btn.excluded-link:hover { color: #5a6f90; }
 td.excluded-link { color: #7a8fb0; }
+tr.ignored td { font-style: italic; }
+.link-btn.ignored-link { font-style: italic; }
+td.ignored-link { font-style: italic; }
 
 /* Schedule section */
 .schedule-days { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }

@@ -696,6 +696,118 @@ class DataStoreTest {
             "boat ID should use the overridden design");
     }
 
+    /**
+     * Regression: when a later importer supplies an IGNORED design (e.g. TopYacht's
+     * division marker "D1"), {@code findOrCreateBoat} must still recognise the existing
+     * properly-designed boat (from a prior ORC/BWPS import) and route the import to it,
+     * rather than creating a second design-less record.
+     */
+    @Test
+    void findOrCreateBoatMatchesExistingDesignedBoatWhenIncomingDesignIsIgnored(@TempDir Path tempDir) throws Exception
+    {
+        Path configDir = tempDir.resolve("config");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("design.yaml"),
+            """
+            excluded: []
+            ignored:
+              - "d1"
+            boatDesignOverrides: []
+            """);
+
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        // Simulate ORC having already created the properly-designed boat
+        store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, null));
+        store.putBoat(new Boat("6333-georgiaexpress-farr36", "6333", "Georgia Express", "farr36",
+                               null, List.of(), List.of("ORC:Farr 36"), null, null));
+
+        // TopYacht now re-imports the same physical boat with division marker "D1" as design
+        Boat resolved = store.findOrCreateBoat("6333", "Georgia Express", "D1",
+                                               LocalDate.of(2024, 1, 1), "TopYacht");
+
+        assertNotNull(resolved, "re-import must not fail");
+        assertEquals("6333-georgiaexpress-farr36", resolved.id(),
+            "re-import should reuse the existing Farr 36 record, not create a designless duplicate");
+        assertEquals(1, store.boats().size(),
+            "no duplicate boat should have been added to the store");
+        assertFalse(store.boats().containsKey("6333-georgiaexpress"),
+            "the old designless form must not exist after re-import");
+    }
+
+    /**
+     * Ignoring a design: every boat of that design is de-designed. Where another boat
+     * already sits at the target {@code sailNo-name} id, the two records merge (certs
+     * union, sources union, target's clubId wins). Race finisher references are rewritten.
+     * Subsequent imports of the ignored design name route to the de-designed boat.
+     */
+    @Test
+    void setDesignIgnoredCascadesOverBoats(@TempDir Path tempDir) {
+        DataStore store = new DataStore(tempDir);
+        store.start();
+
+        store.putDesign(new Design("d1", "D1", List.of(), List.of(), null, null));
+        store.putDesign(new Design("farr36", "Farr 36", List.of(), List.of(), null, null));
+
+        // Boat A is under design d1 — will be de-designed (no collision at "1-foo").
+        // Sail number "1" rather than "AUS1" to keep the implicit AUS-strip out of this test.
+        store.putBoat(new Boat("1-foo-d1", "1", "Foo", "d1", null,
+                List.of(), List.of("TopYacht:D1"), null, null));
+
+        // Boat B is under design d1 with a collision — a designless "6333-georgiaexpress"
+        // already exists from a TopYacht earlier run. The d1 boat carries certs we want to
+        // keep; the ignore cascade should merge the d1 record INTO the designless one.
+        Certificate cert = new Certificate("ORC", 2024, 0.95, false, false, false, false, null, null);
+        store.putBoat(new Boat("6333-georgiaexpress-d1", "6333", "Georgia Express", "d1",
+                "myclub.com", List.of(cert), List.of("ORC:D1"), null, null));
+        store.putBoat(new Boat("6333-georgiaexpress", "6333", "Georgia Express", null,
+                null, List.of(), List.of("TopYacht:D1"), null, null));
+
+        // Race with finishers referring to the d1-suffixed ids.
+        Race race = new Race("club-2024-01-01-0001", "club", List.of("club/s"),
+                LocalDate.of(2024, 1, 1), 1, null,
+                List.of(new Division("A", List.of(
+                        new Finisher("1-foo-d1", Duration.ofMinutes(60), false, null),
+                        new Finisher("6333-georgiaexpress-d1", Duration.ofMinutes(62), false, null)
+                ))), null, null, null);
+        store.putRace(race);
+
+        store.setDesignIgnored("d1", true);
+
+        // 1. No-collision boat renamed in place.
+        assertFalse(store.boats().containsKey("1-foo-d1"));
+        Boat foo = store.boats().get("1-foo");
+        assertNotNull(foo, "de-designed boat should live at 1-foo");
+        assertNull(foo.designId());
+        assertTrue(foo.sources().contains("Ignored:d1"));
+
+        // 2. Colliding boat merged into the existing designless record.
+        assertFalse(store.boats().containsKey("6333-georgiaexpress-d1"));
+        Boat merged = store.boats().get("6333-georgiaexpress");
+        assertNotNull(merged);
+        assertNull(merged.designId());
+        assertEquals(1, merged.certificates().size(), "certs moved from d1 into the keep boat");
+        assertTrue(merged.sources().contains("Ignored:d1"));
+        assertTrue(merged.sources().contains("ORC:D1"), "d1 boat sources are unioned in");
+
+        // 3. Race finisher references updated from the old -d1 ids to the new ids.
+        List<Finisher> finishers = store.races().get("club-2024-01-01-0001")
+                .divisions().getFirst().finishers();
+        assertEquals("1-foo", finishers.get(0).boatId());
+        assertEquals("6333-georgiaexpress", finishers.get(1).boatId());
+
+        // 4. The store recognises the design as ignored.
+        assertTrue(store.isDesignIgnored("d1"));
+
+        // 5. A fresh import of a "D1" boat sail+name that already exists resolves to the
+        //    existing designless record rather than creating a new one.
+        Boat resolved = store.findOrCreateBoat("1", "Foo", "D1",
+                LocalDate.of(2024, 2, 1), "TopYacht");
+        assertEquals("1-foo", resolved.id(),
+                "ignored incoming design should route to the existing designless boat");
+    }
+
     // --- Helpers ---
 
     private DataStore testDataStore() throws URISyntaxException {

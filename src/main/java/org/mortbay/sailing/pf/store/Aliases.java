@@ -37,19 +37,26 @@ public class Aliases
     private static final List<String> AUS_PREFIXES = List.of("JAUS", "EAUS", "VAUS", "SAUS", "AUS");
 
     /**
-     * Strip a known Australian country/fleet prefix from a normalised sail number.
-     * "AUS5656" → "5656", "JAUS103" → "103", "5656" → "5656".
-     * Only strips when the prefix is immediately followed by a digit.
-     * "JAUS" is listed before "AUS" so that "JAUS103" → "103", not "US103".
+     * Strip a known Australian country/fleet prefix AND any leading zeros from a
+     * normalised sail number. Both transformations are applied in sequence so that
+     * "AUS5656", "0103", and "AUS00103" all collapse to the bare numeric form
+     * ("5656", "103", "103"). "JAUS" is listed before "AUS" so "JAUS103" → "103",
+     * not "US103". Only strips the prefix when at least one digit follows.
      */
     private static String stripPrefix(String normSail)
     {
+        if (normSail == null || normSail.isEmpty()) return normSail;
         for (String prefix : AUS_PREFIXES)
         {
             if (normSail.startsWith(prefix) && normSail.length() > prefix.length()
                 && Character.isDigit(normSail.charAt(prefix.length())))
-                return normSail.substring(prefix.length());
+            {
+                normSail = normSail.substring(prefix.length());
+                break;
+            }
         }
+        while (normSail.length() > 1 && normSail.charAt(0) == '0' && Character.isDigit(normSail.charAt(1)))
+            normSail = normSail.substring(1);
         return normSail;
     }
 

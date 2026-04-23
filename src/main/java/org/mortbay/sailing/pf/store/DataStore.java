@@ -71,6 +71,11 @@ public class DataStore
             # IMPORTANT: This file is managed by the server.
             # It is overwritten whenever exclusions are changed via the admin UI.
             # Only edit manually when the server is NOT running.
+            #
+            # This file holds boat, race, and series exclusions. Design-level flags
+            # (excluded designs and ignored designs) live in design.yaml under the
+            # `excluded:` and `ignored:` fields, which are the single source of truth
+            # for long-lived design catalogue state.
             """;
 
 
@@ -96,7 +101,6 @@ public class DataStore
 
     // Mutable exclusion sets — persisted to config/exclusions.json, managed via admin UI
     private final Set<String> excludedBoatIds          = new LinkedHashSet<>();
-    private final Set<String> excludedDesignOverrideIds = new LinkedHashSet<>();
     private final Set<String> excludedRaceIds           = new LinkedHashSet<>();
     private final List<String> excludedSeriesPatterns    = new ArrayList<>();
     private volatile List<Pattern> compiledSeriesPatterns = List.of();
@@ -258,6 +262,15 @@ public class DataStore
             designId = overrideDesignId;
             rawDesign = designs.containsKey(designId) ? designs.get(designId).canonicalName() : overrideDesignId;
         }
+        // If the resolved design is ignored — via the curated {@code ignored:} list in
+        // design.yaml or via the runtime user-toggled set — treat the incoming boat as
+        // design-less for matching purposes, otherwise a new designless record would get
+        // created alongside an existing properly-designed one.
+        if (isDesignIgnored(designId))
+        {
+            designId = "";
+            rawDesign = null;
+        }
 
         final String normSailNo = sailNo;
         final String normName = name;
@@ -376,7 +389,7 @@ public class DataStore
         if (className == null || className.isBlank())
             return null;
         String designId = IdGenerator.normaliseDesignName(className);
-        if (designCatalogue.isIgnored(designId))
+        if (isDesignIgnored(designId))
             return null;
         Design design = designs.get(designId);
         if (design != null)
@@ -768,10 +781,12 @@ public class DataStore
      * Raw records are still created — exclusion is a configuration concern, not a data concern.
      * Checks both the static design.yaml catalogue and any UI-driven overrides.
      */
+    // Design excluded/ignored state is persisted in design.yaml (curated catalogue) and
+    // loaded into the DesignCatalogue at start / reload. The runtime helpers just delegate.
     public boolean isDesignExcluded(String designId)
     {
         requireStarted();
-        return designCatalogue.isExcluded(designId) || excludedDesignOverrideIds.contains(designId);
+        return designCatalogue.isExcluded(designId);
     }
 
     /**
@@ -854,9 +869,98 @@ public class DataStore
     public void setDesignExcluded(String id, boolean excluded)
     {
         requireStarted();
-        if (excluded) excludedDesignOverrideIds.add(id);
-        else excludedDesignOverrideIds.remove(id);
-        saveExclusions();
+        Designs.setFlag(configDir, id, Designs.Flag.EXCLUDED, excluded);
+        reloadDesignCatalogue();
+    }
+
+    /**
+     * True when the given design is ignored for import/analysis, per the {@code ignored:}
+     * list in {@code design.yaml}. Toggled via {@link #setDesignIgnored(String, boolean)}.
+     */
+    public boolean isDesignIgnored(String designId)
+    {
+        if (designId == null || designId.isBlank()) return false;
+        return designCatalogue.isIgnored(designId);
+    }
+
+    /**
+     * Toggles the "ignored" flag for a design. When setting to true, cascades over all
+     * boats with that designId: each is de-designed (designId cleared, boat id reverts
+     * to {@code sailNo-name}). If another boat already sits at the target id, the two
+     * are merged (certificates deduplicated, sources unioned, clubId preserved from
+     * the target) and race finisher references rewritten from the old id to the target.
+     * A {@code "Ignored:<designId>"} entry is added to the affected boat's sources.
+     * <p>
+     * When setting to false, only the flag changes — previously de-designed boats are
+     * not restored (their original design is unrecoverable). Callers must call
+     * {@link #save()} to persist the entity-level changes.
+     */
+    public void setDesignIgnored(String id, boolean ignored)
+    {
+        requireStarted();
+        boolean wasIgnored = isDesignIgnored(id);
+        Designs.setFlag(configDir, id, Designs.Flag.IGNORED, ignored);
+        reloadDesignCatalogue();
+        if (ignored && !wasIgnored)
+            cascadeIgnoreDesign(id);
+    }
+
+    /**
+     * Rewrites every boat whose designId equals {@code ignoredId} so it has no design.
+     * When a target boat id (sailNo-name) is already occupied, merges instead of renaming.
+     */
+    private void cascadeIgnoreDesign(String ignoredId)
+    {
+        String note = "Ignored:" + ignoredId;
+        for (Boat boat : List.copyOf(boats.values()))
+        {
+            if (!ignoredId.equals(boat.designId())) continue;
+            String newId = IdGenerator.generateBoatId(boat.sailNumber(), boat.name(), null);
+            Boat target = boats.get(newId);
+            if (target != null && !target.id().equals(boat.id()))
+            {
+                // Collision: merge boat INTO the existing target (prefer target's clubId
+                // and existing certificates; union sources).
+                Map<String, Certificate> certMap = new LinkedHashMap<>();
+                for (Certificate c : target.certificates()) certMap.put(certKey(c), c);
+                for (Certificate c : boat.certificates())   certMap.putIfAbsent(certKey(c), c);
+                Set<String> mergedSources = new LinkedHashSet<>(target.sources());
+                mergedSources.addAll(boat.sources());
+                mergedSources.add(note);
+                String clubId = target.clubId() != null ? target.clubId() : boat.clubId();
+                Boat merged = new Boat(newId, target.sailNumber(), target.name(), null,
+                    clubId, List.copyOf(certMap.values()), List.copyOf(mergedSources),
+                    Instant.now(), null);
+                removeBoat(boat.id());
+                putBoat(merged);
+                rewriteFinisherBoatId(boat.id(), newId);
+                LOG.info("Ignore cascade: merged {} into {} (design {} ignored)",
+                    boat.id(), newId, ignoredId);
+            }
+            else
+            {
+                // Simple rename: strip the design suffix in place.
+                Boat updated = new Boat(newId, boat.sailNumber(), boat.name(), null,
+                    boat.clubId(), boat.certificates(),
+                    addSource(boat.sources(), note), Instant.now(), null);
+                if (!newId.equals(boat.id()))
+                {
+                    removeBoat(boat.id());
+                    putBoat(updated);
+                    rewriteFinisherBoatId(boat.id(), newId);
+                    LOG.info("Ignore cascade: renamed {} to {} (design {} ignored)",
+                        boat.id(), newId, ignoredId);
+                }
+                else
+                {
+                    // Boat id already has no suffix (shouldn't really happen since the
+                    // match was on designId) — just annotate the sources.
+                    putBoat(updated);
+                }
+            }
+        }
+        InvalidationListener l = invalidationListener;
+        if (l != null) l.onAllChanged();
     }
 
     public void setRaceExcluded(String id, boolean excluded)
@@ -927,10 +1031,9 @@ public class DataStore
 
     private static class ExclusionsFile
     {
-        public Set<String> boats   = new LinkedHashSet<>();
-        public Set<String> designs = new LinkedHashSet<>();
-        public Set<String> races   = new LinkedHashSet<>();
-        public List<String> series = new ArrayList<>();
+        public Set<String> boats          = new LinkedHashSet<>();
+        public Set<String> races          = new LinkedHashSet<>();
+        public List<String> series        = new ArrayList<>();
     }
 
     private void loadExclusions()
@@ -945,16 +1048,15 @@ public class DataStore
             boolean isYaml = file.equals(yamlFile);
             ExclusionsFile ef = (isYaml ? YAML_MAPPER : MAPPER).readValue(file.toFile(), ExclusionsFile.class);
             if (ef.boats   != null) excludedBoatIds.addAll(ef.boats);
-            if (ef.designs != null) excludedDesignOverrideIds.addAll(ef.designs);
             if (ef.races   != null) excludedRaceIds.addAll(ef.races);
             if (ef.series  != null)
             {
                 excludedSeriesPatterns.addAll(ef.series);
                 compileSeriesPatterns();
             }
-            LOG.info("Loaded exclusions from {}: {} boats, {} designs, {} races, {} series patterns",
-                file.getFileName(), excludedBoatIds.size(), excludedDesignOverrideIds.size(),
-                excludedRaceIds.size(), excludedSeriesPatterns.size());
+            LOG.info("Loaded exclusions from {}: {} boats, {} races, {} series patterns",
+                file.getFileName(), excludedBoatIds.size(), excludedRaceIds.size(),
+                excludedSeriesPatterns.size());
             // Migrate: if loaded from JSON, save as YAML and delete the JSON file
             if (!isYaml)
             {
@@ -986,7 +1088,6 @@ public class DataStore
         Path file = configDir.resolve("exclusions.yaml");
         ExclusionsFile ef = new ExclusionsFile();
         ef.boats   = new LinkedHashSet<>(excludedBoatIds);
-        ef.designs = new LinkedHashSet<>(excludedDesignOverrideIds);
         ef.races   = new LinkedHashSet<>(excludedRaceIds);
         ef.series  = new ArrayList<>(excludedSeriesPatterns);
         try
@@ -1394,7 +1495,6 @@ public class DataStore
         makers = null;
         makersDirty = false;
         excludedBoatIds.clear();
-        excludedDesignOverrideIds.clear();
         excludedRaceIds.clear();
     }
 

@@ -130,6 +130,16 @@ class SailNumberNameLoaderTest
         assertTrue(result.isPresent());
         assertEquals("103", result.get().normSailNumber());
         assertEquals("myyacht", result.get().normName());
+
+        result = empty.lookupBoat("0103", "myyacht");
+        assertTrue(result.isPresent());
+        assertEquals("103", result.get().normSailNumber());
+        assertEquals("myyacht", result.get().normName());
+
+        result = empty.lookupBoat("AUS00103", "myyacht");
+        assertTrue(result.isPresent());
+        assertEquals("103", result.get().normSailNumber());
+        assertEquals("myyacht", result.get().normName());
     }
 
     @Test

@@ -133,6 +133,8 @@ public class AdminApiServlet extends HttpServlet
             handleSetExcluded("races", req, resp);
         else if ("/series/exclude".equals(path))
             handleSetSeriesExcluded(req, resp);
+        else if ("/designs/ignore".equals(path))
+            handleSetDesignIgnored(req, resp);
         else if (path.startsWith("/importers/") && path.endsWith("/run"))
         {
             String name = path.substring("/importers/".length(), path.length() - "/run".length());
@@ -193,7 +195,8 @@ public class AdminApiServlet extends HttpServlet
             || "/boats/edit-request".equals(path)
             || "/boats/exclude-request".equals(path) || "/designs/exclude-request".equals(path)
             || "/clubs/exclude-request".equals(path) || "/races/exclude-request".equals(path)
-            || "/series/exclude-request".equals(path))
+            || "/series/exclude-request".equals(path)
+            || "/designs/ignore-request".equals(path))
         {
             handleUserRequest(path, req, resp);
         }
@@ -447,6 +450,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("name",       b.name());
                 row.put("designId",   b.designId());
                 row.put("designExcluded", b.designId() != null && store.isDesignExcluded(b.designId()));
+                row.put("designIgnored",  b.designId() != null && store.isDesignIgnored(b.designId()));
                 row.put("clubId",     b.clubId());
                 putClubNaming(row, b.clubId());
                 row.put("clubExcluded", b.clubId() != null && store.isClubExcluded(b.clubId()));
@@ -738,6 +742,45 @@ public class AdminApiServlet extends HttpServlet
                 return;
             }
             writeJson(resp, club);
+        }
+    }
+
+    /**
+     * POST /api/designs/ignore — sets the ignored flag for one or more designs.
+     * <p>
+     * Accepts JSON body with {@code id} (single) or {@code ids} (array) plus a boolean
+     * {@code ignored}. Setting to true cascades: every boat of that design has its
+     * designId stripped, and collisions on the resulting {@code sailNo-name} id merge
+     * the two records. Setting to false only toggles the flag — previously de-designed
+     * boats are not restored. Returns {@code {ok, ignored, count}} on success. Persists
+     * entity changes via {@code store.save()} and the flag itself via exclusions.yaml.
+     */
+    @SuppressWarnings("unchecked")
+    private void handleSetDesignIgnored(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        try
+        {
+            Map<String, Object> body = MAPPER.readValue(req.getInputStream(), Map.class);
+            List<String> ids = readIds(body, "id", "ids");
+            if (ids.isEmpty())
+            {
+                resp.setStatus(400);
+                writeJson(resp, Map.of("error", "id or ids is required"));
+                return;
+            }
+            boolean ignored = Boolean.TRUE.equals(body.get("ignored"));
+            for (String id : ids)
+                store.setDesignIgnored(id, ignored);
+            if (ignored)
+                store.save();
+            if (cache != null)
+                cache.refreshIndexes();
+            writeJson(resp, Map.of("ok", true, "ignored", ignored, "count", ids.size()));
+        }
+        catch (Exception e)
+        {
+            resp.setStatus(500);
+            writeJson(resp, Map.of("error", e.getMessage()));
         }
     }
 
@@ -1528,6 +1571,7 @@ public class AdminApiServlet extends HttpServlet
                 row.put("spinRef",       dspin != null ? factorMap(dspin) : null);
                 row.put("boats",         dd != null ? dd.boatIds().size() : 0);
                 row.put("excluded",      store.isDesignExcluded(d.id()));
+                row.put("ignored",       store.isDesignIgnored(d.id()));
                 return row;
             }).collect(Collectors.toList());
 

@@ -46,6 +46,8 @@
 
     <div id="merge-bar-boats" style="display:none; margin-top:0.75rem; padding:0.6rem 0.8rem; background:#fff8e1; border:1px solid #f0c040; border-radius:4px;">
       <span id="merge-bar-count-boats"></span>
+      <button id="edit-btn-boats" onclick="showEditPanel()" style="margin-left:0.5rem;display:none;">Edit selected…</button>
+      <button id="edit-request-btn-boats" onclick="showEditPanel()" style="margin-left:0.5rem;display:none;">Request edit…</button>
       <button id="merge-btn-boats" onclick="showMergePanel('boats')" style="margin-left:0.5rem;">Merge selected…</button>
       <button id="merge-request-btn-boats" onclick="showMergePanel('boats')" style="margin-left:0.5rem;display:none;">Request merge…</button>
       <button id="exclude-btn-boats" onclick="showExcludePanel('boats', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
@@ -87,36 +89,36 @@
       <div id="merge-status-boats" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
+    <div id="edit-panel-boats" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="edit-panel-title">Edit Boat</strong>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
+        <label for="edit-boat-sail">Sail #:</label>
+        <input type="text" id="edit-boat-sail" style="font-family:monospace;padding:3px 6px;">
+        <label for="edit-boat-name">Name:</label>
+        <input type="text" id="edit-boat-name" style="font-family:monospace;padding:3px 6px;">
+        <label for="edit-boat-design">Design:</label>
+        <select id="edit-boat-design" style="font-family:monospace;padding:3px 6px;"></select>
+        <label for="edit-boat-club">Club:</label>
+        <select id="edit-boat-club" style="font-family:monospace;padding:3px 6px;"></select>
+      </div>
+      <div id="edit-email-row" style="display:none; margin-bottom:0.5rem;">
+        <label for="edit-email" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="edit-email" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="edit-message-row" style="display:none; margin-bottom:0.5rem;">
+        <label for="edit-message" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="edit-message" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
+      </div>
+      <button id="edit-save-btn" onclick="saveBoatEdit()">Save</button>
+      <button id="edit-request-btn" onclick="requestBoatEdit()" style="display:none;">Request</button>
+      <button onclick="hideEditPanel()" style="margin-left:0.5rem;">Cancel</button>
+      <div id="edit-status-boats" style="margin-top:0.5rem; color:#555;"></div>
+    </div>
+
     <div class="detail-panel" id="detail-boats">
       <div id="ref-factors-boats" style="margin-bottom:0.75rem;"></div>
       <div id="pf-detail-boats" style="margin-bottom:0.75rem;"></div>
       <div id="aliases-boats" style="margin-bottom:0.75rem;"></div>
-      <div id="edit-btn-container" style="margin-bottom:0.75rem;display:none;"><button onclick="showEditPanel()">Edit boat…</button></div>
-      <div id="edit-panel-boats" style="display:none; margin-bottom:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
-        <strong>Edit Boat</strong>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:0.3rem 0.8rem;max-width:500px;margin:0.5rem 0;">
-          <label for="edit-boat-sail">Sail #:</label>
-          <input type="text" id="edit-boat-sail" style="font-family:monospace;padding:3px 6px;">
-          <label for="edit-boat-name">Name:</label>
-          <input type="text" id="edit-boat-name" style="font-family:monospace;padding:3px 6px;">
-          <label for="edit-boat-design">Design:</label>
-          <select id="edit-boat-design" style="font-family:monospace;padding:3px 6px;"></select>
-          <label for="edit-boat-club">Club:</label>
-          <select id="edit-boat-club" style="font-family:monospace;padding:3px 6px;"></select>
-        </div>
-        <div id="edit-email-row" style="display:none; margin-bottom:0.5rem;">
-          <label for="edit-email" style="font-size:0.9rem;">Your email (optional): </label>
-          <input type="email" id="edit-email" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
-        </div>
-        <div id="edit-message-row" style="display:none; margin-bottom:0.5rem;">
-          <label for="edit-message" style="font-size:0.9rem;">Message (optional):</label><br>
-          <textarea id="edit-message" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason for edit…"></textarea>
-        </div>
-        <button id="edit-save-btn" onclick="saveBoatEdit()">Save</button>
-        <button id="edit-request-btn" onclick="requestBoatEdit()" style="display:none;">Request</button>
-        <button onclick="hideEditPanel()" style="margin-left:0.5rem;">Cancel</button>
-        <div id="edit-status-boats" style="margin-top:0.5rem; color:#555;"></div>
-      </div>
       <div id="pre-boats" class="json-tree"></div>
     </div>
   </div>
@@ -142,7 +144,27 @@
       <button id="merge-request-btn-designs" onclick="showMergePanel('designs')" style="margin-left:0.5rem;display:none;">Request merge…</button>
       <button id="exclude-btn-designs" onclick="showExcludePanel('designs', true)" style="margin-left:0.5rem;display:none;">Exclude selected…</button>
       <button id="include-btn-designs" onclick="showExcludePanel('designs', false)" style="margin-left:0.5rem;display:none;">Include selected…</button>
+      <button id="ignore-btn-designs" onclick="showIgnorePanel(true)" style="margin-left:0.5rem;display:none;">Ignore selected…</button>
+      <button id="unignore-btn-designs" onclick="showIgnorePanel(false)" style="margin-left:0.5rem;display:none;">Do Not Ignore selected…</button>
       <button onclick="clearSelection('designs')" style="margin-left:0.5rem;">Clear selection</button>
+    </div>
+
+    <div id="ignore-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">
+      <strong id="ignore-panel-title-designs"></strong>
+      <div id="ignore-list-designs" style="margin:0.6rem 0;"></div>
+      <div id="ignore-warning-designs" style="display:none;margin:0.4rem 0;font-size:0.9rem;color:#8a4500;"></div>
+      <div id="ignore-email-row-designs" style="display:none; margin-bottom:0.5rem;">
+        <label for="ignore-email-designs" style="font-size:0.9rem;">Your email (optional): </label>
+        <input type="email" id="ignore-email-designs" placeholder="you@example.com" style="padding:3px 6px;" oninput="syncRequestEmail(this.value)">
+      </div>
+      <div id="ignore-message-row-designs" style="display:none; margin-bottom:0.5rem;">
+        <label for="ignore-message-designs" style="font-size:0.9rem;">Message (optional):</label><br>
+        <textarea id="ignore-message-designs" rows="2" style="width:100%;max-width:400px;padding:3px 6px;font-size:0.9rem;" placeholder="Reason…"></textarea>
+      </div>
+      <button id="ignore-confirm-designs" onclick="performIgnore()">Confirm</button>
+      <button id="ignore-request-confirm-designs" onclick="requestIgnore()" style="display:none;">Submit request</button>
+      <button onclick="hideIgnorePanel()" style="margin-left:0.5rem;">Cancel</button>
+      <div id="ignore-status-designs" style="margin-top:0.5rem; color:#555;"></div>
     </div>
 
     <div id="exclude-panel-designs" style="display:none; margin-top:0.75rem; padding:0.8rem; border:1px solid #ccc; border-radius:4px; background:#fafafa;">

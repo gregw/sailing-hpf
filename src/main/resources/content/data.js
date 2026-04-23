@@ -90,7 +90,10 @@ const COLUMNS = {
         { label: 'Design', type: 'action', sortKey: 'designId', anchor: 'col-boat-design', cls: 'id-col',
           tip: 'Design (class) identifier; click to search for this design in the designs tab.',
           render:   item => item.designId || '',
-          btnClass: item => item.designExcluded ? 'excluded-link' : '',
+          btnClass: item => [
+              item.designExcluded ? 'excluded-link' : '',
+              item.designIgnored  ? 'ignored-link'  : ''
+          ].filter(Boolean).join(' '),
           action: item => {
               if (!item.designId) return;
               state.searches['designs'] = item.designId;
@@ -391,6 +394,7 @@ function renderTable(entity, items, append) {
         const globalIdx = baseIdx + itemIdx;
         const tr = document.createElement('tr');
         if (item.excluded) tr.classList.add('excluded');
+        if (item.ignored)  tr.classList.add('ignored');
         if (state.selected[entity].has(item.id)) tr.classList.add('selected');
         // Checkbox cell — stop propagation so clicking the checkbox doesn't also open detail
         const tdCb = document.createElement('td');
@@ -489,10 +493,8 @@ async function loadDetail(entity, id) {
         const aliases = await fetchJson('/api/boats/' + encodeURIComponent(id) + '/aliases');
         aliasDiv.innerHTML = aliases && aliases.length > 0 ? renderBoatAliases(aliases) : '';
 
-        // Store loaded boat data for the edit panel and show the edit button
+        // Store loaded boat data for possible reuse (edit flow is selection-driven now)
         state.lastDetailBoat = data;
-        document.getElementById('edit-btn-container').style.display = '';
-        hideEditPanel();
 
         updateBoatNav();
     }
@@ -714,6 +716,10 @@ function toggleSelect(entity, item, checked) {
         state.selected[entity].delete(item.id);
         state.selectedData[entity].delete(item.id);
     }
+    // Any change to the selection closes the previously-opened detail panel; the
+    // action bar is the new focus for the user until they click another row.
+    const panel = document.getElementById('detail-' + entity);
+    if (panel) panel.classList.remove('visible');
     updateMergeBar(entity);
 }
 
@@ -731,6 +737,8 @@ function updateMergeBar(entity) {
                 : (n + ' ' + noun + (n !== 1 ? 's' : '') + ' selected');
     document.getElementById('merge-bar-count-' + entity).textContent = label;
 
+    const items = Array.from(state.selectedData[entity].values());
+
     const mergeable = (entity === 'boats' || entity === 'designs');
     const w = isWriteAllowed();
     const mergeBtn = document.getElementById('merge-btn-' + entity);
@@ -738,8 +746,27 @@ function updateMergeBar(entity) {
     if (mergeBtn) mergeBtn.style.display = (mergeable && n >= 2 && w)  ? '' : 'none';
     if (reqBtn)   reqBtn.style.display   = (mergeable && n >= 2 && !w) ? '' : 'none';
 
+    // Edit (boats only) — visible on a single-row selection.
+    if (entity === 'boats')
+    {
+        const editBtn = document.getElementById('edit-btn-boats');
+        const editReq = document.getElementById('edit-request-btn-boats');
+        if (editBtn) editBtn.style.display = (n === 1 && w)  ? '' : 'none';
+        if (editReq) editReq.style.display = (n === 1 && !w) ? '' : 'none';
+    }
+
+    // Ignore / Do Not Ignore (designs only) — mirrors Exclude/Include on the ignored flag.
+    if (entity === 'designs')
+    {
+        const anyIgnored    = items.some(isItemIgnored);
+        const anyUnignored  = items.some(it => !isItemIgnored(it));
+        const ignoreBtn   = document.getElementById('ignore-btn-designs');
+        const unignoreBtn = document.getElementById('unignore-btn-designs');
+        if (ignoreBtn)   ignoreBtn.style.display   = (n >= 1 && anyUnignored) ? '' : 'none';
+        if (unignoreBtn) unignoreBtn.style.display = (n >= 1 && anyIgnored)   ? '' : 'none';
+    }
+
     // Exclude / Include — visible based on excluded-state of currently-selected items.
-    const items = Array.from(state.selectedData[entity].values());
     const anyExcluded  = items.some(isItemExcluded);
     const anyIncluded  = items.some(it => !isItemExcluded(it));
     const excludeBtn = document.getElementById('exclude-btn-' + entity);
@@ -751,12 +778,19 @@ function updateMergeBar(entity) {
 /** Returns true if the item is currently excluded (as seen by the last list fetch). */
 function isItemExcluded(item) { return !!item.excluded; }
 
+/** Returns true if the design item is currently ignored (as seen by the last list fetch). */
+function isItemIgnored(item) { return !!item.ignored; }
+
 function clearSelection(entity) {
     state.selected[entity].clear();
     state.selectedData[entity].clear();
     updateMergeBar(entity);
     hideMergePanel(entity);
     hideExcludePanel(entity);
+    if (entity === 'boats')   hideEditPanel();
+    if (entity === 'designs') hideIgnorePanel();
+    const panel = document.getElementById('detail-' + entity);
+    if (panel) panel.classList.remove('visible');
     document.querySelectorAll('#tbody-' + entity + ' input[type=checkbox]').forEach(cb => cb.checked = false);
     document.querySelectorAll('#tbody-' + entity + ' tr.selected').forEach(tr => tr.classList.remove('selected'));
 }
@@ -822,6 +856,7 @@ function applyMergeAuthState() {
         applyPanelAuthState(entity, 'merge', w);
     });
     ALL_ENTITIES.forEach(entity => applyPanelAuthState(entity, 'exclude', w));
+    applyPanelAuthState('designs', 'ignore', w);
     ALL_ENTITIES.forEach(updateMergeBar);
 
     const editSaveBtn  = document.getElementById('edit-save-btn');
@@ -1017,6 +1052,103 @@ async function requestExclude(entity) {
     }
 }
 
+// ---- Ignore / Do-Not-Ignore (designs only) ----
+
+let ignoreIntent = true;
+
+function showIgnorePanel(doIgnore) {
+    ignoreIntent = doIgnore;
+    const panel = document.getElementById('ignore-panel-designs');
+    const list  = document.getElementById('ignore-list-designs');
+    const title = document.getElementById('ignore-panel-title-designs');
+    const warn  = document.getElementById('ignore-warning-designs');
+    document.getElementById('ignore-status-designs').textContent = '';
+    // Only act on designs whose state needs to flip.
+    const targets = Array.from(state.selectedData.designs.values())
+        .filter(it => isItemIgnored(it) !== doIgnore);
+    const n = targets.length;
+    const verb = doIgnore ? 'Ignore' : 'Do not ignore';
+    title.textContent = verb + ' ' + n + ' design' + (n !== 1 ? 's' : '') + '?';
+    list.innerHTML = '';
+    targets.forEach(it => {
+        const line = document.createElement('div');
+        line.style.fontFamily = 'monospace';
+        line.style.fontSize   = '0.9rem';
+        const boats = it.boats != null ? it.boats : 0;
+        line.textContent = it.id + '  —  ' + (it.canonicalName || '') + '   (' + boats + ' boat' + (boats !== 1 ? 's' : '') + ')';
+        list.appendChild(line);
+    });
+    if (doIgnore) {
+        const total = targets.reduce((acc, it) => acc + (it.boats || 0), 0);
+        warn.textContent = total > 0
+            ? 'This will strip the design from ' + total + ' boat' + (total !== 1 ? 's' : '')
+                + '; where a designless record already exists at the same sail+name, the two will be merged.'
+            : '';
+        warn.style.display = total > 0 ? '' : 'none';
+    } else {
+        warn.textContent = 'Un-ignoring a design does not restore boats that were already de-designed by a previous ignore.';
+        warn.style.display = '';
+    }
+    panel.style.display = '';
+    applyPanelAuthState('designs', 'ignore', isWriteAllowed());
+}
+
+function hideIgnorePanel() {
+    const panel = document.getElementById('ignore-panel-designs');
+    if (panel) panel.style.display = 'none';
+}
+
+function buildIgnoreBody() {
+    const ids = Array.from(state.selectedData.designs.values())
+        .filter(it => isItemIgnored(it) !== ignoreIntent)
+        .map(it => it.id)
+        .filter(Boolean);
+    return { ids, ignored: ignoreIntent };
+}
+
+async function performIgnore() {
+    if (!isWriteAllowed()) return;
+    const statusEl = document.getElementById('ignore-status-designs');
+    const body = buildIgnoreBody();
+    if (body.ids.length === 0) { hideIgnorePanel(); return; }
+    statusEl.textContent = (ignoreIntent ? 'Ignoring' : 'Un-ignoring') + '…';
+    const result = await fetchJson('/api/designs/ignore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!result || !result.ok) {
+        statusEl.textContent = 'Failed — see console.';
+        return;
+    }
+    clearSelection('designs');
+    hideIgnorePanel();
+    loadList('designs', 0);
+}
+
+async function requestIgnore() {
+    const statusEl = document.getElementById('ignore-status-designs');
+    const email = document.getElementById('ignore-email-designs')?.value.trim() || '';
+    const message = document.getElementById('ignore-message-designs')?.value.trim() || '';
+    const body = buildIgnoreBody();
+    if (body.ids.length === 0) { hideIgnorePanel(); return; }
+    if (email) body.email = email;
+    if (message) body.message = message;
+    statusEl.textContent = 'Submitting request…';
+    const result = await fetchJson('/api/designs/ignore-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (result && result.ok) {
+        statusEl.textContent = 'Request recorded.';
+        clearSelection('designs');
+        hideIgnorePanel();
+    } else {
+        statusEl.textContent = 'Failed to record request — see console.';
+    }
+}
+
 // ---- Edit boat ----
 
 let editingBoatId = null;
@@ -1059,10 +1191,16 @@ async function loadEditChoices() {
     }
 }
 
+/** Opens the edit panel for the single currently-selected boat. */
 function showEditPanel() {
-    const item = state.lastDetailBoat;
+    const ids = Array.from(state.selected.boats);
+    if (ids.length !== 1) return;
+    const item = state.selectedData.boats.get(ids[0]);
     if (!item) return;
     editingBoatId = item.id;
+    const title = document.getElementById('edit-panel-title');
+    if (title) title.textContent = isWriteAllowed() ? ('Edit Boat ' + item.id)
+                                                    : ('Request edit for Boat ' + item.id);
     document.getElementById('edit-boat-sail').value = item.sailNumber || '';
     document.getElementById('edit-boat-name').value = item.name || '';
     // Populate selects before setting value so the option exists
@@ -1073,14 +1211,13 @@ function showEditPanel() {
     document.getElementById('edit-boat-design').value = item.designId || '';
     document.getElementById('edit-boat-club').value = item.clubId || '';
     document.getElementById('edit-status-boats').textContent = '';
-    document.getElementById('edit-btn-container').style.display = 'none';
     document.getElementById('edit-panel-boats').style.display = '';
     applyMergeAuthState();
 }
 
 function hideEditPanel() {
-    document.getElementById('edit-panel-boats').style.display = 'none';
-    document.getElementById('edit-btn-container').style.display = '';
+    const panel = document.getElementById('edit-panel-boats');
+    if (panel) panel.style.display = 'none';
     editingBoatId = null;
 }
 
@@ -1112,7 +1249,7 @@ async function saveBoatEdit() {
     if (result.idChanged) msg += ' ID changed to ' + result.newBoatId + '.';
     if (result.updatedRaces > 0) msg += ' Updated ' + result.updatedRaces + ' race(s).';
     statusEl.textContent = msg;
-    hideEditPanel();
+    clearSelection('boats');
     loadList('boats', 0);
     if (result.newBoatId) loadDetail('boats', result.newBoatId);
 }
@@ -1141,7 +1278,8 @@ async function requestBoatEdit() {
     });
 
     if (result && result.ok) {
-        hideEditPanel();
+        statusEl.textContent = 'Request recorded.';
+        clearSelection('boats');
     } else {
         statusEl.textContent = 'Failed to record request — see console.';
     }

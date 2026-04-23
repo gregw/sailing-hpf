@@ -591,3 +591,78 @@ boats:
     aliases:
     - sailNumber: "9596"
       name: "loco"
+  "4-dscrsquest4":
+    canonicalName: "DSC RS Quest 4"
+    aliases:
+    - sailNumber: "04"
+      name: "dscrsquest4"
+  "35-hitnrun":
+    canonicalName: "HIT N RUN"
+    aliases:
+    - sailNumber: "035"
+      name: "hitnrun"
+  "25-matador":
+    canonicalName: "Matador"
+    aliases:
+    - sailNumber: "025"
+      name: "matador"
+  "400-vento":
+    canonicalName: "Vento"
+    aliases:
+    - sailNumber: "00400"
+      name: "vento"
+  "112-joli":
+    canonicalName: "Joli"
+    aliases:
+    - sailNumber: "0112"
+      name: "joli"
+  "7-shakennotstirred":
+    canonicalName: "Shaken not Stirred"
+    aliases:
+    - sailNumber: "007"
+      name: "shakennotstirred"
+  "214444-four":
+    canonicalName: "Four"
+    aliases:
+    - sailNumber: "0214444"
+      name: "four"
+  "38-tribute":
+    canonicalName: "Tribute"
+    aliases:
+    - sailNumber: "038"
+      name: "tribute"
+  "14-seafox":
+    canonicalName: "Sea Fox"
+    aliases:
+    - sailNumber: "014"
+      name: "seafox"
+  "19-wubaray":
+    canonicalName: "Wubaray"
+    aliases:
+    - sailNumber: "019"
+      name: "wubaray"
+  "86-dragonfly":
+    canonicalName: "Dragonfly"
+    aliases:
+    - sailNumber: "0086"
+      name: "dragonfly"
+  "18-blink":
+    canonicalName: "Blink"
+    aliases:
+    - sailNumber: "018"
+      name: "blink"
+  "103-theedge":
+    canonicalName: "The Edge"
+    aliases:
+    - sailNumber: "0103"
+      name: "theedge"
+  "3-dscrsquest3":
+    canonicalName: "DSC RS Quest 3"
+    aliases:
+    - sailNumber: "03"
+      name: "dscrsquest3"
+  "67-twicetempted":
+    canonicalName: "Twice Tempted"
+    aliases:
+    - sailNumber: "067"
+      name: "twicetempted"
