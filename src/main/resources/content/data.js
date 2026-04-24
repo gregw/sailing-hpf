@@ -132,8 +132,16 @@ const COLUMNS = {
                             'Races for ' + (item.name || item.id)); switchTab('races'); } },
     ],
     designs: [
-        { label: 'ID',     key: 'id',           anchor: 'col-design-id',     tip: 'Unique design identifier (normalised class name).', cls: 'id-col' },
-        { label: 'Name',   key: 'canonicalName', anchor: 'col-design-name',   tip: 'Canonical design name used in all reports.' },
+        { label: 'ID',     sortKey: 'id',           anchor: 'col-design-id',     tip: 'Unique design identifier (normalised class name).', cls: 'id-col',
+          render: item => {
+              const text = esc(item.id != null ? String(item.id) : '');
+              return /modified|custom/i.test(item.id || '') ? `<span style="text-decoration:line-through">${text}</span>` : text;
+          } },
+        { label: 'Name',   sortKey: 'canonicalName', anchor: 'col-design-name',   tip: 'Canonical design name used in all reports.',
+          render: item => {
+              const text = esc(item.canonicalName != null ? String(item.canonicalName) : '');
+              return /modified|custom/i.test(item.id || '') ? `<span style="text-decoration:line-through">${text}</span>` : text;
+          } },
         { label: 'RF',     key: 'spinRef',       anchor: 'col-design-rf',
           tip: 'Design-level Reference Factor aggregated across all boats of this class. Colors: green = high confidence, red = low',
           render: v => v && v.value != null

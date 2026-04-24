@@ -130,7 +130,9 @@
       <button class="search-clear-btn" title="Clear search" onclick="clearSearch('designs')">✕</button>
       <button onclick="doSearch('designs')">Search</button>
       <label style="margin-left:0.5rem;"><input type="checkbox" id="show-excluded-designs" onchange="doSearch('designs')"> Show excluded</label>
-      <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-designs" onchange="doSearch('designs')"> Hide empty</label>
+      <label style="margin-left:0.5rem;"><input type="checkbox" id="hide-empty-designs" onchange="doSearch('designs')"> Hide empty</label>&nbsp;;
+      <label style="margin-left:0.5rem;">Design <i>ignored</i><a href="ui-tips.md#ignored-design" class="info-btn" data-tip="Ignored Design: A design that is ignored (e.g. 'design1')" target="_blank" onclick="event.stopPropagation()">ⓘ</a>
+          or <span style="text-decoration:line-through">custom</span><a href="ui-tips.md#custom-design" class="info-btn" data-tip="Custom Design: Custom or modified designs are not assigned an RF" target="_blank" onclick="event.stopPropagation()">ⓘ</a></label>
     </div>
     <div class="table-scroll" style="height:calc(75vh - 300px);max-height:calc(100vh - 250px);overflow-y:auto;resize:vertical;"><table>
       <thead><tr id="thead-designs"></tr></thead>
