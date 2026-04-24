@@ -19,19 +19,20 @@
   <div class="comparison-controls">
     <div class="selector-panels">
       <div class="selector-panel">
-        <h3>Design A <span id="label-a" style="color:#2255aa;font-weight:normal;font-size:0.9rem;"></span></h3>
-        <input type="text" id="search-a" class="selector-search" placeholder="Search by design name…">
-        <div id="list-a" class="selector-list"></div>
-        <button id="select-a-btn" disabled>Select Design A</button>
-      </div>
-      <div class="selector-panel">
-        <h3>Design B <span id="label-b" style="color:#c47900;font-weight:normal;font-size:0.9rem;"></span></h3>
-        <input type="text" id="search-b" class="selector-search" placeholder="Search by design name…">
-        <div id="list-b" class="selector-list"></div>
-        <button id="select-b-btn" disabled>Select Design B</button>
+        <h3>Designs</h3>
+        <input type="text" id="design-search" class="selector-search" placeholder="Search by design name…"
+               title="Search designs by canonical name or id">
+        <div id="design-list" class="selector-list"></div>
+        <button id="add-design-btn" disabled>Add Design</button>
       </div>
     </div>
     <div class="comparison-options-row">
+      <label class="all-available-label">
+        <input type="checkbox" id="all-available"
+               title="When unchecked, the selector only shows designs that have raced with every design in the comparison list">
+        All available
+        <span style="color:#666;font-size:0.85rem;">(uncheck to show only designs that have co-raced with all selected)</span>
+      </label>
       <label class="variant-label">
         Variant:
         <select id="variant-selector" title="Which handicap variant to display">
@@ -39,56 +40,50 @@
           <option value="nonSpin">Non-Spin</option>
         </select>
       </label>
-      <label title="Start both axes at zero">
-        <input type="checkbox" id="design-from-zero" checked onchange="onDesignFromZeroChange()"> From 0
+      <label title="Show RF (Reference Factor) horizontal line per design">
+        <input type="checkbox" id="show-rf-line" checked> RF line
+      </label>
+      <label title="Show weighted linear trend line per design">
+        <input type="checkbox" id="show-trend-linear" checked> Linear trend
+      </label>
+      <label title="Show trailing N-finish weighted average per design">
+        <input type="checkbox" id="show-trend-sliding" checked> Sliding average
+      </label>
+      <label title="Hide the chart legend">
+        <input type="checkbox" id="hide-legend"> Hide legend
+      </label>
+      <label title="Only show race results from the last 12 months">
+        <input type="checkbox" id="last-12-months"> Last 12 months
+      </label>
+      <label title="Only plot races in which all selected designs had at least one finisher">
+        <input type="checkbox" id="common-races-only"> Common races only
       </label>
     </div>
   </div>
 
-  <div style="font-weight:bold;margin-bottom:0.25rem;">Design Comparison Chart <a href="ui-tips.md#chart-design-comparison" class="info-btn" data-tip="Scatter plot comparing elapsed times for two selected designs. Blue = Design A, amber = Design B.  A good linear fit close to the projected RF indicates these designs are good for handicap comparisons. " target="_blank">ⓘ</a></div>
-  <div id="design-comparison-chart" class="chart-med" style="width:100%;height:520px;margin-top:0.5rem;"></div>
+  <div id="chip-list" class="chip-list"></div>
 
-  <div id="design-calc" style="display:none; margin-top:1.25rem;">
-    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Calculator to generate handicaps based on the RF ratio of designs. Enter a handicap for Design A to compute the equivalent for Design B using RF ratio and best-fit conversion." target="_blank">ⓘ</a></h3>
-    <p id="calc-ratios" style="margin:0 0 0.75rem;color:#666;font-size:0.85rem;"></p>
-    <table class="pf-calc-table">
-      <thead>
-        <tr>
-          <th></th>
-          <th id="calc-name-a" style="color:#2255aa;padding:3px 8px;">Design A</th>
-          <th id="calc-name-b" style="color:#c47900;padding:3px 8px;">Design B</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>RF</td>
-          <td id="calc-rf-a" style="font-family:monospace">—</td>
-          <td id="calc-rf-b" style="font-family:monospace">—</td>
-        </tr>
-        <tr>
-          <td>Enter handicap</td>
-          <td><input type="number" id="calc-input-a" step="0.0001" min="0.1" max="2.0"
-                     class="pf-calc-input" placeholder="enter…"
-                     style="width:90px;font-family:monospace;text-align:right;"
-                     oninput="onCalcInput('a')"></td>
-          <td><input type="number" id="calc-input-b" step="0.0001" min="0.1" max="2.0"
-                     class="pf-calc-input" placeholder="enter…"
-                     style="width:90px;font-family:monospace;text-align:right;"
-                     oninput="onCalcInput('b')"></td>
-        </tr>
-        <tr>
-          <td>By RF ratio</td>
-          <td id="calc-rf-result-a" style="font-family:monospace">—</td>
-          <td id="calc-rf-result-b" style="font-family:monospace">—</td>
-        </tr>
-        <tr>
-          <td>By best fit</td>
-          <td id="calc-fit-result-a" style="font-family:monospace">—</td>
-          <td id="calc-fit-result-b" style="font-family:monospace">—</td>
-        </tr>
-      </tbody>
-    </table>
+  <div style="font-weight:bold;margin-bottom:0.25rem;">Back Calculated Factor Comparison <a href="ui-tips.md#chart-design-comparison" class="info-btn" data-tip="Scatter plot of back-calculated factor per race across every member boat of each selected design. Horizontal line = design RF; trend and sliding average are per design." target="_blank">ⓘ</a></div>
+  <div id="comparison-chart" class="chart-tall" style="width:100%;height:960px;margin-top:0.5rem;"></div>
+
+  <div id="pf-calc" style="display:none; margin-top:1.25rem;">
+    <h3 style="margin:0 0 0.5rem;">Handicap Calculator <a href="ui-tips.md#table-pf-calc" class="info-btn" data-tip="Enter a handicap for any design — RF and Best Fit columns for all designs are scaled by the ratio. With multiple entries, the consensus ratio is used; entered values are coloured by fit quality, unentered by confidence." target="_blank">ⓘ</a></h3>
+    <p style="margin:0 0 0.5rem;color:#666;font-size:0.85rem;">
+      Enter a handicap for any design — all other designs are scaled by the consensus ratio.
+    </p>
+    <table class="pf-calc-table"></table>
   </div>
+
+  <div id="elapsed-charts-section" style="display:none; margin-top:1.5rem;">
+    <h3 style="margin:0 0 0.5rem;">Elapsed Time Comparison</h3>
+    <div style="display:flex;gap:1.5rem;align-items:center;margin:0 0 0.5rem 0;font-size:0.9rem;">
+      <label title="Start both axes at zero">
+        <input type="checkbox" id="elapsed-from-zero" checked onchange="onElapsedFromZeroChange()"> From 0
+      </label>
+    </div>
+    <div id="elapsed-charts-container"></div>
+  </div>
+
 
   <script src="common.js"></script>
   <script src="design-comparison.js"></script>

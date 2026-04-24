@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Certificate;
+import org.mortbay.sailing.pf.data.Design;
 import org.mortbay.sailing.pf.data.Division;
 import org.mortbay.sailing.pf.data.Factor;
 import org.mortbay.sailing.pf.data.Finisher;
@@ -220,7 +221,7 @@ public class ReferenceNetworkBuilder
 
         // Step 12: aggregate boat RFs to design level — applied once after propagation converges,
         // so the design factors reflect a stable, fully-propagated set of boat RFs.
-        Map<String, ReferenceFactors> designFactors = computeDesignFactors(result, boats);
+        Map<String, ReferenceFactors> designFactors = computeDesignFactors(result, boats, store.designs());
         LOG.info("ReferenceNetworkBuilder step 12: {} designs with RF", designFactors.size());
 
         // Step 13: combine each boat's RF with its design RF — pulls low-weight outlier boats
@@ -253,7 +254,7 @@ public class ReferenceNetworkBuilder
      * average generation of contributing boats for each variant.
      */
     private static Map<String, ReferenceFactors> computeDesignFactors(
-        Map<String, ReferenceFactors> brf, Map<String, Boat> boats)
+        Map<String, ReferenceFactors> brf, Map<String, Boat> boats, Map<String, Design> designs)
     {
         Map<String, List<Factor>> spinByDesign    = new LinkedHashMap<>();
         Map<String, List<Factor>> nonSpinByDesign = new LinkedHashMap<>();
@@ -290,6 +291,12 @@ public class ReferenceNetworkBuilder
         allDesigns.addAll(spinByDesign.keySet());
         allDesigns.addAll(nonSpinByDesign.keySet());
         allDesigns.addAll(twoHByDesign.keySet());
+
+        // Filter out designs with "Modified" in the canonical name (case insensitive)
+        allDesigns.removeIf(designId -> {
+            Design design = designs.get(designId);
+            return design != null && design.canonicalName().toLowerCase().contains("modified");
+        });
 
         Map<String, ReferenceFactors> result = new LinkedHashMap<>();
         for (String designId : allDesigns)

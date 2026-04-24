@@ -1516,6 +1516,59 @@ public class AdminApiServlet extends HttpServlet
             ReferenceFactors rf = dd.referenceFactors();
             dm.put("rfSpin",    rf != null ? factorMap(rf.spin())    : null);
             dm.put("rfNonSpin", rf != null ? factorMap(rf.nonSpin()) : null);
+
+            // Build per-design back-calc entries by unioning member-boat residuals.
+            // Each entry anchors the residual to the design's RF for the variant, so the
+            // scatter dots are comparable against the design's RF horizontal line.
+            List<Map<String, Object>> entries = new ArrayList<>();
+            if (rf != null && dd.boatIds() != null)
+            {
+                for (String memberId : dd.boatIds())
+                {
+                    List<EntryResidual> residuals = cache.residualsByBoatId().get(memberId);
+                    if (residuals == null) continue;
+                    BoatDerived memberBd = cache.boatDerived().get(memberId);
+                    String memberName = memberBd != null ? memberBd.boat().name() : memberId;
+                    String memberSail = memberBd != null ? memberBd.boat().sailNumber() : null;
+                    for (EntryResidual r : residuals)
+                    {
+                        // Designs have no two-handed RF; skip two-handed entries rather than
+                        // anchor against a mismatched variant.
+                        if (r.twoHanded()) continue;
+                        Factor rfVariant = r.nonSpinnaker() ? rf.nonSpin() : rf.spin();
+                        if (rfVariant == null || Double.isNaN(rfVariant.value())) continue;
+                        double backCalcFactor = rfVariant.value() * Math.exp(-r.residual());
+                        Race race = store.races().get(r.raceId());
+                        String raceName = raceName(race);
+                        String seriesName = null, seriesId = null;
+                        if (race != null && race.seriesIds() != null && !race.seriesIds().isEmpty())
+                        {
+                            seriesId = race.seriesIds().getFirst();
+                            var club = store.clubs().get(race.clubId());
+                            if (club != null && club.series() != null)
+                                for (var s : club.series())
+                                    if (seriesId.equals(s.id())) { seriesName = s.name(); break; }
+                            if (seriesName == null) seriesName = seriesId;
+                        }
+                        Map<String, Object> em = new LinkedHashMap<>();
+                        em.put("date",           r.raceDate().toString());
+                        em.put("raceId",         r.raceId());
+                        em.put("raceName",       raceName);
+                        em.put("seriesName",     seriesName);
+                        em.put("seriesId",       seriesId);
+                        em.put("division",       r.divisionName());
+                        em.put("backCalcFactor", backCalcFactor);
+                        em.put("nonSpinnaker",   r.nonSpinnaker());
+                        em.put("twoHanded",      r.twoHanded());
+                        em.put("weight",         r.weight());
+                        em.put("boatId",         memberId);
+                        em.put("boatName",       memberName);
+                        em.put("boatSailNumber", memberSail);
+                        entries.add(em);
+                    }
+                }
+            }
+            dm.put("entries", entries);
             designData.add(dm);
         }
 
@@ -2473,44 +2526,69 @@ public class AdminApiServlet extends HttpServlet
      * text filter. Excluded designs are always omitted. Results are sorted by canonical name
      * and capped at 200. Each entry includes the design's spin and nonSpin RF.
      */
-    private void handleDesignComparisonCandidates(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    /**
+     * Returns the set of design ids that have co-raced (share a race division) with at
+     * least one boat of the given anchor design. Returns null if the anchor design or
+     * its member-boat set is unknown.
+     */
+    private Set<String> coRacingDesigns(String anchorId)
     {
-        String designAId = req.getParameter("designAId");
-        String q         = req.getParameter("q");
-        String lowerQ    = q != null && !q.isBlank() ? q.toLowerCase() : null;
-
-        // When designAId is given, restrict to designs that co-raced with any boat of design A
-        Set<String> validDesignIds = null;
-        if (designAId != null && !designAId.isBlank())
+        DesignDerived dda = cache.designDerived().get(anchorId);
+        if (dda == null || dda.boatIds() == null) return null;
+        Set<String> out = new HashSet<>();
+        for (String boatId : dda.boatIds())
         {
-            DesignDerived dda = cache.designDerived().get(designAId.trim());
-            if (dda != null && dda.boatIds() != null)
+            BoatDerived bd = cache.boatDerived().get(boatId);
+            if (bd == null) continue;
+            for (String raceId : bd.raceIds())
             {
-                validDesignIds = new HashSet<>();
-                for (String boatIdA : dda.boatIds())
+                Race race = store.races().get(raceId);
+                if (race == null || race.divisions() == null) continue;
+                for (var div : race.divisions())
                 {
-                    BoatDerived bda = cache.boatDerived().get(boatIdA);
-                    if (bda == null) continue;
-                    for (String raceId : bda.raceIds())
+                    boolean hasAnchor = div.finishers().stream()
+                        .anyMatch(f -> dda.boatIds().contains(f.boatId()));
+                    if (!hasAnchor) continue;
+                    for (var f : div.finishers())
                     {
-                        Race race = store.races().get(raceId);
-                        if (race == null || race.divisions() == null) continue;
-                        for (var div : race.divisions())
-                        {
-                            boolean hasA = div.finishers().stream()
-                                .anyMatch(f -> dda.boatIds().contains(f.boatId()));
-                            if (!hasA) continue;
-                            for (var f : div.finishers())
-                            {
-                                BoatDerived bd = cache.boatDerived().get(f.boatId());
-                                if (bd != null && bd.boat().designId() != null)
-                                    validDesignIds.add(bd.boat().designId());
-                            }
-                        }
+                        BoatDerived other = cache.boatDerived().get(f.boatId());
+                        if (other != null && other.boat().designId() != null)
+                            out.add(other.boat().designId());
                     }
                 }
-                validDesignIds.remove(designAId.trim());
             }
+        }
+        return out;
+    }
+
+    private void handleDesignComparisonCandidates(HttpServletRequest req, HttpServletResponse resp) throws IOException
+    {
+        String designAId   = req.getParameter("designAId");
+        String designIdsIn = req.getParameter("designIds");
+        String q           = req.getParameter("q");
+        String lowerQ      = q != null && !q.isBlank() ? q.toLowerCase() : null;
+        boolean allAvailable = "true".equals(req.getParameter("allAvailable"));
+
+        // Build the anchor set: if designIds is given, intersect co-racers across all of them;
+        // otherwise fall back to the legacy single designAId behaviour.
+        List<String> anchors = new ArrayList<>();
+        if (designIdsIn != null && !designIdsIn.isBlank())
+            for (String id : designIdsIn.split(","))
+                if (!id.trim().isEmpty()) anchors.add(id.trim());
+        if (anchors.isEmpty() && designAId != null && !designAId.isBlank())
+            anchors.add(designAId.trim());
+
+        Set<String> validDesignIds = null;
+        if (!allAvailable && !anchors.isEmpty())
+        {
+            for (String anchorId : anchors)
+            {
+                Set<String> coracers = coRacingDesigns(anchorId);
+                if (coracers == null) continue;
+                if (validDesignIds == null) validDesignIds = new HashSet<>(coracers);
+                else                        validDesignIds.retainAll(coracers);
+            }
+            if (validDesignIds != null) anchors.forEach(validDesignIds::remove);
         }
 
         final Set<String> finalValid = validDesignIds;
