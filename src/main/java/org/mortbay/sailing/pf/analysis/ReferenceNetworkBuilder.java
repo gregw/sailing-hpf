@@ -292,11 +292,8 @@ public class ReferenceNetworkBuilder
         allDesigns.addAll(nonSpinByDesign.keySet());
         allDesigns.addAll(twoHByDesign.keySet());
 
-        // Filter out designs with "Modified" in the canonical name (case insensitive)
-        allDesigns.removeIf(designId -> {
-            Design design = designs.get(designId);
-            return design != null && design.canonicalName().toLowerCase().contains("modified");
-        });
+        // Filter out designs with "Modified" or "Custom" in the design id
+        allDesigns.removeIf(designId -> designId.toLowerCase().contains("modified") || designId.toLowerCase().contains("custom"));
 
         Map<String, ReferenceFactors> result = new LinkedHashMap<>();
         for (String designId : allDesigns)
