@@ -1189,9 +1189,10 @@ function renderInlineDivisionChart() {
         }))
         .sort((a, b) => a.handicap - b.handicap);
     if (allocPts.length > 0) {
+        const allocXs = allocPts.map(p => p.handicap);
+        const allocYs = allocPts.map(p => p.correctedMin);
         traces.push({
-            x: allocPts.map(p => p.handicap),
-            y: allocPts.map(p => p.correctedMin),
+            x: allocXs, y: allocYs,
             mode: 'lines+markers', type: 'scatter',
             name: 'Allocated handicap corrected',
             line: {dash: 'longdash', color: '#a04020', width: 2},
@@ -1201,6 +1202,28 @@ function renderInlineDivisionChart() {
                 + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
             hoverinfo: 'text'
         });
+
+        // Podium markers for the allocated-handicap line (1st/2nd/3rd fastest corrected time).
+        // Shares legendgroups with the PF podium markers so the legend stays clean.
+        const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
+        const PODIUM_SIZES = [14, 12, 11];
+        const PODIUM_LABELS = ['1st', '2nd', '3rd'];
+        const allocRanked = allocPts.map((p, i) => ({i, t: p.correctedMin})).sort((a, b) => a.t - b.t);
+        for (let pos = 0; pos < Math.min(3, allocRanked.length); pos++) {
+            const idx = allocRanked[pos].i;
+            const p = allocPts[idx];
+            traces.push({
+                x: [allocXs[idx]], y: [allocYs[idx]],
+                mode: 'markers', type: 'scatter',
+                name: PODIUM_LABELS[pos], legendgroup: PODIUM_LABELS[pos], showlegend: false,
+                marker: {
+                    symbol: PODIUM_SYMBOLS[pos], size: PODIUM_SIZES[pos],
+                    color: '#a04020', line: {color: '#fff', width: 1.5}
+                },
+                text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
+                hoverinfo: 'text'
+            });
+        }
     }
 
     const annotations = finishers.map((f, i) => {

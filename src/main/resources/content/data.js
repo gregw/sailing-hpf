@@ -290,6 +290,7 @@ let currentDivRaceId = null;
 const RACE_RF_KEY    = 'pf.divChart.showRf';
 const RACE_ERR_KEY   = 'pf.divChart.showErrorBars';
 const RACE_TREND_KEY = 'pf.divChart.showTrend';
+const CLUBS_SELECTED_KEY = 'pf.clubs.selectedId';
 function sessionBool(key, dflt) {
     const v = sessionStorage.getItem(key);
     return v === null ? dflt : v === 'true';
@@ -555,6 +556,8 @@ async function loadDetail(entity, id) {
         loadSeriesChart(id);
         return;
     }
+
+    if (entity === 'clubs') sessionStorage.setItem(CLUBS_SELECTED_KEY, id);
 
     const data = await fetchJson('/api/' + entity + '/' + encodeURIComponent(id));
     if (!data) return;
@@ -2075,7 +2078,16 @@ function median(arr) {
     const raceId   = p.get('raceId');
     const boatId   = p.get('boatId');
     if (!tab) {
-        loadList('clubs', 0);
+        const savedClubId = sessionStorage.getItem(CLUBS_SELECTED_KEY);
+        if (savedClubId) {
+            const q = document.getElementById('q-clubs');
+            if (q) {
+                q.value = savedClubId;
+                state.searches['clubs'] = savedClubId;
+            }
+        }
+        await loadList('clubs', 0);
+        if (savedClubId) await loadDetail('clubs', savedClubId);
         return;
     }
 
