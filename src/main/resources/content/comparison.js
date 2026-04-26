@@ -786,25 +786,77 @@ function scaleMulti(anchors, calcBoats) {
         }
     });
 
-    // Update delta columns
+    // Update delta columns — first pass: collect all deltas to find the max
+    const allDeltas = [];
+
+    // Collect PF deltas
+    const pfStats = ftStats['pf'];
+    if (pfStats && pfStats.ratios.length > 1) {
+        calcBoats.forEach(boat => {
+            const boatId = boat.id;
+            const isAnchor = anchorIds.has(boatId);
+            const anchor = anchorByBoat.get(boatId);
+            if (isAnchor && anchor) {
+                const predicted = boat.pf * pfStats.R;
+                const delta = anchor.value - predicted;
+                allDeltas.push(Math.abs(delta));
+            }
+        });
+    }
+
+    // Collect RF deltas
+    const rfStats = ftStats['rf'];
+    if (rfStats && rfStats.ratios.length > 1) {
+        calcBoats.forEach(boat => {
+            if (boat.rf != null) {
+                const boatId = boat.id;
+                const isAnchor = anchorIds.has(boatId);
+                const anchor = anchorByBoat.get(boatId);
+                if (isAnchor && anchor) {
+                    const predicted = boat.rf * rfStats.R;
+                    const delta = anchor.value - predicted;
+                    allDeltas.push(Math.abs(delta));
+                }
+            }
+        });
+    }
+
+    const maxAbsDelta = allDeltas.length > 0 ? Math.max(...allDeltas) : 0.05;
+
+    // Helper: gradient color from green (small delta) → red (large delta)
+    const deltaColor = (absDelta) => {
+        const t = Math.min(absDelta / maxAbsDelta, 1);
+        const h = 120 * (1 - t);
+        return `hsl(${h}, 60%, 38%)`;
+    };
+
+    // Helper to format delta with arrow and sign, using smaller font and gradient color
+    const formatDelta = (delta) => {
+        if (Math.abs(delta) < 0.00005) return '0';
+        const arrow = delta > 0 ? '↑' : '↓';
+        const sign = delta > 0 ? '+' : '−';
+        const color = deltaColor(Math.abs(delta));
+        const absValue = Math.abs(delta).toFixed(4);
+        return `<span style="font-size:0.75rem;color:${color};font-weight:bold;">${arrow}${sign}${absValue}</span>`;
+    };
+
+    // Second pass: render deltas with gradient colors
     calcBoats.forEach(boat => {
         const boatId = boat.id;
         const isAnchor = anchorIds.has(boatId);
         const anchor = anchorByBoat.get(boatId);
 
         // PF Delta
-        const pfStats = ftStats['pf'];
         if (pfStats && pfStats.ratios.length > 1) {
             const pfDeltaCell = document.querySelector(`.pf-calc-value[data-boat-id="${boatId}"][data-factor-type="pfDelta"]`);
             if (pfDeltaCell) {
                 if (isAnchor && anchor) {
                     const predicted = boat.pf * pfStats.R;
                     const delta = anchor.value - predicted;
-                    pfDeltaCell.textContent = delta.toFixed(4);
-                    pfDeltaCell.style.color = delta > 0 ? '#a04020' : '#206020';
+                    pfDeltaCell.innerHTML = formatDelta(delta);
                     pfDeltaCell.title = `Entered: ${anchor.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
                 } else {
-                    pfDeltaCell.textContent = '0.0000';
+                    pfDeltaCell.textContent = '';
                     pfDeltaCell.style.color = '';
                     pfDeltaCell.title = 'Consensus prediction (no delta)';
                 }
@@ -812,18 +864,16 @@ function scaleMulti(anchors, calcBoats) {
         }
 
         // RF Delta
-        const rfStats = ftStats['rf'];
         if (rfStats && rfStats.ratios.length > 1 && boat.rf != null) {
             const rfDeltaCell = document.querySelector(`.pf-calc-value[data-boat-id="${boatId}"][data-factor-type="rfDelta"]`);
             if (rfDeltaCell) {
                 if (isAnchor && anchor) {
                     const predicted = boat.rf * rfStats.R;
                     const delta = anchor.value - predicted;
-                    rfDeltaCell.textContent = delta.toFixed(4);
-                    rfDeltaCell.style.color = delta > 0 ? '#a04020' : '#206020';
+                    rfDeltaCell.innerHTML = formatDelta(delta);
                     rfDeltaCell.title = `Entered: ${anchor.value.toFixed(4)}, Predicted: ${predicted.toFixed(4)}`;
                 } else {
-                    rfDeltaCell.textContent = '0.0000';
+                    rfDeltaCell.textContent = '';
                     rfDeltaCell.style.color = '';
                     rfDeltaCell.title = 'Consensus prediction (no delta)';
                 }
