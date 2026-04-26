@@ -2,12 +2,7 @@
 
 Use sailsys cache for handicap fetch?
 
-handle https://app.sailsys.com.au/club/23/results/series/4912/races/35345?handicap=5 with no results yet
-
-Support CSV format files with sailno,name,PHS for handicap fetch.  Use the same format for a save/download option.
-
 Modify div plots to plot RF on X axis for RF corrected time dots.
 
 Show allocated handicap results in division chart.
 
-Use the nextHC column if it exists.

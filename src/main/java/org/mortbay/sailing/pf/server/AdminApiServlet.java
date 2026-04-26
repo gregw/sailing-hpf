@@ -1,36 +1,5 @@
 package org.mortbay.sailing.pf.server;
 
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import jakarta.servlet.http.HttpServlet;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.eclipse.jetty.client.ContentResponse;
-import org.eclipse.jetty.client.HttpClient;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import org.mortbay.sailing.pf.analysis.BoatDerived;
-import org.mortbay.sailing.pf.analysis.BoatPf;
-import org.mortbay.sailing.pf.analysis.DesignDerived;
-import org.mortbay.sailing.pf.analysis.EntryResidual;
-import org.mortbay.sailing.pf.analysis.PfQuality;
-import org.mortbay.sailing.pf.analysis.PerformanceProfile;
-import org.mortbay.sailing.pf.analysis.ReferenceFactors;
-import org.mortbay.sailing.pf.data.Boat;
-import org.mortbay.sailing.pf.data.Club;
-import org.mortbay.sailing.pf.data.Design;
-import org.mortbay.sailing.pf.data.Division;
-import org.mortbay.sailing.pf.data.Factor;
-import org.mortbay.sailing.pf.data.Finisher;
-import org.mortbay.sailing.pf.data.Race;
-import org.mortbay.sailing.pf.data.Series;
-import org.mortbay.sailing.pf.importer.IdGenerator;
-import org.mortbay.sailing.pf.store.Aliases;
-import org.mortbay.sailing.pf.store.DataStore;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.DayOfWeek;
@@ -50,6 +19,37 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.eclipse.jetty.client.ContentResponse;
+import org.eclipse.jetty.client.HttpClient;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+import org.mortbay.sailing.pf.analysis.BoatDerived;
+import org.mortbay.sailing.pf.analysis.BoatPf;
+import org.mortbay.sailing.pf.analysis.DesignDerived;
+import org.mortbay.sailing.pf.analysis.EntryResidual;
+import org.mortbay.sailing.pf.analysis.PerformanceProfile;
+import org.mortbay.sailing.pf.analysis.PfQuality;
+import org.mortbay.sailing.pf.analysis.ReferenceFactors;
+import org.mortbay.sailing.pf.data.Boat;
+import org.mortbay.sailing.pf.data.Club;
+import org.mortbay.sailing.pf.data.Design;
+import org.mortbay.sailing.pf.data.Division;
+import org.mortbay.sailing.pf.data.Factor;
+import org.mortbay.sailing.pf.data.Finisher;
+import org.mortbay.sailing.pf.data.Race;
+import org.mortbay.sailing.pf.data.Series;
+import org.mortbay.sailing.pf.importer.IdGenerator;
+import org.mortbay.sailing.pf.store.Aliases;
+import org.mortbay.sailing.pf.store.DataStore;
 
 public class AdminApiServlet extends HttpServlet
 {
@@ -2948,12 +2948,18 @@ public class AdminApiServlet extends HttpServlet
     // --- SailSys ---
 
     private static final Pattern SAILSYS_RACE_ID = Pattern.compile("/races/(\\d+)");
+    private static final Pattern SAILSYS_HANDICAP_ARG = Pattern.compile("[?&]handicap=(\\d+)");
 
     /**
      * Hits the public SailSys race API (same endpoint the importer uses) for the race id
-     * embedded in the URL, and extracts each entrant's allocated handicap. PHS is preferred
-     * over IRC/ORC/AMS so the value is the actual time-on-time multiplier used for scoring
-     * the PHS standings the comparison calculator expects.
+     * embedded in the URL, and extracts each entrant's allocated handicap from
+     * {@code entry.handicap.currentHandicaps[]}. Reading from that per-entry array —
+     * rather than {@code calculations[].handicapCreatedFrom} — means entry pages for
+     * unsailed races and DNF/DNC boats still report a handicap.
+     * <p>
+     * The handicap definition is selected by {@code ?handicap=N} on the URL when present
+     * (matching SailSys' own page), otherwise the race's {@code defaultHandicapId},
+     * otherwise the first PHS row, otherwise the first listed system.
      */
     private List<Map<String, Object>> fetchSailSysHandicaps(String url) throws Exception
     {
@@ -2961,6 +2967,20 @@ public class AdminApiServlet extends HttpServlet
         if (!m.find())
             throw new IllegalArgumentException("Could not extract SailSys race id from URL");
         String raceId = m.group(1);
+
+        Integer urlHandicapId = null;
+        Matcher hm = SAILSYS_HANDICAP_ARG.matcher(url);
+        if (hm.find())
+        {
+            try
+            {
+                urlHandicapId = Integer.parseInt(hm.group(1));
+            }
+            catch (NumberFormatException ignored)
+            {
+            }
+        }
+
         String apiUrl = "https://api.sailsys.com.au/api/v1/races/" + raceId + "/resultsentrants/display";
 
         ContentResponse response = httpClient.GET(apiUrl);
@@ -2992,7 +3012,12 @@ public class AdminApiServlet extends HttpServlet
                 }
             }
         }
-        Integer chosenId = phsId != null ? phsId : fallbackId;
+        Integer defaultHandicapId = data.get("defaultHandicapId") instanceof Number n
+            ? n.intValue() : null;
+        Integer chosenId = urlHandicapId != null ? urlHandicapId
+            : defaultHandicapId != null ? defaultHandicapId
+            : phsId != null ? phsId
+            : fallbackId;
 
         List<Map<String, Object>> result = new ArrayList<>();
         List<Map<String, Object>> divisions = (List<Map<String, Object>>) data.get("competitors");
@@ -3011,28 +3036,37 @@ public class AdminApiServlet extends HttpServlet
                 if (sailNo == null && name == null) continue;
 
                 Double hcap = null;
-                if (chosenId != null)
-                {
-                    List<Map<String, Object>> calcs = (List<Map<String, Object>>) entry.get("calculations");
-                    if (calcs != null)
-                    {
-                        for (Map<String, Object> c : calcs)
-                        {
-                            Object defId = c.get("handicapDefinitionId");
-                            if (defId instanceof Number && ((Number) defId).intValue() == chosenId)
-                            {
-                                Object v = c.get("handicapCreatedFrom");
-                                if (v instanceof Number) hcap = ((Number) v).doubleValue();
-                                break;
-                            }
-                        }
-                    }
-                }
+                Map<String, Object> handicap = (Map<String, Object>)entry.get("handicap");
+                if (handicap != null && chosenId != null)
+                    hcap = pickSailSysHandicap((List<Map<String, Object>>)handicap.get("currentHandicaps"), chosenId);
                 if (hcap == null) continue;
                 result.add(handicapEntry(sailNo, name, hcap));
             }
         }
         return result;
+    }
+
+    /**
+     * Returns the {@code value} of the first entry whose {@code definition.id} matches, or null.
+     */
+    @SuppressWarnings("unchecked")
+    private static Double pickSailSysHandicap(List<Map<String, Object>> handicaps, int definitionId)
+    {
+        if (handicaps == null)
+            return null;
+        for (Map<String, Object> h : handicaps)
+        {
+            Map<String, Object> def = (Map<String, Object>)h.get("definition");
+            if (def == null)
+                continue;
+            Object id = def.get("id");
+            if (!(id instanceof Number) || ((Number)id).intValue() != definitionId)
+                continue;
+            Object v = h.get("value");
+            if (v instanceof Number)
+                return ((Number)v).doubleValue();
+        }
+        return null;
     }
 
     // --- TopYacht ---
