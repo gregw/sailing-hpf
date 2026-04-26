@@ -652,7 +652,9 @@ function scaleSingle(anchor, calcBoats) {
             return;
         }
 
-        td.textContent = (origVal * (anchor.value / srcFactor)).toFixed(4);
+        // Single-anchor: every cell IS the consensus prediction, so delta is always 0.
+        const newVal = origVal * (anchor.value / srcFactor);
+        td.textContent = newVal.toFixed(4);
         td.style.color = '#c05000';
         td.title = 'Scaled from single entered value — no consensus spread available';
     });
@@ -704,7 +706,7 @@ function scaleMulti(anchors, calcBoats) {
             return;
         }
 
-        // Single valid ratio for this column — treat as single-anchor
+        // Single valid ratio for this column — treat as single-anchor (delta = 0).
         if (stats.ratios.length === 1) {
             td.textContent = (origVal * stats.R).toFixed(4);
             td.style.color = '#c05000';
@@ -714,9 +716,10 @@ function scaleMulti(anchors, calcBoats) {
 
         const isAnchor = anchorIds.has(boatId);
         if (isAnchor) {
-            // Show the entered value (entered / orig * orig = entered)
+            // Show the entered value; delta is entered − consensus prediction (origVal * R).
             const a = anchorByBoat.get(boatId);
-            td.textContent = a.value.toFixed(4);
+            const predicted = origVal * stats.R;
+            td.innerHTML = a.value.toFixed(4) + deltaSpan(a.value, predicted);
             // Color: fit quality — how far this boat's ratio is from consensus
             const r = stats.ratioMap.get(boatId);
             if (r != null) {
@@ -728,7 +731,7 @@ function scaleMulti(anchors, calcBoats) {
                 td.title = '';
             }
         } else {
-            // Unentered boat: consensus-scaled value
+            // Unentered boat: cell IS the consensus prediction, so delta = 0.
             td.textContent = (origVal * stats.R).toFixed(4);
             // Color: confidence based on coefficient of variation
             td.style.color = confidenceColor(stats.cv);
@@ -864,6 +867,120 @@ async function fetchHandicaps(calcBoats) {
 
         // Trigger recalculation
         recalcAll(calcBoats);
+
+    } catch (error) {
+        statusDiv.textContent = `Error: ${error.message}`;
+        statusDiv.style.color = '#c62828';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function loadHandicapsFromFile(calcBoats) {
+    const fileInput = document.getElementById('handicap-file');
+    const statusDiv = document.getElementById('file-status');
+
+    if (!fileInput.files || !fileInput.files[0]) {
+        statusDiv.textContent = 'No file selected';
+        statusDiv.style.color = '#c62828';
+        return;
+    }
+
+    const file = fileInput.files[0];
+    statusDiv.textContent = 'Reading file...';
+    statusDiv.style.color = '#666';
+
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (!Array.isArray(data)) {
+            throw new Error('Expected array of handicaps in file');
+        }
+
+        let matched = 0;
+        data.forEach(item => {
+            if (item.handicap == null) return;
+            // Primary: sail number matched the importer way
+            // Fallback: boat name compared via normaliseDesignName
+            let boat = null;
+            if (item.sailno) {
+                boat = calcBoats.find(b => sailnoMatch(b.sailNumber, item.sailno));
+            }
+            if (!boat && item.name) {
+                const target = normaliseDesignName(item.name);
+                if (target) boat = calcBoats.find(b => normaliseDesignName(b.boatName) === target);
+            }
+            if (boat) {
+                const input = document.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
+                if (input) {
+                    input.value = item.handicap.toString();
+                    matched++;
+                }
+            }
+        });
+
+        statusDiv.textContent = `Loaded ${data.length} handicaps, matched ${matched} boats`;
+        statusDiv.style.color = matched > 0 ? '#2e7d32' : '#c62828';
+        fileInput.value = ''; // Clear the file input
+
+        // Trigger recalculation
+        recalcAll(calcBoats);
+
+    } catch (error) {
+        statusDiv.textContent = `Error: ${error.message}`;
+        statusDiv.style.color = '#c62828';
+        fileInput.value = '';
+    }
+}
+
+function downloadHandicaps(calcBoats) {
+    const statusDiv = document.getElementById('download-status');
+    const btn = document.getElementById('download-handicaps-btn');
+
+    btn.disabled = true;
+    statusDiv.textContent = 'Preparing download...';
+    statusDiv.style.color = '#666';
+
+    try {
+        const handicaps = [];
+
+        // Gather all entered handicap values
+        document.querySelectorAll('.pf-calc-input').forEach(inp => {
+            const v = parseFloat(inp.value);
+            if (!isNaN(v)) {
+                const boat = calcBoats.find(b => b.id === inp.dataset.boatId);
+                if (boat) {
+                    handicaps.push({
+                        sailno: boat.sailNumber || '',
+                        name: boat.boatName || '',
+                        handicap: v
+                    });
+                }
+            }
+        });
+
+        if (handicaps.length === 0) {
+            statusDiv.textContent = 'No handicaps entered';
+            statusDiv.style.color = '#c62828';
+            btn.disabled = false;
+            return;
+        }
+
+        // Create JSON and trigger download
+        const json = JSON.stringify(handicaps, null, 2);
+        const blob = new Blob([json], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `handicaps-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        statusDiv.textContent = `Downloaded ${handicaps.length} handicap(s)`;
+        statusDiv.style.color = '#2e7d32';
 
     } catch (error) {
         statusDiv.textContent = `Error: ${error.message}`;
@@ -1103,6 +1220,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('add-boat-btn').addEventListener('click', addBoat);
     document.getElementById('fetch-handicaps-btn').addEventListener('click', () => fetchHandicaps(currentCalcBoats));
+    document.getElementById('handicap-file').addEventListener('change', () => loadHandicapsFromFile(currentCalcBoats));
+    document.getElementById('download-handicaps-btn').addEventListener('click', () => downloadHandicaps(currentCalcBoats));
     loadCandidates();
     if (selectedItems.length > 0) loadChart();
 });

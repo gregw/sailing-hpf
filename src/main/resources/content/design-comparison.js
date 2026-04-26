@@ -551,6 +551,18 @@ function confidenceLabel(cv) {
     return `Scaled from consensus — spread ${pct}% (very low confidence)`;
 }
 
+// Small inline delta indicator: shows how the displayed cell value differs from the
+// column's original (RF / Best Fit) allocation.
+function deltaSpan(displayed, orig) {
+    if (orig == null || isNaN(orig)) return '';
+    const delta = displayed - orig;
+    if (Math.abs(delta) < 0.00005) return '';
+    const arrow = delta > 0 ? '↑' : '↓';
+    const sign = delta > 0 ? '+' : '−';
+    const color = delta > 0 ? '#a04020' : '#206020';
+    return ` <span style="font-size:0.72rem;color:${color};margin-left:4px;font-weight:normal;">${arrow}${sign}${Math.abs(delta).toFixed(4)}</span>`;
+}
+
 function restoreAll() {
     document.querySelectorAll('.pf-calc-value').forEach(td => {
         const origStr = td.dataset.origValue;
@@ -575,7 +587,9 @@ function scaleSingle(anchor) {
             td.title = '';
             return;
         }
-        td.textContent = (origVal * (anchor.value / srcFactor)).toFixed(4);
+        // Single-anchor: every cell IS the consensus prediction, so delta is always 0.
+        const newVal = origVal * (anchor.value / srcFactor);
+        td.textContent = newVal.toFixed(4);
         td.style.color = '#c05000';
         td.title = 'Scaled from single entered value — no consensus spread available';
     });
@@ -627,8 +641,10 @@ function scaleMulti(anchors) {
         }
         const isAnchor = anchorIds.has(boatId);
         if (isAnchor) {
+            // Show the entered value; delta is entered − consensus prediction (origVal * R).
             const a = anchorByBoat.get(boatId);
-            td.textContent = a.value.toFixed(4);
+            const predicted = origVal * stats.R;
+            td.innerHTML = a.value.toFixed(4) + deltaSpan(a.value, predicted);
             const r = stats.ratioMap.get(boatId);
             if (r != null) {
                 const deviation = Math.abs(r - stats.R) / stats.R;
@@ -639,6 +655,7 @@ function scaleMulti(anchors) {
                 td.title = '';
             }
         } else {
+            // Unentered boat: cell IS the consensus prediction, so delta = 0.
             td.textContent = (origVal * stats.R).toFixed(4);
             td.style.color = confidenceColor(stats.cv);
             td.title = confidenceLabel(stats.cv);
