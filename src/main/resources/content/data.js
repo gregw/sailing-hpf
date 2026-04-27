@@ -847,13 +847,17 @@ function updateMergeBar(entity) {
     if (mergeBtn) mergeBtn.style.display = (mergeable && n >= 2 && w)  ? '' : 'none';
     if (reqBtn)   reqBtn.style.display   = (mergeable && n >= 2 && !w) ? '' : 'none';
 
-    // Edit (boats only) — visible on a single-row selection.
+    // Edit (boats only) — single selection for full edit; 2+ for club-only bulk edit.
     if (entity === 'boats')
     {
         const editBtn = document.getElementById('edit-btn-boats');
         const editReq = document.getElementById('edit-request-btn-boats');
-        if (editBtn) editBtn.style.display = (n === 1 && w)  ? '' : 'none';
+        const editClubBtn = document.getElementById('edit-club-btn-boats');
+        const editClubReq = document.getElementById('edit-club-request-btn-boats');
+        if (editBtn) editBtn.style.display = (n === 1 && w) ? '' : 'none';
         if (editReq) editReq.style.display = (n === 1 && !w) ? '' : 'none';
+        if (editClubBtn) editClubBtn.style.display = (n >= 2 && w) ? '' : 'none';
+        if (editClubReq) editClubReq.style.display = (n >= 2 && !w) ? '' : 'none';
     }
 
     // Ignore / Do Not Ignore (designs only) — mirrors Exclude/Include on the ignored flag.
@@ -894,7 +898,10 @@ function clearSelection(entity) {
     updateMergeBar(entity);
     hideMergePanel(entity);
     hideExcludePanel(entity);
-    if (entity === 'boats')   hideEditPanel();
+    if (entity === 'boats') {
+        hideEditPanel();
+        hideEditClubPanel();
+    }
     if (entity === 'designs') { hideIgnorePanel(); hideEditDesignPanel(); }
     const panel = document.getElementById('detail-' + entity);
     if (panel) panel.classList.remove('visible');
@@ -975,6 +982,16 @@ function applyMergeAuthState() {
     if (editEmailRow) editEmailRow.style.display = w ? 'none' : '';
     if (editMsgRow)   editMsgRow.style.display   = w ? 'none' : '';
 
+    // Edit-club panel (bulk boats)
+    const ecSave = document.getElementById('edit-club-save-btn');
+    const ecReq = document.getElementById('edit-club-request-save-btn');
+    const ecEmail = document.getElementById('edit-club-email-row');
+    const ecMsg = document.getElementById('edit-club-message-row');
+    if (ecSave) ecSave.style.display = w ? '' : 'none';
+    if (ecReq) ecReq.style.display = w ? 'none' : '';
+    if (ecEmail) ecEmail.style.display = w ? 'none' : '';
+    if (ecMsg) ecMsg.style.display = w ? 'none' : '';
+
     // Edit-design panel: same auth pattern but with design-scoped ids.
     const edSave = document.getElementById('edit-design-save-btn');
     const edReq  = document.getElementById('edit-design-request-btn');
@@ -987,7 +1004,7 @@ function applyMergeAuthState() {
 
     // Pre-populate email fields with remembered value
     if (!w) {
-        const ids = ['edit-email', 'edit-email-designs'];
+        const ids = ['edit-email', 'edit-email-designs', 'edit-club-email'];
         ALL_ENTITIES.forEach(e => {
             ids.push('merge-email-' + e);
             ids.push('exclude-email-' + e);
@@ -1340,6 +1357,91 @@ function hideEditPanel() {
     const panel = document.getElementById('edit-panel-boats');
     if (panel) panel.style.display = 'none';
     editingBoatId = null;
+}
+
+async function showEditClubPanel() {
+    const panel = document.getElementById('edit-club-panel-boats');
+    const sel = document.getElementById('edit-club-select');
+    const ids = Array.from(state.selected.boats);
+    const title = document.getElementById('edit-club-panel-title');
+    if (title) title.textContent = `Edit Club for ${ids.length} selected boat${ids.length !== 1 ? 's' : ''}`;
+    document.getElementById('edit-club-status').textContent = '';
+
+    // Populate club selector with No Club + all clubs
+    const clubsResp = await fetchJson('/api/clubs?limit=500');
+    const noClubOpt = document.createElement('option');
+    noClubOpt.value = '';
+    noClubOpt.textContent = '— No Club —';
+    const opts = (clubsResp && clubsResp.items ? clubsResp.items : []).map(c => {
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = c.shortName ? `${c.shortName} — ${c.id}` : c.id;
+        return o;
+    });
+    sel.replaceChildren(noClubOpt, ...opts);
+
+    // Pre-select common club if all selected boats share one
+    const clubs = ids.map(id => (state.selectedData.boats.get(id) || {}).clubId || '');
+    const common = clubs.every(c => c === clubs[0]) ? clubs[0] : '';
+    sel.value = common;
+
+    applyMergeAuthState();
+    panel.style.display = '';
+}
+
+function hideEditClubPanel() {
+    const panel = document.getElementById('edit-club-panel-boats');
+    if (panel) panel.style.display = 'none';
+}
+
+async function saveBoatClubBulk() {
+    if (!isWriteAllowed()) return;
+    const ids = Array.from(state.selected.boats);
+    const clubId = document.getElementById('edit-club-select').value.trim() || null;
+    const statusEl = document.getElementById('edit-club-status');
+    statusEl.textContent = `Saving ${ids.length} boat${ids.length !== 1 ? 's' : ''}…`;
+
+    let saved = 0, failed = 0;
+    for (const boatId of ids) {
+        const result = await fetchJson('/api/boats/edit', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({boatId, clubId})
+        });
+        if (result && result.ok) saved++;
+        else failed++;
+    }
+
+    statusEl.textContent = failed === 0
+        ? `Saved ${saved} boat${saved !== 1 ? 's' : ''}.`
+        : `${saved} saved, ${failed} failed — see console.`;
+    clearSelection('boats');
+    loadList('boats', 0);
+}
+
+async function requestBoatClubBulk() {
+    const ids = Array.from(state.selected.boats);
+    const clubId = document.getElementById('edit-club-select').value.trim() || null;
+    const email = document.getElementById('edit-club-email')?.value.trim() || '';
+    const message = document.getElementById('edit-club-message')?.value.trim() || '';
+    const statusEl = document.getElementById('edit-club-status');
+    statusEl.textContent = `Submitting request for ${ids.length} boat${ids.length !== 1 ? 's' : ''}…`;
+
+    let sent = 0, failed = 0;
+    for (const boatId of ids) {
+        const result = await fetchJson('/api/boats/edit-request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({boatId, clubId, ...(email && {email}), ...(message && {message})})
+        });
+        if (result && result.ok) sent++;
+        else failed++;
+    }
+
+    statusEl.textContent = failed === 0
+        ? `Request submitted for ${sent} boat${sent !== 1 ? 's' : ''}.`
+        : `${sent} submitted, ${failed} failed — see console.`;
+    if (failed === 0) clearSelection('boats');
 }
 
 async function saveBoatEdit() {
