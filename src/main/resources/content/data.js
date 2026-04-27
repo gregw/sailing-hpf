@@ -669,8 +669,8 @@ function renderBoatPf(data) {
     }
     html += `<div class="division-nav" id="boat-nav" style="margin:0.75rem 0;">
       <button id="boat-prev-btn" onclick="prevBoat()" disabled>&#8592; Prev</button>
-      <span id="boat-nav-label" style="flex:1;text-align:center;font-weight:bold;font-size:1rem;"></span>
       <button id="boat-next-btn" onclick="nextBoat()" disabled>Next &#8594;</button>
+      <span id="boat-nav-label" style="flex:1;text-align:center;font-weight:bold;font-size:1rem;"></span>
     </div>`;
 
     if (data.residuals && data.residuals.length > 0) {
