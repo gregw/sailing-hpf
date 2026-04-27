@@ -6,6 +6,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   byc.org.au:
     shortName: "BYC"
     state: "TAS"
@@ -13,6 +14,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   ballaratyachtclub.com.au:
     shortName: "BYC"
     state: "VIC"
@@ -20,6 +22,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   cyca.com.au:
     shortName: "CYCA"
     state: "NSW"
@@ -29,6 +32,7 @@ clubs:
     - "CYCA/SDYC"
     topyacht:
     - "https://cyca.com.au/results/2019/bwps_1920/index.htm"
+    boats: null
   cycsa.com.au:
     shortName: "CYCSA"
     state: "SA"
@@ -41,6 +45,7 @@ clubs:
     - "https://topyacht.net.au/results/cycsa/2021/club/index.htm"
     - "https://topyacht.net.au/results/cycsa/2022/club/index.htm"
     - "https://topyacht.net.au/results/cycsa/2025/club/index.htm"
+    boats: null
   hbyc.org.au:
     shortName: "HBYC"
     state: "VIC"
@@ -48,6 +53,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   hastingsyachtclub.org.au:
     shortName: "HYC"
     state: "VIC"
@@ -55,6 +61,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   mcys.com.au:
     shortName: "MCYS"
     state: "VIC"
@@ -62,6 +69,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   morningtonyc.net.au:
     shortName: "MYC"
     state: "VIC"
@@ -69,6 +77,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   portadelaidesailingclub.com:
     shortName: "PASC"
     state: "SA"
@@ -76,6 +85,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   gyc.com.au:
     shortName: "PCSC"
     state: "QLD"
@@ -86,6 +96,7 @@ clubs:
     - "https://www.topyacht.net.au/results/pcsc/2020/club/index.htm"
     - "https://www.topyacht.net.au/results/pcsc/2021/club/index.htm"
     - "https://www.topyacht.net.au/results/pcsc/2022/club/index.htm"
+    boats: null
   pdyc.org.au:
     shortName: "PDYC"
     state: "TAS"
@@ -93,6 +104,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   plyc.com.au:
     shortName: "PLYC"
     state: "SA"
@@ -103,6 +115,7 @@ clubs:
     - "https://topyacht.net.au/results/plyc/lincolnweek/2024/"
     - "https://topyacht.net.au/results/plyc/lincolnweek/2025/"
     - "https://topyacht.net.au/results/plyc/lincolnweek/2026/"
+    boats: null
   unknown.domain.14:
     shortName: "RBYC"
     state: "TAS"
@@ -110,6 +123,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rbyc.org.au:
     shortName: "RBYC"
     state: "VIC"
@@ -117,6 +131,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rfbyc.asn.au:
     shortName: "RFBYC"
     state: "WA"
@@ -124,6 +139,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rgyc.com.au:
     shortName: "RGYC"
     state: "VIC"
@@ -142,6 +158,7 @@ clubs:
     - "https://www.topyacht.net.au/results/2024/fos/index.htm"
     - "https://www.topyacht.net.au/results/2025/fos/index.htm"
     - "https://www.topyacht.net.au/results/2026/fos/index.htm"
+    boats: null
   rmys.com.au:
     shortName: "RMYS"
     state: "VIC"
@@ -150,6 +167,7 @@ clubs:
     aliases: []
     topyacht:
     - "https://www.topyacht.net.au/results/rmys/2022/awkr22/index.htm"
+    boats: null
   rqys.com.au:
     shortName: "RQYS"
     state: "QLD"
@@ -157,6 +175,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rsays.com.au:
     shortName: "RSAYS"
     state: "SA"
@@ -165,6 +184,7 @@ clubs:
     aliases: []
     topyacht:
     - "https://topyacht.net.au/results/rsays/2022/vxonestate/index.htm"
+    boats: null
   ryct.org.au:
     shortName: "RYCT"
     state: "TAS"
@@ -187,6 +207,7 @@ clubs:
     - "http://results.ryct.org.au/drgstates21/"
     - "http://results.ryct.org.au/drgstates22/"
     - "http://results.ryct.org.au/drgstates23/"
+    boats: null
   unknown.domain.22:
     shortName: "RYCV"
     state: "SA"
@@ -194,6 +215,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rycv.com.au:
     shortName: "RYCV"
     state: "VIC"
@@ -211,6 +233,7 @@ clubs:
     - "https://www.topyacht.net.au/results/rycv/2024/summer/index-summer.htm"
     - "https://www.topyacht.net.au/results/rycv/2024/winter/index-winter.htm"
     - "https://www.topyacht.net.au/results/rycv/2025/summer/index-summer.htm"
+    boats: null
   sbsc.net.au:
     shortName: "SBSC"
     state: "VIC"
@@ -218,6 +241,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   unknown.domain.25:
     shortName: "SBYC"
     state: "VIC"
@@ -225,6 +249,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   syc.com.au:
     shortName: "SYC"
     state: "VIC"
@@ -242,6 +267,7 @@ clubs:
     - "https://www.topyacht.net.au/results/2024/sailsandy/index.htm"
     - "https://www.topyacht.net.au/results/2025/sailsandy/index.htm"
     - "https://www.topyacht.net.au/results/2026/sailsandy/index.htm"
+    boats: null
   myc.org.au:
     shortName: "MYC"
     state: "NSW"
@@ -249,6 +275,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   mhyc.com.au:
     shortName: "MHYC"
     state: "NSW"
@@ -260,6 +287,7 @@ clubs:
     - "https://www.mhyc.com.au/files/results/2021/champsregattas/index.htm"
     - "https://www.mhyc.com.au/files/results/2020/club/index.htm"
     - "https://www.mhyc.com.au/files/results/2021/club/index.htm"
+    boats: null
   sasc.com.au:
     shortName: "SASC"
     state: "NSW"
@@ -268,6 +296,8 @@ clubs:
     aliases: []
     topyacht:
     - "https://www.topyacht.net.au/results/sasc/2023/club/index.htm"
+    boats:
+      - "1255-melody-swansondart"
   rpeyc.com.au:
     shortName: "RPEYC"
     state: "NSW"
@@ -275,6 +305,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rsys.com.au:
     shortName: "RSYS"
     state: "NSW"
@@ -284,6 +315,7 @@ clubs:
     - "RSYSAcademy"
     - "RSYS - Academy"
     topyacht: null
+    boats: null
   ransa.com.au:
     shortName: "RANSA"
     state: "NSW"
@@ -291,14 +323,17 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rpayc.com.au:
     shortName: "RPAYC"
     state: "NSW"
     fullName: "Royal Prince Alfred Yacht Club"
     excluded: null
-    aliases: ["RPAYC-OTB"]
+    aliases:
+      - "RPAYC-OTB"
     topyacht:
     - "https://rpayc.com.au/results/2022/club/otb/index.htm"
+    boats: null
   byra.org.au:
     shortName: "BYRA"
     state: "NSW"
@@ -306,6 +341,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   royalmotor.com.au:
     shortName: "RMYC"
     state: "NSW"
@@ -314,6 +350,7 @@ clubs:
     aliases:
     - "RMYCBB"
     topyacht: null
+    boats: null
   avalonsailingclub.com.au:
     shortName: "ASC"
     state: "NSW"
@@ -321,6 +358,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   bbyc.com.au:
     shortName: "BBYC"
     state: "NSW"
@@ -332,6 +370,7 @@ clubs:
     - "https://www.topyacht.net.au/results/botanybay/2023/club_series/"
     - "https://www.topyacht.net.au/results/botanybay/2024/club_series/"
     - "https://www.topyacht.net.au/results/botanybay/2025/club_series/"
+    boats: null
   cronullasailingclub.com.au:
     shortName: "CSC"
     state: "NSW"
@@ -339,6 +378,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rmycph.com.au:
     shortName: "RMYC (PH)"
     state: "NSW"
@@ -346,6 +386,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   balmainsailingclub.com.au:
     shortName: "BSC"
     state: "NSW"
@@ -361,6 +402,7 @@ clubs:
     - "https://www.topyacht.net.au/results/balmainsc/2024/kb/index.htm"
     - "https://www.topyacht.net.au/results/balmainsc/2025/kb/index.htm"
     - "https://www.topyacht.net.au/results/balmainsc/2026/kb/index.htm"
+    boats: null
   prsc.org.au:
     shortName: "PRSC"
     state: "NSW"
@@ -368,6 +410,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   dsc.org.au:
     shortName: "DSC"
     state: "NSW"
@@ -375,6 +418,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   ncyc.net.au:
     shortName: "NCYC"
     state: "NSW"
@@ -384,6 +428,7 @@ clubs:
     topyacht:
     - "https://www.topyacht.net.au/results/ncyc/2021/sf2021/index.htm"
     - "https://www.topyacht.net.au/results/ncyc/2022/sf2022/index.htm"
+    boats: null
   lmyc.com.au:
     shortName: "LMYC"
     state: "NSW"
@@ -396,6 +441,7 @@ clubs:
     - "https://www.lmycraceresults.com.au/results/2023/tyregattas/"
     - "https://www.lmycraceresults.com.au/results/2024/tyregattas/"
     - "https://www.lmycraceresults.com.au/results/2025/tyregattas/"
+    boats: null
   gossail.com.au:
     shortName: "GSC"
     state: "NSW"
@@ -403,6 +449,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   orcv.org.au:
     shortName: "ORCV"
     state: "VIC"
@@ -414,6 +461,7 @@ clubs:
     - "https://www.orcv.org.au/results/2023-24/"
     - "https://www.orcv.org.au/results/2024-25/"
     - "https://www.orcv.org.au/results/2025-26/"
+    boats: null
   dbyc.com.au:
     shortName: "DBYC"
     state: "VIC"
@@ -421,6 +469,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   bys.asn.au:
     shortName: "BYS"
     state: "VIC"
@@ -428,6 +477,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   queenscliffcruisingyachtclub.org:
     shortName: "QCYC"
     state: "VIC"
@@ -435,6 +485,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   mccraeyc.com.au:
     shortName: "McCYC"
     state: "VIC"
@@ -443,6 +494,7 @@ clubs:
     aliases:
     - "MYC"
     topyacht: null
+    boats: null
   rosebudyachtclub.au:
     shortName: "RYC"
     state: "VIC"
@@ -450,6 +502,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   flindersyc.com.au:
     shortName: "FYC"
     state: "VIC"
@@ -457,6 +510,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   mmyc.org.au:
     shortName: "MMYC"
     state: "VIC"
@@ -464,6 +518,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   mordiallocsc.com.au:
     shortName: "MSC"
     state: "VIC"
@@ -471,6 +526,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   williamstownsailingclub.org.au:
     shortName: "WSC"
     state: "VIC"
@@ -478,6 +534,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   dssinc.org.au:
     shortName: "DSS"
     state: "TAS"
@@ -485,6 +542,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   wmyc.com.au:
     shortName: "WMSC"
     state: "QLD"
@@ -494,6 +552,7 @@ clubs:
     - "MYC"
     - "WMYC"
     topyacht: null
+    boats: null
   qcyc.com.au:
     shortName: "QCYC"
     state: "QLD"
@@ -501,6 +560,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   southportyachtclub.com.au:
     shortName: "SYC"
     state: "QLD"
@@ -513,6 +573,7 @@ clubs:
     - "https://www.topyacht.net.au/results/2022/sailparadise/"
     - "https://www.topyacht.net.au/results/2023/sailparadise/"
     - "https://www.topyacht.net.au/results/2024/sailparadise/"
+    boats: null
   mooloolabayachtclub.com.au:
     shortName: "MYC"
     state: "QLD"
@@ -520,6 +581,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   nyrc.com.au:
     shortName: "NYRC"
     state: "QLD"
@@ -527,6 +589,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   whitsundaysailingclub.com.au:
     shortName: "WSC"
     state: "QLD"
@@ -536,6 +599,7 @@ clubs:
     topyacht:
     - "https://www.topyacht.net.au/results/2025/abrw/index.htm"
     - "https://www.topyacht.net.au/results/2024/abrw/index.htm"
+    boats: null
   adelaidesailingclub.com.au:
     shortName: "ASC"
     state: "SA"
@@ -543,6 +607,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   bsyc.com.au:
     shortName: "BSYC"
     state: "SA"
@@ -552,6 +617,7 @@ clubs:
     topyacht:
     - "https://www.topyacht.net.au/results/bsyc/2023/club/index.htm"
     - "https://www.topyacht.net.au/results/bsyc/2024/club/index.htm"
+    boats: null
   rpyc.com.au:
     shortName: "RPYC"
     state: "WA"
@@ -559,6 +625,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   fsc.com.au:
     shortName: "FSC"
     state: "WA"
@@ -570,6 +637,7 @@ clubs:
     - "https://www.topyacht.net.au/results/fsc/2024/kb24/"
     - "https://www.topyacht.net.au/results/fsc/2025/kb25/"
     - "https://www.topyacht.net.au/results/fsc/2025/kb26/"
+    boats: null
   efyc.com.au:
     shortName: "EFYC"
     state: "WA"
@@ -577,6 +645,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   nyc.org.au:
     shortName: "NYC"
     state: "WA"
@@ -584,6 +653,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   hillarysyachtclub.com.au:
     shortName: "HYC"
     state: "WA"
@@ -591,6 +661,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   sopyc.com.au:
     shortName: "SoPYC"
     state: "WA"
@@ -598,6 +669,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   pfsyc.com.au:
     shortName: "PFSYC"
     state: "WA"
@@ -605,6 +677,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   darwinsailingclub.com.au:
     shortName: "DSC"
     state: "NT"
@@ -612,6 +685,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   dbcya.com.au:
     shortName: "DBCYA"
     state: "NT"
@@ -619,6 +693,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rycv.com.au/port-phillip-north-yacht-clubs-ppnyc:
     shortName: "PPNYC"
     state: "VIC"
@@ -626,6 +701,7 @@ clubs:
     excluded: null
     aliases: null
     topyacht: null
+    boats: null
   revolutionise.com.au/goolwaryc:
     shortName: "GWYC"
     state: "SA"
@@ -633,6 +709,7 @@ clubs:
     excluded: null
     aliases: null
     topyacht: null
+    boats: null
   rmyctoronto.com.au:
     shortName: "RMYCT"
     state: "NSW"
@@ -648,6 +725,7 @@ clubs:
     - "https://www.raceresults.rmyctoronto.com.au/results/2023_2024/hcwindex.htm"
     - "https://www.raceresults.rmyctoronto.com.au/results/2024_2025/hcwindex.htm"
     - "https://www.raceresults.rmyctoronto.com.au/results/2025_2026/hcwindex.htm"
+    boats: null
   gfs.org.au:
     shortName: "GFS"
     state: "NSW"
@@ -659,6 +737,7 @@ clubs:
     - "https://gfs.org.au/handicapper/results/2021/2021_club_series/index.htm"
     - "https://gfs.org.au/handicapper/results/2022/2022_club_series/index.htm"
     - "https://gfs.org.au/handicapper/results/2023/2023_club_series/index.htm"
+    boats: null
   pmyc.asn.au:
     shortName: "PMYC"
     state: "VIC"
@@ -672,6 +751,7 @@ clubs:
     - "https://www.topyacht.net.au/results/pmyc/2023/club/index.htm"
     - "https://www.topyacht.net.au/results/pmyc/2024/club/index.htm"
     - "https://www.topyacht.net.au/results/pmyc/2025/club/index.htm"
+    boats: null
   gryc.com.au:
     shortName: "GRYC"
     state: "SA"
@@ -683,6 +763,7 @@ clubs:
     - "https://www.topyacht.net.au/results/gryc/2021/club/Winter2021/series.htm"
     - "https://www.topyacht.net.au/results/gryc/2022/club/Winter2022/series.htm"
     - "https://www.topyacht.net.au/results/gryc/2025/club/Winter2025/series.htm"
+    boats: null
   oceanracingwa.com.au:
     shortName: "ORWA"
     state: "WA"
@@ -693,6 +774,7 @@ clubs:
     - "https://www.topyacht.net.au/results/orwa/2021/index.htm"
     - "https://www.topyacht.net.au/results/orwa/2022/index.htm"
     - "https://www.topyacht.net.au/results/orwa/2023/index.htm"
+    boats: null
   classicyacht.com.au:
     shortName: "CYAA"
     state: "VIC"
@@ -702,6 +784,7 @@ clubs:
     topyacht:
     - "https://www.topyacht.net.au/results/cyaa/2021/winter/index.htm"
     - "https://www.topyacht.net.au/results/cyaa/2022/winter/index.htm"
+    boats: null
   hamiltonisland.com.au:
     shortName: "HIYC"
     state: "QLD"
@@ -713,6 +796,7 @@ clubs:
     - "https://www.topyacht.net.au/results/2024/hirw/index.htm"
     - "https://www.topyacht.net.au/results/2023/hirw/index.htm"
     - "https://www.topyacht.net.au/results/2022/hirw/index.htm"
+    boats: null
   townsvilleyachtclub.com.au:
     shortName: "TYC"
     state: "QLD"
@@ -726,6 +810,7 @@ clubs:
     - "https://www.topyacht.net.au/results/2023/mirw/index.htm"
     - "https://www.topyacht.net.au/results/2024/mirw/index.htm"
     - "https://www.topyacht.net.au/results/2025/mirw/index.htm"
+    boats: null
   app.sailsys.com/au/club/27/profile:
     shortName: "SHCC"
     state: "NSW"
@@ -733,6 +818,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   wyc.org.au:
     shortName: "WYC"
     state: "NSW"
@@ -740,6 +826,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   pesc.com.au:
     shortName: "PESC"
     state: "TAS"
@@ -747,6 +834,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   multihullcruising.org.au:
     shortName: "MHYC"
     state: "NSW"
@@ -754,6 +842,7 @@ clubs:
     excluded: true
     aliases: []
     topyacht: null
+    boats: null
   rhkyc.org.hk:
     shortName: "RHKYC"
     state: "HongKong"
@@ -761,6 +850,7 @@ clubs:
     excluded: true
     aliases: []
     topyacht: null
+    boats: null
   jbcyc.com.au:
     shortName: "JBCYC"
     state: "NSW"
@@ -768,6 +858,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   ketteringyachtclub.org.au:
     shortName: "KYC"
     state: "TAS"
@@ -775,6 +866,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   sailsys.com.au:
     shortName: "SAILSYS"
     state: "NSW"
@@ -782,6 +874,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   sailportstephens.com.au:
     shortName: "SPS"
     state: "NSW"
@@ -789,6 +882,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   opuacruisingclub.co.nz:
     shortName: "OCC"
     state: "NZ"
@@ -796,6 +890,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   tcbyachtclub.wixsite.com:
     shortName: "TCYC"
     state: "QLD"
@@ -803,6 +898,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   iycsailing.asn.au:
     shortName: "IYC"
     state: "NSW"
@@ -810,6 +906,7 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   rpnyc.org.nz:
     shortName: "RPNYC"
     state: "NZ"
@@ -817,11 +914,15 @@ clubs:
     excluded: null
     aliases: []
     topyacht: null
+    boats: null
   yacht.org.nz:
     shortName: "TYPBC"
     state: "NZ"
     fullName: "Tauranga Yacht & Power Boat Club Inc"
     excluded: null
+    aliases: null
+    topyacht: null
+    boats: null
 boatClubOverrides:
 - sailNumber: "20"
   name: "Rhett's Rig"
@@ -844,3 +945,8 @@ boatClubOverrides:
 - sailNumber: "MYC10"
   name: "Joss"
   clubId: "myc.org.au"
+- sailNumber: "1255"
+  name: "Melody"
+  clubId: "sasc.com.au"
+noclub:
+  - "6689-copernicus-radford12"

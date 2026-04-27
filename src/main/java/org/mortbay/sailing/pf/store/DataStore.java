@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import org.mortbay.sailing.pf.data.Boat;
 import org.mortbay.sailing.pf.data.Certificate;
 import org.mortbay.sailing.pf.data.Club;
@@ -348,9 +347,21 @@ public class DataStore
                 return existingById;
             }
 
-            String newClubId = clubCatalogue.resolveClubOverride(normSailNo, rawName);
-            if (newClubId != null)
-                LOG.info("Boat {}/{}: club override → {}", normSailNo, rawName, newClubId);
+            // BoatId-based override takes priority over legacy sail+name override
+            String boatIdOverride = clubCatalogue.resolveBoatIdOverride(newBoatId);
+            String newClubId;
+            if (boatIdOverride != null)
+            {
+                newClubId = boatIdOverride.isEmpty() ? null : boatIdOverride;
+                LOG.info("Boat {}: boatId club override → {}", newBoatId,
+                    boatIdOverride.isEmpty() ? "no-club" : newClubId);
+            }
+            else
+            {
+                newClubId = clubCatalogue.resolveClubOverride(normSailNo, rawName);
+                if (newClubId != null)
+                    LOG.info("Boat {}/{}: sail+name club override → {}", normSailNo, rawName, newClubId);
+            }
             Boat newBoat = new Boat(
                 newBoatId,
                 normSailNo,
@@ -768,6 +779,16 @@ public class DataStore
         for (Design md : toMerge)
             removeDesign(md.id());
 
+        // Remap boatId-based club config for any boats that got a new ID
+        if (!boatIdRemap.isEmpty())
+        {
+            for (Map.Entry<String, String> remap : boatIdRemap.entrySet())
+            {
+                ClubLoader.remapBoatId(configDir, remap.getKey(), remap.getValue());
+            }
+            reloadClubCatalogue();
+        }
+
         LOG.info("mergeDesigns: kept={} merged={} updatedBoats={} updatedRaces={} updatedFinishers={}",
             keepId, mergeIds, updatedBoats, updatedRaces, updatedFinishers);
         InvalidationListener l = invalidationListener;
@@ -912,6 +933,7 @@ public class DataStore
     private void cascadeIgnoreDesign(String ignoredId)
     {
         String note = "Ignored:" + ignoredId;
+        boolean clubConfigChanged = false;
         for (Boat boat : List.copyOf(boats.values()))
         {
             if (!ignoredId.equals(boat.designId())) continue;
@@ -934,6 +956,9 @@ public class DataStore
                 removeBoat(boat.id());
                 putBoat(merged);
                 rewriteFinisherBoatId(boat.id(), newId);
+                // Merged-away boat: remove its club config entry (target keeps its own)
+                ClubLoader.removeBoatId(configDir, boat.id());
+                clubConfigChanged = true;
                 LOG.info("Ignore cascade: merged {} into {} (design {} ignored)",
                     boat.id(), newId, ignoredId);
             }
@@ -948,6 +973,8 @@ public class DataStore
                     removeBoat(boat.id());
                     putBoat(updated);
                     rewriteFinisherBoatId(boat.id(), newId);
+                    ClubLoader.remapBoatId(configDir, boat.id(), newId);
+                    clubConfigChanged = true;
                     LOG.info("Ignore cascade: renamed {} to {} (design {} ignored)",
                         boat.id(), newId, ignoredId);
                 }
@@ -959,6 +986,8 @@ public class DataStore
                 }
             }
         }
+        if (clubConfigChanged)
+            reloadClubCatalogue();
         InvalidationListener l = invalidationListener;
         if (l != null) l.onAllChanged();
     }
@@ -1148,6 +1177,46 @@ public class DataStore
     {
         requireStarted();
         clubCatalogue = ClubLoader.loadCatalogue(configDir);
+    }
+
+    /**
+     * Assigns a boatId to a specific club in clubs.yaml and reloads the catalogue.
+     */
+    public void setBoatClubOverrideById(String boatId, String clubId)
+    {
+        requireStarted();
+        ClubLoader.setBoatClub(configDir, boatId, clubId);
+        reloadClubCatalogue();
+    }
+
+    /**
+     * Marks a boatId as explicitly having no club in clubs.yaml and reloads the catalogue.
+     */
+    public void setBoatNoClubById(String boatId)
+    {
+        requireStarted();
+        ClubLoader.setBoatNoClub(configDir, boatId);
+        reloadClubCatalogue();
+    }
+
+    /**
+     * Renames a boatId in clubs.yaml noclub/boats lists and reloads the catalogue.
+     */
+    public void remapBoatIdInClubConfig(String oldBoatId, String newBoatId)
+    {
+        requireStarted();
+        ClubLoader.remapBoatId(configDir, oldBoatId, newBoatId);
+        reloadClubCatalogue();
+    }
+
+    /**
+     * Removes a boatId from clubs.yaml noclub/boats lists and reloads the catalogue.
+     */
+    public void removeBoatFromClubConfig(String boatId)
+    {
+        requireStarted();
+        ClubLoader.removeBoatId(configDir, boatId);
+        reloadClubCatalogue();
     }
 
     /**

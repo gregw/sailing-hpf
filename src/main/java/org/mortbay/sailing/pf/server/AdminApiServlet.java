@@ -924,6 +924,12 @@ public class AdminApiServlet extends HttpServlet
             DataStore.MergeResult result = store.mergeBoats(keepId, mergeIds);
             store.save();
 
+            // Remove merged-away boatIds from club config (keepId retains its own entries)
+            for (String mergeId : mergeIds)
+            {
+                store.removeBoatFromClubConfig(mergeId);
+            }
+
             // Update aliases.yaml and reload the alias seed so future imports honour the merge
             if (!newAliases.isEmpty())
             {
@@ -1162,11 +1168,30 @@ public class AdminApiServlet extends HttpServlet
                 }
             }
 
-            // Write club override to clubs.yaml if club was changed
-            if (body.containsKey("clubId") && !Objects.equals(clubId, boat.clubId()))
+            // Write club override to clubs.yaml
+            if (body.containsKey("clubId"))
             {
                 if (clubId != null)
-                    store.addClubOverride(sail, name, clubId);
+                {
+                    // Keep legacy sail+name override for boats that may be re-created
+                    if (!Objects.equals(clubId, boat.clubId()))
+                        store.addClubOverride(sail, name, clubId);
+                    // BoatId-based override (takes priority over sail+name on future imports)
+                    store.setBoatClubOverrideById(newBoatId, clubId);
+                    if (idChanged)
+                        store.removeBoatFromClubConfig(boatId);
+                }
+                else
+                {
+                    store.setBoatNoClubById(newBoatId);
+                    if (idChanged)
+                        store.removeBoatFromClubConfig(boatId);
+                }
+            }
+            else if (idChanged)
+            {
+                // Club not edited but ID changed — remap existing boatId-based entries
+                store.remapBoatIdInClubConfig(boatId, newBoatId);
             }
 
             store.save();

@@ -1297,6 +1297,9 @@ async function loadEditChoices() {
 
     const clubSel = document.getElementById('edit-boat-club');
     if (clubsResp && clubsResp.items) {
+        const noClubOpt = document.createElement('option');
+        noClubOpt.value = '';
+        noClubOpt.textContent = '— No Club —';
         const opts = clubsResp.items.map(c => {
             const o = document.createElement('option');
             o.value = c.id;
@@ -1304,7 +1307,7 @@ async function loadEditChoices() {
             return o;
         });
         const cur = clubSel.value;
-        clubSel.replaceChildren(...opts);
+        clubSel.replaceChildren(noClubOpt, ...opts);
         clubSel.value = cur;
     }
 }
@@ -1344,12 +1347,13 @@ async function saveBoatEdit() {
     const statusEl = document.getElementById('edit-status-boats');
     statusEl.textContent = 'Saving…';
 
+    const clubVal = document.getElementById('edit-boat-club').value.trim();
     const body = {
         boatId: editingBoatId,
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
-        clubId: document.getElementById('edit-boat-club').value.trim()
+        clubId: clubVal || null
     };
 
     const result = await fetchJson('/api/boats/edit', {
@@ -1379,12 +1383,13 @@ async function requestBoatEdit() {
 
     const email = document.getElementById('edit-email')?.value.trim() || '';
     const message = document.getElementById('edit-message')?.value.trim() || '';
+    const clubValReq = document.getElementById('edit-boat-club').value.trim();
     const body = {
         boatId: editingBoatId,
         sailNumber: document.getElementById('edit-boat-sail').value.trim(),
         name: document.getElementById('edit-boat-name').value.trim(),
         designId: document.getElementById('edit-boat-design').value.trim(),
-        clubId: document.getElementById('edit-boat-club').value.trim(),
+        clubId: clubValReq || null,
         ...(email && { email }),
         ...(message && { message })
     };

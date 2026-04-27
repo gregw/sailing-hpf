@@ -1,5 +1,18 @@
 package org.mortbay.sailing.pf.store;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
@@ -7,17 +20,6 @@ import org.mortbay.sailing.pf.data.Club;
 import org.mortbay.sailing.pf.importer.IdGenerator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 /**
  * Reads {@code /clubs.yaml} from the classpath and returns stub {@link Club} records
@@ -177,10 +179,190 @@ class ClubLoader
         }
     }
 
+    /**
+     * Assigns a boatId to a specific club in clubs.yaml (per-club {@code boats} list).
+     * Removes the boatId from {@code noclub} and from any other club's {@code boats} list.
+     */
+    static void setBoatClub(Path configDir, String boatId, String clubId)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return;
+
+        // Remove from noclub
+        if (seedFile.noclub != null)
+            seedFile.noclub.remove(boatId);
+
+        // Remove from any other club's boats list, and ensure target club has the entry
+        if (seedFile.clubs != null)
+        {
+            for (Map.Entry<String, SeedEntry> e : seedFile.clubs.entrySet())
+            {
+                SeedEntry entry = e.getValue();
+                if (entry.boats != null)
+                    entry.boats.remove(boatId);
+                if (e.getKey().equals(clubId))
+                {
+                    if (entry.boats == null)
+                        entry.boats = new ArrayList<>();
+                    if (!entry.boats.contains(boatId))
+                        entry.boats.add(boatId);
+                }
+            }
+        }
+
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: boatId {} assigned to club {}", boatId, clubId);
+    }
+
+    /**
+     * Marks a boatId as having no club in clubs.yaml (adds to {@code noclub} list).
+     * Removes the boatId from all per-club {@code boats} lists.
+     */
+    static void setBoatNoClub(Path configDir, String boatId)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return;
+
+        // Add to noclub if not already there
+        if (seedFile.noclub == null)
+            seedFile.noclub = new ArrayList<>();
+        if (!seedFile.noclub.contains(boatId))
+            seedFile.noclub.add(boatId);
+
+        // Remove from all clubs' boats lists
+        if (seedFile.clubs != null)
+            for (SeedEntry entry : seedFile.clubs.values())
+            {
+                if (entry.boats != null)
+                    entry.boats.remove(boatId);
+            }
+
+        writeOrLog(configDir, seedFile);
+        LOG.info("clubs.yaml: boatId {} marked as no-club", boatId);
+    }
+
+    /**
+     * Renames a boatId in clubs.yaml — updates {@code noclub} and all per-club {@code boats} lists.
+     */
+    static void remapBoatId(Path configDir, String oldBoatId, String newBoatId)
+    {
+        if (Objects.equals(oldBoatId, newBoatId))
+            return;
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return;
+
+        boolean changed = false;
+
+        if (seedFile.noclub != null)
+        {
+            int idx = seedFile.noclub.indexOf(oldBoatId);
+            if (idx >= 0 && !seedFile.noclub.contains(newBoatId))
+            {
+                seedFile.noclub.set(idx, newBoatId);
+                changed = true;
+            }
+            else if (idx >= 0)
+            {
+                seedFile.noclub.remove(idx);
+                changed = true;
+            }
+        }
+
+        if (seedFile.clubs != null)
+        {
+            for (SeedEntry entry : seedFile.clubs.values())
+            {
+                if (entry.boats == null)
+                    continue;
+                int idx = entry.boats.indexOf(oldBoatId);
+                if (idx >= 0 && !entry.boats.contains(newBoatId))
+                {
+                    entry.boats.set(idx, newBoatId);
+                    changed = true;
+                }
+                else if (idx >= 0)
+                {
+                    entry.boats.remove(idx);
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed)
+        {
+            writeOrLog(configDir, seedFile);
+            LOG.info("clubs.yaml: remapped boatId {} → {}", oldBoatId, newBoatId);
+        }
+    }
+
+    /**
+     * Removes a boatId from clubs.yaml — from {@code noclub} and all per-club {@code boats} lists.
+     */
+    static void removeBoatId(Path configDir, String boatId)
+    {
+        SeedFile seedFile = readOrNew(configDir);
+        if (seedFile == null)
+            return;
+
+        boolean changed = false;
+
+        if (seedFile.noclub != null && seedFile.noclub.remove(boatId))
+            changed = true;
+
+        if (seedFile.clubs != null)
+            for (SeedEntry entry : seedFile.clubs.values())
+            {
+                if (entry.boats != null && entry.boats.remove(boatId))
+                    changed = true;
+            }
+
+        if (changed)
+        {
+            writeOrLog(configDir, seedFile);
+            LOG.info("clubs.yaml: removed boatId {}", boatId);
+        }
+    }
+
+    private static SeedFile readOrNew(Path configDir)
+    {
+        Path file = configDir.resolve(FILENAME);
+        if (Files.exists(file))
+        {
+            try
+            {
+                return YAML_MAPPER.readValue(file.toFile(), SeedFile.class);
+            }
+            catch (Exception e)
+            {
+                LOG.error("Failed to read {} for update: {}", file, e.getMessage());
+                return null;
+            }
+        }
+        return new SeedFile();
+    }
+
+    private static void writeOrLog(Path configDir, SeedFile seedFile)
+    {
+        Path file = configDir.resolve(FILENAME);
+        try
+        {
+            Files.createDirectories(file.getParent());
+            YAML_MAPPER.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), seedFile);
+        }
+        catch (Exception e)
+        {
+            LOG.error("Failed to write {}: {}", file, e.getMessage());
+        }
+    }
+
     static class SeedFile
     {
         public Map<String, SeedEntry> clubs;
         public List<ClubOverride> boatClubOverrides;
+        public List<String> noclub;
     }
 
     static class SeedEntry
@@ -191,6 +373,7 @@ class ClubLoader
         public Boolean excluded;
         public List<String> aliases;
         public List<String> topyacht;
+        public List<String> boats;
     }
 
     static class ClubOverride
@@ -206,27 +389,91 @@ class ClubLoader
     {
         static final ClubCatalogue EMPTY = new ClubCatalogue(null);
 
-        /** "normSail|normName" → clubId */
+        /**
+         * "normSail|normName" → clubId (legacy sail+name key)
+         */
         private final Map<String, String> overridesByKey;
+        /**
+         * boatId → clubId for boats explicitly assigned to a club
+         */
+        private final Map<String, String> boatIdToClubId;
+        /**
+         * boatIds explicitly set to have no club
+         */
+        private final Set<String> noclubBoatIds;
 
         private ClubCatalogue(SeedFile file)
         {
-            if (file == null || file.boatClubOverrides == null)
+            if (file == null)
             {
                 overridesByKey = Map.of();
+                boatIdToClubId = Map.of();
+                noclubBoatIds = Set.of();
                 return;
             }
-            Map<String, String> map = new HashMap<>();
-            for (ClubOverride o : file.boatClubOverrides)
+
+            // Legacy sail+name overrides
+            Map<String, String> byKey = new HashMap<>();
+            if (file.boatClubOverrides != null)
             {
-                if (o.sailNumber == null || o.name == null || o.clubId == null) continue;
-                String key = IdGenerator.normaliseSailNumber(o.sailNumber)
-                    + "|" + IdGenerator.normaliseName(o.name);
-                map.put(key, o.clubId);
+                for (ClubOverride o : file.boatClubOverrides)
+                {
+                    if (o.sailNumber == null || o.name == null || o.clubId == null)
+                        continue;
+                    String key = IdGenerator.normaliseSailNumber(o.sailNumber)
+                        + "|" + IdGenerator.normaliseName(o.name);
+                    byKey.put(key, o.clubId);
+                }
             }
-            overridesByKey = Collections.unmodifiableMap(map);
-            if (!map.isEmpty())
-                LOG.info("Loaded club catalogue: {} boat club override(s)", map.size());
+            overridesByKey = Collections.unmodifiableMap(byKey);
+
+            // BoatId-based: per-club boats lists
+            Map<String, String> byBoatId = new HashMap<>();
+            if (file.clubs != null)
+            {
+                for (Map.Entry<String, SeedEntry> e : file.clubs.entrySet())
+                {
+                    SeedEntry entry = e.getValue();
+                    if (entry.boats == null)
+                        continue;
+                    for (String boatId : entry.boats)
+                    {
+                        if (boatId != null)
+                            byBoatId.put(boatId, e.getKey());
+                    }
+                }
+            }
+            boatIdToClubId = Collections.unmodifiableMap(byBoatId);
+
+            // BoatId-based: noclub list
+            Set<String> noclub = new HashSet<>();
+            if (file.noclub != null)
+                for (String boatId : file.noclub)
+                {
+                    if (boatId != null)
+                        noclub.add(boatId);
+                }
+            noclubBoatIds = Collections.unmodifiableSet(noclub);
+
+            if (!byKey.isEmpty())
+                LOG.info("Loaded club catalogue: {} sail+name override(s)", byKey.size());
+            if (!byBoatId.isEmpty() || !noclub.isEmpty())
+                LOG.info("Loaded club catalogue: {} boatId club assignment(s), {} no-club boatId(s)",
+                    byBoatId.size(), noclub.size());
+        }
+
+        /**
+         * Returns the boatId-based club override:
+         * null  → no boatId-based override (fall through to sail+name lookup)
+         * ""    → explicit no-club
+         * other → explicit clubId
+         */
+        String resolveBoatIdOverride(String boatId)
+        {
+            if (boatId == null)
+                return null;
+            if (noclubBoatIds.contains(boatId)) return "";
+            return boatIdToClubId.get(boatId);
         }
 
         /**
