@@ -551,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (seriesTrendCb) seriesTrendCb.checked = showSeriesOverallTrend;
 });
 
-async function loadDetail(entity, id) {
+async function loadDetail(entity, id, {scroll = true} = {}) {
     if (entity === 'series') {
         loadSeriesChart(id);
         return;
@@ -588,13 +588,15 @@ async function loadDetail(entity, id) {
     }
 
     panel.classList.add('visible');
-    if (entity === 'races') {
-        document.getElementById('division-section-races').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else if (entity === 'boats') {
-        const heading = document.getElementById('pf-boat-heading');
-        if (heading) window.scrollTo(0, heading.getBoundingClientRect().top + window.scrollY);
-    } else {
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (scroll) {
+        if (entity === 'races') {
+            document.getElementById('division-section-races').scrollIntoView({behavior: 'smooth', block: 'start'});
+        } else if (entity === 'boats') {
+            const heading = document.getElementById('pf-boat-heading');
+            if (heading) window.scrollTo(0, heading.getBoundingClientRect().top + window.scrollY);
+        } else {
+            panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+        }
     }
 }
 
@@ -2087,7 +2089,7 @@ function median(arr) {
             }
         }
         await loadList('clubs', 0);
-        if (savedClubId) await loadDetail('clubs', savedClubId);
+        if (savedClubId) await loadDetail('clubs', savedClubId, {scroll: false});
         return;
     }
 
