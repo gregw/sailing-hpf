@@ -376,6 +376,7 @@ function clearSearch(entity) {
     state.searches[entity] = '';
     const q = document.getElementById('q-' + entity);
     if (q) q.value = '';
+    if (entity === 'clubs') sessionStorage.removeItem(CLUBS_SELECTED_KEY);
     doSearch(entity);
 }
 
