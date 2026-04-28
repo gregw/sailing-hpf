@@ -29,7 +29,7 @@ let calcSort        = { col: 'pf', dir: 'desc' }; // handicap calculator sort st
 let currentCalcBoats = []; // current boats in the calculator
 let inlineDivisionData = null; // most recently loaded /api/comparison/division payload
 const INLINE_DIV_XFACTOR_KEY = 'pf.inlineDiv.xFactor';
-let inlineDivXFactor = sessionStorage.getItem(INLINE_DIV_XFACTOR_KEY) || 'PF';
+let inlineDivXFactor = sessionStorage.getItem(INLINE_DIV_XFACTOR_KEY) || '---';
 let inlineDivisionRaceId = null;
 let inlineDivisionName = null;
 let inlineDivisionSeriesId = null;
@@ -1224,7 +1224,7 @@ function renderInlineDivisionChart() {
             ...(rfFinishersList.length > 0 ? ['RF'] : []),
             ...(allocPts.length > 0 ? ['Allocated'] : [])
         ];
-        if (!opts.includes(inlineDivXFactor)) inlineDivXFactor = 'PF';
+        if (!opts.includes(inlineDivXFactor)) inlineDivXFactor = '---';
         if (xSelect.options.length !== opts.length ||
             [...xSelect.options].map(o => o.value).join() !== opts.join()) {
             xSelect.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');

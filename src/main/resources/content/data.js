@@ -302,7 +302,7 @@ let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
 const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
 let showSeriesOverallTrend = sessionBool(SERIES_OVERALL_TREND_KEY, false);
 let preferredDivision = null;
-let raceDivXFactor = sessionStorage.getItem(RACE_DIV_XFACTOR_KEY) || 'PF';
+let raceDivXFactor = sessionStorage.getItem(RACE_DIV_XFACTOR_KEY) || '---';
 let lastRaceDivData = null;
 
 function isWriteAllowed() { return window.pfAuth?.authenticated; }
@@ -1786,7 +1786,7 @@ function renderDivisionChart(data) {
     const xSelect = document.getElementById('race-div-xfactor');
     if (xSelect) {
         const opts = ['---', 'PF', ...(rfFinishers.length > 0 ? ['RF'] : [])];
-        if (!opts.includes(raceDivXFactor)) raceDivXFactor = 'PF';
+        if (!opts.includes(raceDivXFactor)) raceDivXFactor = '---';
         if (xSelect.options.length !== opts.length ||
             [...xSelect.options].map(o => o.value).join() !== opts.join()) {
             xSelect.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
@@ -1842,7 +1842,7 @@ function renderDivisionChart(data) {
     let traces, annotations, xAxisTitle;
 
     if (raceDivXFactor === '---') {
-        // Natural mode: each trace uses its own factor as x-axis.
+        // Natural mode: elapsed always at x=PF; corrected traces use their own factor.
         const xs = finishers.map(f => f.pf);
         const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
         const elapsed = finishers.map(f => f.elapsed / 60);
@@ -1852,27 +1852,17 @@ function renderDivisionChart(data) {
         const rfCorr = rfFinishers.map(o => o.rfCorrMin);
         const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
         const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
-        const rfElapsed = rfFinishers.map(o => o.f.elapsed / 60);
-
-        // When the RF line is shown, RF boats' elapsed baseline belongs at x=rf (not x=pf),
-        // so it sits alongside their RF-corrected marker. PF-only boats remain at x=pf.
-        const rfBoatIdsForElapsed = showRaceRfLine
-            ? new Set(rfFinishers.map(o => o.f.boatId)) : new Set();
-        const pfElapsedFinishers = finishers.filter(f => !rfBoatIdsForElapsed.has(f.boatId));
 
         const boatCustom = finishers.map(f => ({boatId: f.boatId}));
 
         traces = [
-            // Elapsed for PF-only boats (no RF) at x=pf
+            // Elapsed for all boats at x=pf
             {
-                x: pfElapsedFinishers.map(f => f.pf),
-                y: pfElapsedFinishers.map(f => f.elapsed / 60),
+                x: xs, y: elapsed,
                 mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
                 line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                text: hoverTexts('Elapsed',
-                    pfElapsedFinishers.map(f => f.elapsed / 60),
-                    pfElapsedFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name)),
-                hoverinfo: 'text', customdata: pfElapsedFinishers.map(f => ({boatId: f.boatId}))
+                text: hoverTexts('Elapsed', elapsed, names),
+                hoverinfo: 'text', customdata: boatCustom
             },
             {
                 x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
@@ -1881,15 +1871,6 @@ function renderDivisionChart(data) {
                 text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
             },
             ...(showRaceRfLine && rfFinishers.length > 0 ? [
-                // Elapsed for RF boats at x=rf (same legend entry as Elapsed above)
-                {
-                    x: rfXs, y: rfElapsed,
-                    mode: 'lines+markers', type: 'scatter',
-                    name: 'Elapsed', legendgroup: 'Elapsed', showlegend: false,
-                    line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                    text: hoverTexts('Elapsed', rfElapsed, rfNames),
-                    hoverinfo: 'text', customdata: rfCustom
-                },
                 {
                     x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
                     line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
