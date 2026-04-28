@@ -28,6 +28,8 @@ let lastChartData   = null;
 let calcSort        = { col: 'pf', dir: 'desc' }; // handicap calculator sort state
 let currentCalcBoats = []; // current boats in the calculator
 let inlineDivisionData = null; // most recently loaded /api/comparison/division payload
+const INLINE_DIV_XFACTOR_KEY = 'pf.inlineDiv.xFactor';
+let inlineDivXFactor = sessionStorage.getItem(INLINE_DIV_XFACTOR_KEY) || 'PF';
 let inlineDivisionRaceId = null;
 let inlineDivisionName = null;
 let inlineDivisionSeriesId = null;
@@ -1182,6 +1184,12 @@ function inlineDivNext() {
         showRaceDivisionInline(inlineSeriesRaces[idx + 1].raceId, inlineDivisionName, inlineDivisionSeriesId);
 }
 
+function onInlineDivXFactorChange() {
+    inlineDivXFactor = document.getElementById('bcfc-div-xfactor').value;
+    sessionStorage.setItem(INLINE_DIV_XFACTOR_KEY, inlineDivXFactor);
+    renderInlineDivisionChart();
+}
+
 function renderInlineDivisionChart() {
     const data = inlineDivisionData;
     if (!data) return;
@@ -1191,31 +1199,9 @@ function renderInlineDivisionChart() {
         return;
     }
 
-    const xs = finishers.map(f => f.pf);
-    const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
-    const elapsed = finishers.map(f => f.elapsed / 60);
-    const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+    const rfFinishersList = finishers.filter(f => f.rf != null && f.rfCorrected != null);
 
-    const traces = [
-        {
-            x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
-            line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-            text: names.map((n, i) => `${esc(n)}<br>Elapsed: ${fmtTime(elapsed[i] * 60)}`),
-            hoverinfo: 'text'
-        },
-        {
-            x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
-            line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
-            text: names.map((n, i) => pfCorr[i] != null
-                ? `${esc(n)}<br>PF corrected: ${fmtTime(pfCorr[i] * 60)}` : ''),
-            hoverinfo: 'text'
-        }
-    ];
-
-    addPodiumTraces(traces, finishers, xs, pfCorr);
-
-    // Allocated-handicap line: pulled live from the handicap calculator inputs.
-    // For each finisher with an entered handicap, plot (handicap, elapsed*handicap).
+    // Allocated-handicap data: pulled live from the handicap calculator inputs.
     const allocByBoat = new Map();
     document.querySelectorAll('.pf-calc-input').forEach(inp => {
         const v = parseFloat(inp.value);
@@ -1224,62 +1210,152 @@ function renderInlineDivisionChart() {
     const allocPts = finishers
         .filter(f => allocByBoat.has(f.boatId))
         .map(f => ({
+            f,
             name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
             handicap: allocByBoat.get(f.boatId),
             correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
         }))
         .sort((a, b) => a.handicap - b.handicap);
-    if (allocPts.length > 0) {
-        const allocXs = allocPts.map(p => p.handicap);
-        const allocYs = allocPts.map(p => p.correctedMin);
-        traces.push({
-            x: allocXs, y: allocYs,
-            mode: 'lines+markers', type: 'scatter',
-            name: 'Allocated handicap corrected',
-            line: {dash: 'longdash', color: '#a04020', width: 2},
-            marker: {size: 8, symbol: 'square'},
-            text: allocPts.map(p =>
-                `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
-                + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
-            hoverinfo: 'text'
-        });
 
-        // Podium markers for the allocated-handicap line (1st/2nd/3rd fastest corrected time).
-        // Shares legendgroups with the PF podium markers so the legend stays clean.
-        const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
-        const PODIUM_SIZES = [14, 12, 11];
-        const PODIUM_LABELS = ['1st', '2nd', '3rd'];
-        const allocRanked = allocPts.map((p, i) => ({i, t: p.correctedMin})).sort((a, b) => a.t - b.t);
-        for (let pos = 0; pos < Math.min(3, allocRanked.length); pos++) {
-            const idx = allocRanked[pos].i;
-            const p = allocPts[idx];
-            traces.push({
-                x: [allocXs[idx]], y: [allocYs[idx]],
-                mode: 'markers', type: 'scatter',
-                name: PODIUM_LABELS[pos], legendgroup: PODIUM_LABELS[pos], showlegend: false,
-                marker: {
-                    symbol: PODIUM_SYMBOLS[pos], size: PODIUM_SIZES[pos],
-                    color: '#a04020', line: {color: '#fff', width: 1.5}
-                },
-                text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
-                hoverinfo: 'text'
-            });
+    // Rebuild the x-factor selector with options valid for this data.
+    const xSelect = document.getElementById('bcfc-div-xfactor');
+    if (xSelect) {
+        const opts = ['---', 'PF',
+            ...(rfFinishersList.length > 0 ? ['RF'] : []),
+            ...(allocPts.length > 0 ? ['Allocated'] : [])
+        ];
+        if (!opts.includes(inlineDivXFactor)) inlineDivXFactor = 'PF';
+        if (xSelect.options.length !== opts.length ||
+            [...xSelect.options].map(o => o.value).join() !== opts.join()) {
+            xSelect.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
         }
+        xSelect.value = inlineDivXFactor;
     }
 
-    const annotations = finishers.map((f, i) => {
-        const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
-        return {
-            x: xs[i], y: Math.max(...ys),
+    function hoverText(n, label, t) {
+        return t != null ? `${esc(n)}<br>${label}: ${fmtTime(t * 60)}` : '';
+    }
+
+    let traces, annotations, xAxisTitle;
+
+    if (inlineDivXFactor === '---') {
+        // Natural mode: each trace at its own factor's x-axis.
+        const xs = finishers.map(f => f.pf);
+        const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        const elapsed = finishers.map(f => f.elapsed / 60);
+        const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+
+        traces = [
+            {
+                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+                text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])),
+                hoverinfo: 'text'
+            },
+            {
+                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+                text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])),
+                hoverinfo: 'text'
+            }
+        ];
+
+        addPodiumTraces(traces, finishers, xs, pfCorr);
+
+        if (allocPts.length > 0) {
+            const allocXs = allocPts.map(p => p.handicap);
+            const allocYs = allocPts.map(p => p.correctedMin);
+            traces.push({
+                x: allocXs, y: allocYs,
+                mode: 'lines+markers', type: 'scatter',
+                name: 'Allocated handicap corrected',
+                line: {dash: 'longdash', color: '#a04020', width: 2},
+                marker: {size: 8, symbol: 'square'},
+                text: allocPts.map(p =>
+                    `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
+                    + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                hoverinfo: 'text'
+            });
+            addAllocPodiumTraces(traces, allocPts, allocXs, allocYs);
+        }
+
+        annotations = finishers.map((f, i) => ({
+            x: xs[i], y: Math.max(...[elapsed[i], pfCorr[i]].filter(v => v != null)),
             text: f.name, textangle: -90,
             xanchor: 'center', yanchor: 'bottom', yshift: 6,
             showarrow: false, cliponaxis: false, font: {size: 11}
+        }));
+
+        xAxisTitle = 'Handicap (PF)';
+
+    } else {
+        // Common-factor mode: all traces share the same x-axis factor.
+        const getX = f => {
+            if (inlineDivXFactor === 'RF') return f.rf;
+            if (inlineDivXFactor === 'Allocated') return allocByBoat.get(f.boatId);
+            return f.pf;
         };
-    });
+        const plotFinishers = finishers
+            .filter(f => getX(f) != null)
+            .sort((a, b) => getX(a) - getX(b));
+        if (plotFinishers.length === 0) return;
+
+        const xs = plotFinishers.map(getX);
+        const names = plotFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        const elapsed = plotFinishers.map(f => f.elapsed / 60);
+        const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+        const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
+        const allocCorr = plotFinishers.map(f => {
+            const h = allocByBoat.get(f.boatId);
+            return h != null ? f.elapsed * h / 60 : null;
+        });
+
+        traces = [
+            {
+                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+                text: names.map((n, i) => hoverText(n, 'Elapsed', elapsed[i])), hoverinfo: 'text'
+            },
+            {
+                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+                text: names.map((n, i) => hoverText(n, 'PF corrected', pfCorr[i])), hoverinfo: 'text'
+            },
+            ...(rfCorr.some(v => v != null) ? [{
+                x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+                line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+                text: names.map((n, i) => hoverText(n, 'RF corrected', rfCorr[i])), hoverinfo: 'text'
+            }] : []),
+            ...(allocCorr.some(v => v != null) ? [{
+                x: xs, y: allocCorr, mode: 'lines+markers', type: 'scatter',
+                name: 'Allocated handicap corrected',
+                line: {dash: 'longdash', color: '#a04020', width: 2}, marker: {size: 8, symbol: 'square'},
+                text: plotFinishers.map((f, i) => {
+                    const h = allocByBoat.get(f.boatId);
+                    return h != null
+                        ? `${esc(names[i])}<br>Allocated: ${h.toFixed(4)}<br>Corrected: ${fmtTime(allocCorr[i] * 60)}`
+                        : '';
+                }), hoverinfo: 'text'
+            }] : [])
+        ];
+
+        addPodiumTraces(traces, plotFinishers, xs, pfCorr);
+
+        annotations = plotFinishers.map((f, i) => {
+            const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+            return {
+                x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                xanchor: 'center', yanchor: 'bottom', yshift: 6,
+                showarrow: false, cliponaxis: false, font: {size: 11}
+            };
+        });
+
+        xAxisTitle = inlineDivXFactor === 'Allocated' ? 'Allocated Handicap' : inlineDivXFactor;
+    }
 
     const yFromZero = document.getElementById('bcfc-y-from-zero')?.checked ?? false;
     const layout = {
-        xaxis: {title: 'Handicap (PF)'},
+        xaxis: {title: xAxisTitle},
         yaxis: {title: 'Time (min)', tickformat: '.1f', rangemode: yFromZero ? 'tozero' : 'normal'},
         legend: {orientation: 'h', y: -0.18},
         margin: {t: 80, b: 80, l: 60, r: 20},
@@ -1288,6 +1364,28 @@ function renderInlineDivisionChart() {
     };
 
     Plotly.react('bcfc-race-division-chart', traces, layout, {responsive: true});
+}
+
+function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs) {
+    const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
+    const PODIUM_SIZES = [14, 12, 11];
+    const PODIUM_LABELS = ['1st', '2nd', '3rd'];
+    const ranked = allocPts.map((p, i) => ({i, t: p.correctedMin})).sort((a, b) => a.t - b.t);
+    for (let pos = 0; pos < Math.min(3, ranked.length); pos++) {
+        const idx = ranked[pos].i;
+        const p = allocPts[idx];
+        traces.push({
+            x: [allocXs[idx]], y: [allocYs[idx]],
+            mode: 'markers', type: 'scatter',
+            name: PODIUM_LABELS[pos], legendgroup: PODIUM_LABELS[pos], showlegend: false,
+            marker: {
+                symbol: PODIUM_SYMBOLS[pos], size: PODIUM_SIZES[pos],
+                color: '#a04020', line: {color: '#fff', width: 1.5}
+            },
+            text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
+            hoverinfo: 'text'
+        });
+    }
 }
 
 // ---- Elapsed time comparison charts ----

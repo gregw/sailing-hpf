@@ -81,6 +81,9 @@
         <span style="font-weight:bold;" id="bcfc-race-division-title"></span>
         <button id="bcfc-div-next-btn" disabled onclick="inlineDivNext()">Next race →</button>
     </div>
+    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:0.25rem;font-size:0.9rem;">
+        <label>X-axis: <select id="bcfc-div-xfactor" onchange="onInlineDivXFactorChange()"></select></label>
+    </div>
     <div id="bcfc-race-division-chart" style="width:100%;height:500px;"></div>
 </div>
 

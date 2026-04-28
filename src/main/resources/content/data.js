@@ -291,6 +291,7 @@ const RACE_RF_KEY    = 'pf.divChart.showRf';
 const RACE_ERR_KEY   = 'pf.divChart.showErrorBars';
 const RACE_TREND_KEY = 'pf.divChart.showTrend';
 const CLUBS_SELECTED_KEY = 'pf.clubs.selectedId';
+const RACE_DIV_XFACTOR_KEY = 'pf.divChart.xFactor';
 function sessionBool(key, dflt) {
     const v = sessionStorage.getItem(key);
     return v === null ? dflt : v === 'true';
@@ -301,6 +302,8 @@ let showRaceTrendLine = sessionBool(RACE_TREND_KEY, false);
 const SERIES_OVERALL_TREND_KEY = 'pf.divChart.seriesOverallTrend';
 let showSeriesOverallTrend = sessionBool(SERIES_OVERALL_TREND_KEY, false);
 let preferredDivision = null;
+let raceDivXFactor = sessionStorage.getItem(RACE_DIV_XFACTOR_KEY) || 'PF';
+let lastRaceDivData = null;
 
 function isWriteAllowed() { return window.pfAuth?.authenticated; }
 
@@ -1723,6 +1726,12 @@ function onRaceTrendChange() {
     onRaceDivisionChange();
 }
 
+function onRaceDivXFactorChange() {
+    raceDivXFactor = document.getElementById('race-div-xfactor').value;
+    sessionStorage.setItem(RACE_DIV_XFACTOR_KEY, raceDivXFactor);
+    if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+}
+
 function onSeriesOverallTrendChange(cb) {
     showSeriesOverallTrend = cb.checked;
     sessionStorage.setItem(SERIES_OVERALL_TREND_KEY, String(showSeriesOverallTrend));
@@ -1763,30 +1772,27 @@ async function loadRaceDivChart(raceId, divisionName) {
 }
 
 function renderDivisionChart(data) {
+    lastRaceDivData = data;
     const finishers = data.finishers.filter(f => f.pf != null && f.elapsed > 0);
     if (finishers.length === 0) return;
-
-    const xs      = finishers.map(f => f.pf);
-    const names   = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
-    const elapsed = finishers.map(f => f.elapsed / 60);
-    const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
 
     // RF trace plots (rf, rfCorrected) — sorted by RF so the line is monotonic.
     const rfFinishers = finishers
         .map(f => ({f, rf: f.rf, rfCorrMin: f.rfCorrected != null ? f.rfCorrected / 60 : null}))
         .filter(o => o.rf != null && o.rfCorrMin != null)
         .sort((a, b) => a.rf - b.rf);
-    const rfXs = rfFinishers.map(o => o.rf);
-    const rfCorr = rfFinishers.map(o => o.rfCorrMin);
-    const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
-    const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
-    const rfElapsed = rfFinishers.map(o => o.f.elapsed / 60);
 
-    // When the RF line is shown, RF boats' elapsed baseline belongs at x=rf (not x=pf),
-    // so it sits alongside their RF-corrected marker. PF-only boats remain at x=pf.
-    const rfBoatIdsForElapsed = showRaceRfLine
-        ? new Set(rfFinishers.map(o => o.f.boatId)) : new Set();
-    const pfElapsedFinishers = finishers.filter(f => !rfBoatIdsForElapsed.has(f.boatId));
+    // Rebuild the x-factor selector with options valid for this data.
+    const xSelect = document.getElementById('race-div-xfactor');
+    if (xSelect) {
+        const opts = ['---', 'PF', ...(rfFinishers.length > 0 ? ['RF'] : [])];
+        if (!opts.includes(raceDivXFactor)) raceDivXFactor = 'PF';
+        if (xSelect.options.length !== opts.length ||
+            [...xSelect.options].map(o => o.value).join() !== opts.join()) {
+            xSelect.innerHTML = opts.map(o => `<option value="${o}">${o}</option>`).join('');
+        }
+        xSelect.value = raceDivXFactor;
+    }
 
     // Vertical error bars on corrected times: factor uncertainty propagates multiplicatively
     // to the corrected time — e.g. PF_upper_time = elapsed * pf_upper / 60
@@ -1810,94 +1816,166 @@ function renderDivisionChart(data) {
             t != null ? `${esc(labels[i])}<br>${label}: ${fmtTime(t * 60)}` : '');
     }
 
-    const boatCustom = finishers.map(f => ({ boatId: f.boatId }));
-
-    const traces = [
-        // Elapsed for PF-only boats (no RF) at x=pf
-        {
-            x: pfElapsedFinishers.map(f => f.pf),
-            y: pfElapsedFinishers.map(f => f.elapsed / 60),
-            mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
-          line: { dash: 'dash', color: '#555', width: 1.5 }, marker: { size: 7 },
-            text: hoverTexts('Elapsed',
-                pfElapsedFinishers.map(f => f.elapsed / 60),
-                pfElapsedFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name)),
-            hoverinfo: 'text', customdata: pfElapsedFinishers.map(f => ({boatId: f.boatId}))
-        },
-        { x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
-          line: { dash: 'solid', color: '#2255aa', width: 2 }, marker: { size: 7 },
-          error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
-            text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
-        },
-        ...(showRaceRfLine && rfFinishers.length > 0 ? [
-            // Elapsed for RF boats at x=rf (same legend entry as Elapsed above)
-            {
-                x: rfXs, y: rfElapsed,
-                mode: 'lines+markers', type: 'scatter',
-                name: 'Elapsed', legendgroup: 'Elapsed', showlegend: false,
-                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                text: hoverTexts('Elapsed', rfElapsed, rfNames),
-                hoverinfo: 'text', customdata: rfCustom
-            },
-            {
-                x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
-                line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
-                error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
-                text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
-            }
-        ] : [])
-    ];
-
-    addPodiumTraces(traces, finishers, xs, pfCorr);
-
-    if (showRaceTrendLine) {
-        // Linear regression of pfCorrected times vs PF, excluding nulls
-        const pts = finishers.map((f, i) => ({ x: xs[i], y: pfCorr[i] }))
-                             .filter(p => p.y != null);
-        if (pts.length >= 2) {
-            const n   = pts.length;
-            const sx  = pts.reduce((s, p) => s + p.x, 0);
-            const sy  = pts.reduce((s, p) => s + p.y, 0);
-            const sxx = pts.reduce((s, p) => s + p.x * p.x, 0);
-            const sxy = pts.reduce((s, p) => s + p.x * p.y, 0);
-            const denom = n * sxx - sx * sx;
-            if (denom !== 0) {
-                const slope     = (n * sxy - sx * sy) / denom;
-                const intercept = (sy - slope * sx) / n;
-                const xMin = Math.min(...pts.map(p => p.x));
-                const xMax = Math.max(...pts.map(p => p.x));
-                traces.push({
-                    x: [xMin, xMax],
-                    y: [slope * xMin + intercept, slope * xMax + intercept],
-                    mode: 'lines', type: 'scatter', name: 'PF corr trend',
-                    line: { dash: 'dashdot', color: '#2255aa', width: 2 },
-                    hoverinfo: 'skip'
-                });
-            }
-        }
+    function buildTrendTrace(plotPts, xLbl) {
+        const pts = plotPts.filter(p => p.y != null);
+        if (pts.length < 2) return null;
+        const n = pts.length;
+        const sx = pts.reduce((s, p) => s + p.x, 0);
+        const sy = pts.reduce((s, p) => s + p.y, 0);
+        const sxx = pts.reduce((s, p) => s + p.x * p.x, 0);
+        const sxy = pts.reduce((s, p) => s + p.x * p.y, 0);
+        const denom = n * sxx - sx * sx;
+        if (denom === 0) return null;
+        const slope = (n * sxy - sx * sy) / denom;
+        const intercept = (sy - slope * sx) / n;
+        const xMin = Math.min(...pts.map(p => p.x));
+        const xMax = Math.max(...pts.map(p => p.x));
+        return {
+            x: [xMin, xMax],
+            y: [slope * xMin + intercept, slope * xMax + intercept],
+            mode: 'lines', type: 'scatter', name: `${xLbl} corr trend`,
+            line: {dash: 'dashdot', color: '#2255aa', width: 2},
+            hoverinfo: 'skip'
+        };
     }
 
-    // Boat name labels: vertical text rising above each finisher's slowest-time point,
-    // so they sit in the top margin and never overlap the bars.
-    const annotations = finishers.map((f, i) => {
-        const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
-        const maxY = Math.max(...ys);
-        return {
-            x: xs[i], y: maxY,
-            text: f.name,
-            textangle: -90,
-            xanchor: 'center',
-            yanchor: 'bottom',
-            yshift: 6,
-            showarrow: false,
-            cliponaxis: false,
-            font: { size: 11 }
-        };
-    });
+    let traces, annotations, xAxisTitle;
+
+    if (raceDivXFactor === '---') {
+        // Natural mode: each trace uses its own factor as x-axis.
+        const xs = finishers.map(f => f.pf);
+        const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        const elapsed = finishers.map(f => f.elapsed / 60);
+        const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+
+        const rfXs = rfFinishers.map(o => o.rf);
+        const rfCorr = rfFinishers.map(o => o.rfCorrMin);
+        const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
+        const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
+        const rfElapsed = rfFinishers.map(o => o.f.elapsed / 60);
+
+        // When the RF line is shown, RF boats' elapsed baseline belongs at x=rf (not x=pf),
+        // so it sits alongside their RF-corrected marker. PF-only boats remain at x=pf.
+        const rfBoatIdsForElapsed = showRaceRfLine
+            ? new Set(rfFinishers.map(o => o.f.boatId)) : new Set();
+        const pfElapsedFinishers = finishers.filter(f => !rfBoatIdsForElapsed.has(f.boatId));
+
+        const boatCustom = finishers.map(f => ({boatId: f.boatId}));
+
+        traces = [
+            // Elapsed for PF-only boats (no RF) at x=pf
+            {
+                x: pfElapsedFinishers.map(f => f.pf),
+                y: pfElapsedFinishers.map(f => f.elapsed / 60),
+                mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+                text: hoverTexts('Elapsed',
+                    pfElapsedFinishers.map(f => f.elapsed / 60),
+                    pfElapsedFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name)),
+                hoverinfo: 'text', customdata: pfElapsedFinishers.map(f => ({boatId: f.boatId}))
+            },
+            {
+                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+                error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
+                text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+            },
+            ...(showRaceRfLine && rfFinishers.length > 0 ? [
+                // Elapsed for RF boats at x=rf (same legend entry as Elapsed above)
+                {
+                    x: rfXs, y: rfElapsed,
+                    mode: 'lines+markers', type: 'scatter',
+                    name: 'Elapsed', legendgroup: 'Elapsed', showlegend: false,
+                    line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+                    text: hoverTexts('Elapsed', rfElapsed, rfNames),
+                    hoverinfo: 'text', customdata: rfCustom
+                },
+                {
+                    x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+                    line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+                    error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
+                    text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
+                }
+            ] : [])
+        ];
+
+        addPodiumTraces(traces, finishers, xs, pfCorr);
+
+        if (showRaceTrendLine) {
+            const t = buildTrendTrace(finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF');
+            if (t) traces.push(t);
+        }
+
+        // Boat name labels at the top of each boat's tallest point.
+        annotations = finishers.map((f, i) => {
+            const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+            return {
+                x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                xanchor: 'center', yanchor: 'bottom', yshift: 6,
+                showarrow: false, cliponaxis: false, font: {size: 11}
+            };
+        });
+
+        xAxisTitle = showRaceRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF';
+
+    } else {
+        // Common-factor mode: all traces use the same x-axis factor, so all dots for
+        // a given boat form a vertical line.
+        const getX = f => raceDivXFactor === 'RF' ? f.rf : f.pf;
+        const plotFinishers = finishers
+            .filter(f => getX(f) != null)
+            .sort((a, b) => getX(a) - getX(b));
+        if (plotFinishers.length === 0) return;
+
+        const xs = plotFinishers.map(getX);
+        const names = plotFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+        const elapsed = plotFinishers.map(f => f.elapsed / 60);
+        const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+        const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
+        const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
+
+        traces = [
+            {
+                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
+                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
+                text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'text', customdata: boatCustom
+            },
+            {
+                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
+                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
+                error_y: yErrArrays(plotFinishers, 'pf', 'rfWeight'),
+                text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+            },
+            ...(showRaceRfLine && rfCorr.some(v => v != null) ? [{
+                x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
+                line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+                error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
+                text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
+            }] : [])
+        ];
+
+        addPodiumTraces(traces, plotFinishers, xs, pfCorr);
+
+        if (showRaceTrendLine) {
+            const t = buildTrendTrace(plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF');
+            if (t) traces.push(t);
+        }
+
+        annotations = plotFinishers.map((f, i) => {
+            const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+            return {
+                x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                xanchor: 'center', yanchor: 'bottom', yshift: 6,
+                showarrow: false, cliponaxis: false, font: {size: 11}
+            };
+        });
+
+        xAxisTitle = raceDivXFactor;
+    }
 
     const layout = {
         xaxis: {
-            title: showRaceRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF',
+            title: xAxisTitle,
             rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'
         },
         yaxis: { title: 'Time (min)', tickformat: '.1f',
