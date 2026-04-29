@@ -412,24 +412,68 @@ window.HandicapCalc = (function () {
             render();
         }
 
+        // Match imported rows to calc boats in passes, strongest criteria first, so that an
+        // item with a known name+sailno locks in its boat before another same-sailno item can
+        // claim it via sailno-only. Each boat is matched at most once.
         function setHandicapsByMatch(rows) {
             let matched = 0;
-            rows.forEach(item => {
-                if (item.handicap == null) return;
-                let boat = null;
-                if (item.sailno) boat = calcBoats.find(b => sailnoMatch(b.sailNumber, item.sailno));
-                if (!boat && item.name) {
-                    const target = normaliseDesignName(item.name);
-                    if (target) boat = calcBoats.find(b => normaliseDesignName(b.boatName) === target);
+            const used = new Set();
+            const items = rows.filter(r => r.handicap != null);
+            const remaining = [...items];
+
+            function applyTo(boat, item) {
+                used.add(boat.id);
+                const inp = section.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
+                if (inp) {
+                    inp.value = String(item.handicap);
+                    matched++;
                 }
-                if (boat) {
-                    const inp = section.querySelector(`.pf-calc-input[data-boat-id="${boat.id}"]`);
-                    if (inp) {
-                        inp.value = String(item.handicap);
-                        matched++;
+            }
+
+            // Pass: candidate predicate(item, boat). For each item, if exactly one
+            // unused boat matches, claim it. If multiple match and the item carries a
+            // division, prefer the one with the same division (if unique).
+            function pass(predicate) {
+                const leftover = [];
+                remaining.forEach(item => {
+                    const cands = calcBoats.filter(b => !used.has(b.id) && predicate(item, b));
+                    let pick = null;
+                    if (cands.length === 1) pick = cands[0];
+                    else if (cands.length > 1 && item.division != null) {
+                        const dn = normaliseDesignName(item.division);
+                        const byDiv = cands.filter(b => normaliseDesignName(b.division) === dn);
+                        if (byDiv.length === 1) pick = byDiv[0];
                     }
-                }
+                    if (pick) applyTo(pick, item);
+                    else leftover.push(item);
+                });
+                remaining.length = 0;
+                remaining.push(...leftover);
+            }
+
+            // 1. sailno + name (strongest — distinguishes same-sailno boats by name)
+            pass((it, b) =>
+                it.sailno && it.name &&
+                sailnoMatch(b.sailNumber, it.sailno) &&
+                normaliseDesignName(b.boatName) === normaliseDesignName(it.name));
+
+            // 2. sailno + division
+            pass((it, b) =>
+                it.sailno && it.division != null &&
+                sailnoMatch(b.sailNumber, it.sailno) &&
+                normaliseDesignName(b.division) === normaliseDesignName(it.division));
+
+            // 3. sailno alone (only when unambiguous, or division disambiguates inside pass)
+            pass((it, b) =>
+                it.sailno && sailnoMatch(b.sailNumber, it.sailno));
+
+            // 4. name alone (last resort for boats whose sail number is missing/garbled)
+            pass((it, b) => {
+                if (!it.name) return false;
+                const tn = normaliseDesignName(it.name);
+                return tn !== '' && normaliseDesignName(b.boatName) === tn;
             });
+
             recalc();
             return matched;
         }

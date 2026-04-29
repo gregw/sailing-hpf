@@ -1976,6 +1976,15 @@ function renderDivisionChart(data) {
             const h = allocByBoat.get(f.boatId);
             return h != null ? f.elapsed * h / 60 : null;
         });
+        // Drop gaps so the allocated line connects across boats without an entered handicap.
+        const allocFiltered = plotFinishers
+            .map((f, i) => ({
+                f, x: xs[i], y: allocCorr[i],
+                name: names[i],
+                handicap: allocByBoat.get(f.boatId),
+                correctedMin: allocCorr[i]
+            }))
+            .filter(p => p.y != null);
         const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
 
         traces = [
@@ -1996,33 +2005,25 @@ function renderDivisionChart(data) {
                 error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
                 text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
             }] : []),
-            ...(allocCorr.some(v => v != null) ? (() => {
-                // Drop gaps so the line connects across boats without an allocated handicap.
-                const allocFiltered = plotFinishers
-                    .map((f, i) => ({
-                        x: xs[i],
-                        y: allocCorr[i],
-                        name: names[i],
-                        handicap: allocByBoat.get(f.boatId),
-                        boatId: f.boatId
-                    }))
-                    .filter(p => p.y != null);
-                return [{
-                    x: allocFiltered.map(p => p.x),
-                    y: allocFiltered.map(p => p.y),
-                    mode: 'lines+markers', type: 'scatter',
-                    name: 'Allocated handicap corrected',
-                    line: {dash: 'longdash', color: '#a04020', width: 2},
-                    marker: {size: 8, symbol: 'square'},
-                    text: allocFiltered.map(p =>
-                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
-                    hoverinfo: 'text',
-                    customdata: allocFiltered.map(p => ({boatId: p.boatId}))
-                }];
-            })() : [])
+            ...(allocFiltered.length > 0 ? [{
+                x: allocFiltered.map(p => p.x),
+                y: allocFiltered.map(p => p.y),
+                mode: 'lines+markers', type: 'scatter',
+                name: 'Allocated handicap corrected',
+                line: {dash: 'longdash', color: '#a04020', width: 2},
+                marker: {size: 8, symbol: 'square'},
+                text: allocFiltered.map(p =>
+                    `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
+                hoverinfo: 'text',
+                customdata: allocFiltered.map(p => ({boatId: p.f.boatId}))
+            }] : [])
         ];
 
         addPodiumTraces(traces, plotFinishers, xs, pfCorr);
+        if (allocFiltered.length > 0) {
+            addAllocPodiumTraces(traces, allocFiltered,
+                allocFiltered.map(p => p.x), allocFiltered.map(p => p.y));
+        }
 
         if (showRaceTrendLine) {
             const elapsedTrend = buildTrendTrace(
@@ -2160,6 +2161,7 @@ async function loadRaceHandicapCalc(raceId) {
         name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
         sailNumber: b.sailNumber || null,
         boatName: b.name || null,
+        division: b.division || null,
         pf: b.pf,
         rf: b.rf,
         bestFit: null

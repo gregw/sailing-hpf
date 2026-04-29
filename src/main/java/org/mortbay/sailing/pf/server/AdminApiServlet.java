@@ -3128,6 +3128,8 @@ public class AdminApiServlet extends HttpServlet
         {
             List<Map<String, Object>> items = (List<Map<String, Object>>) div.get("items");
             if (items == null) continue;
+            Map<String, Object> parent = (Map<String, Object>)div.get("parent");
+            String divName = parent != null ? stringOf(parent.get("name")) : null;
             for (Map<String, Object> entry : items)
             {
                 Map<String, Object> boat = (Map<String, Object>) entry.get("boat");
@@ -3141,7 +3143,7 @@ public class AdminApiServlet extends HttpServlet
                 if (handicap != null && chosenId != null)
                     hcap = pickSailSysHandicap((List<Map<String, Object>>)handicap.get("currentHandicaps"), chosenId);
                 if (hcap == null) continue;
-                result.add(handicapEntry(sailNo, name, hcap));
+                result.add(handicapEntry(sailNo, name, divName, hcap));
             }
         }
         return result;
@@ -3339,9 +3341,16 @@ public class AdminApiServlet extends HttpServlet
 
     private static Map<String, Object> handicapEntry(String sailNo, String name, Double handicap)
     {
+        return handicapEntry(sailNo, name, null, handicap);
+    }
+
+    private static Map<String, Object> handicapEntry(String sailNo, String name, String division, Double handicap)
+    {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("sailno", sailNo);
         m.put("name", name);
+        if (division != null)
+            m.put("division", division);
         m.put("handicap", handicap);
         return m;
     }
