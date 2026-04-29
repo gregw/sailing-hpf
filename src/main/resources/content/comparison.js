@@ -676,17 +676,22 @@ function renderInlineDivisionChart() {
                 line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
                 text: names.map((n, i) => hoverText(n, 'RF corrected', rfCorr[i])), hoverinfo: 'text'
             }] : []),
-            ...(allocCorr.some(v => v != null) ? [{
-                x: xs, y: allocCorr, mode: 'lines+markers', type: 'scatter',
-                name: 'Allocated handicap corrected',
-                line: {dash: 'longdash', color: '#a04020', width: 2}, marker: {size: 8, symbol: 'square'},
-                text: plotFinishers.map((f, i) => {
-                    const h = allocByBoat.get(f.boatId);
-                    return h != null
-                        ? `${esc(names[i])}<br>Allocated: ${h.toFixed(4)}<br>Corrected: ${fmtTime(allocCorr[i] * 60)}`
-                        : '';
-                }), hoverinfo: 'text'
-            }] : [])
+            ...(allocCorr.some(v => v != null) ? (() => {
+                // Drop gaps so the line connects across boats without an allocated handicap.
+                const allocFiltered = plotFinishers
+                    .map((f, i) => ({x: xs[i], y: allocCorr[i], name: names[i], handicap: allocByBoat.get(f.boatId)}))
+                    .filter(p => p.y != null);
+                return [{
+                    x: allocFiltered.map(p => p.x),
+                    y: allocFiltered.map(p => p.y),
+                    mode: 'lines+markers', type: 'scatter',
+                    name: 'Allocated handicap corrected',
+                    line: {dash: 'longdash', color: '#a04020', width: 2}, marker: {size: 8, symbol: 'square'},
+                    text: allocFiltered.map(p =>
+                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
+                    hoverinfo: 'text'
+                }];
+            })() : [])
         ];
 
         addPodiumTraces(traces, plotFinishers, xs, pfCorr);

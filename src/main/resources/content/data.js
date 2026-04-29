@@ -1836,8 +1836,8 @@ function renderDivisionChart(data) {
             t != null ? `${esc(labels[i])}<br>${label}: ${fmtTime(t * 60)}` : '');
     }
 
-    function buildTrendTrace(plotPts, xLbl) {
-        const pts = plotPts.filter(p => p.y != null);
+    function buildTrendTrace(plotPts, name, color) {
+        const pts = plotPts.filter(p => p.x != null && p.y != null);
         if (pts.length < 2) return null;
         const n = pts.length;
         const sx = pts.reduce((s, p) => s + p.x, 0);
@@ -1853,8 +1853,9 @@ function renderDivisionChart(data) {
         return {
             x: [xMin, xMax],
             y: [slope * xMin + intercept, slope * xMax + intercept],
-            mode: 'lines', type: 'scatter', name: `${xLbl} corr trend`,
-            line: {dash: 'dashdot', color: '#2255aa', width: 2},
+            mode: 'lines', type: 'scatter', name,
+            line: {dash: 'dashdot', color, width: 1.5},
+            showlegend: false,
             hoverinfo: 'skip'
         };
     }
@@ -1921,8 +1922,24 @@ function renderDivisionChart(data) {
         }
 
         if (showRaceTrendLine) {
-            const t = buildTrendTrace(finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF');
-            if (t) traces.push(t);
+            const elapsedTrend = buildTrendTrace(
+                finishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend', '#555');
+            if (elapsedTrend) traces.push(elapsedTrend);
+            const pfTrend = buildTrendTrace(
+                finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend', '#2255aa');
+            if (pfTrend) traces.push(pfTrend);
+            if (showRaceRfLine && rfFinishers.length > 0) {
+                const rfTrend = buildTrendTrace(
+                    rfFinishers.map((o, i) => ({x: rfXs[i], y: rfCorr[i]})),
+                    'RF corr trend', '#c47900');
+                if (rfTrend) traces.push(rfTrend);
+            }
+            if (allocPts.length > 0) {
+                const allocTrend = buildTrendTrace(
+                    allocPts.map(p => ({x: p.handicap, y: p.correctedMin})),
+                    'Allocated corr trend', '#a04020');
+                if (allocTrend) traces.push(allocTrend);
+            }
         }
 
         // Boat name labels at the top of each boat's tallest point.
@@ -1979,26 +1996,52 @@ function renderDivisionChart(data) {
                 error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
                 text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
             }] : []),
-            ...(allocCorr.some(v => v != null) ? [{
-                x: xs, y: allocCorr, mode: 'lines+markers', type: 'scatter',
-                name: 'Allocated handicap corrected',
-                line: {dash: 'longdash', color: '#a04020', width: 2},
-                marker: {size: 8, symbol: 'square'},
-                text: plotFinishers.map((f, i) => {
-                    const h = allocByBoat.get(f.boatId);
-                    return h != null
-                        ? `${esc(names[i])}<br>Allocated: ${h.toFixed(4)}<br>Corrected: ${fmtTime(allocCorr[i] * 60)}`
-                        : '';
-                }),
-                hoverinfo: 'text', customdata: boatCustom
-            }] : [])
+            ...(allocCorr.some(v => v != null) ? (() => {
+                // Drop gaps so the line connects across boats without an allocated handicap.
+                const allocFiltered = plotFinishers
+                    .map((f, i) => ({
+                        x: xs[i],
+                        y: allocCorr[i],
+                        name: names[i],
+                        handicap: allocByBoat.get(f.boatId),
+                        boatId: f.boatId
+                    }))
+                    .filter(p => p.y != null);
+                return [{
+                    x: allocFiltered.map(p => p.x),
+                    y: allocFiltered.map(p => p.y),
+                    mode: 'lines+markers', type: 'scatter',
+                    name: 'Allocated handicap corrected',
+                    line: {dash: 'longdash', color: '#a04020', width: 2},
+                    marker: {size: 8, symbol: 'square'},
+                    text: allocFiltered.map(p =>
+                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
+                    hoverinfo: 'text',
+                    customdata: allocFiltered.map(p => ({boatId: p.boatId}))
+                }];
+            })() : [])
         ];
 
         addPodiumTraces(traces, plotFinishers, xs, pfCorr);
 
         if (showRaceTrendLine) {
-            const t = buildTrendTrace(plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF');
-            if (t) traces.push(t);
+            const elapsedTrend = buildTrendTrace(
+                plotFinishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend', '#555');
+            if (elapsedTrend) traces.push(elapsedTrend);
+            const pfTrend = buildTrendTrace(
+                plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend', '#2255aa');
+            if (pfTrend) traces.push(pfTrend);
+            if (showRaceRfLine && rfCorr.some(v => v != null)) {
+                const rfTrend = buildTrendTrace(
+                    plotFinishers.map((f, i) => ({x: xs[i], y: rfCorr[i]})), 'RF corr trend', '#c47900');
+                if (rfTrend) traces.push(rfTrend);
+            }
+            if (allocCorr.some(v => v != null)) {
+                const allocTrend = buildTrendTrace(
+                    plotFinishers.map((f, i) => ({x: xs[i], y: allocCorr[i]})),
+                    'Allocated corr trend', '#a04020');
+                if (allocTrend) traces.push(allocTrend);
+            }
         }
 
         annotations = plotFinishers.map((f, i) => {
