@@ -2642,16 +2642,17 @@ function initChartResize(chartId, defaultHeight) {
         startY = e.clientY;
         startHeight = chartDiv.offsetHeight;
         e.preventDefault();
-        document.body.style.cursor = 'nw-resize';
+        document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
 
-        const deltaY = startY - e.clientY;
+        const deltaY = e.clientY - startY;
         const newHeight = Math.max(minHeight, startHeight + deltaY);
         chartDiv.style.height = newHeight + 'px';
+        if (window.Plotly) Plotly.Plots.resize(chartDiv);
 
         // Store the new height
         const heights = JSON.parse(sessionStorage.getItem(CHART_HEIGHTS_KEY) || '{}');
