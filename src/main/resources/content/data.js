@@ -2152,6 +2152,362 @@ function renderDivisionChart(data) {
     });
 }
 
+// ---- Handicap calculator on the races tab ----
+//
+// Calculator is initialised lazily once the first race is selected. Allocated handicaps
+// persist in sessionStorage under ALLOCATED_HANDICAPS_KEY and are shared with the series
+// tab and the boat-comparison page, so entries follow the user across views.
+
+const ALLOCATED_HANDICAPS_KEY = 'pf.allocated.handicaps';
+
+let raceCalcController = null;
+
+function raceCalc() {
+    if (raceCalcController) return raceCalcController;
+    raceCalcController = HandicapCalc.create({
+        section: document.getElementById('pf-calc'),
+        table: document.querySelector('#pf-calc table'),
+        showBestFit: false,
+        sessionKey: ALLOCATED_HANDICAPS_KEY,
+        urlInput: document.getElementById('handicap-url'),
+        fetchBtn: document.getElementById('fetch-handicaps-btn'),
+        fetchStatus: document.getElementById('fetch-status'),
+        fileInput: document.getElementById('handicap-file'),
+        fileStatus: document.getElementById('file-status'),
+        downloadBtn: document.getElementById('download-handicaps-btn'),
+        downloadStatus: document.getElementById('download-status'),
+        onChange: () => {
+            if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+        }
+    });
+    const clearBtn = document.getElementById('clear-handicaps-btn');
+    if (clearBtn) clearBtn.addEventListener('click', () => raceCalcController.clearAll());
+    return raceCalcController;
+}
+
+async function loadRaceHandicapCalc(raceId) {
+    if (!raceId) return;
+    const data = await fetchJson('/api/comparison/race-boats?raceId=' + encodeURIComponent(raceId));
+    if (!data || !data.boats) return;
+    const boats = data.boats.map(b => ({
+        id: b.id,
+        name: b.sailNumber ? `${b.sailNumber} ${b.name}` : b.name,
+        sailNumber: b.sailNumber || null,
+        boatName: b.name || null,
+        division: b.division || null,
+        pf: b.pf,
+        rf: b.rf,
+        bestFit: null
+    }));
+    raceCalc().setBoats(boats);
+    // Re-render division chart so the allocated line picks up any applied entries.
+    if (lastRaceDivData) renderDivisionChart(lastRaceDivData);
+}
+
+// ---- Series chart ----
+
+let seriesChartData = null;  // last loaded series chart response
+let seriesCurrentDivision = null;  // division name currently displayed
+let seriesPfCalcController = null;
+
+function seriesPfCalc() {
+    if (seriesPfCalcController) return seriesPfCalcController;
+    seriesPfCalcController = HandicapCalc.create({
+        section: document.getElementById('series-pf-calc'),
+        table: document.querySelector('#series-pf-calc table'),
+        showBestFit: false,
+        sessionKey: ALLOCATED_HANDICAPS_KEY,
+        urlInput: document.getElementById('series-handicap-url'),
+        fetchBtn: document.getElementById('series-fetch-handicaps-btn'),
+        fetchStatus: document.getElementById('series-fetch-status'),
+        fileInput: document.getElementById('series-handicap-file'),
+        fileStatus: document.getElementById('series-file-status'),
+        downloadBtn: document.getElementById('series-download-handicaps-btn'),
+        downloadStatus: document.getElementById('series-download-status'),
+        onChange: () => {
+            // Re-render only the chart; the calc has already updated its own DOM.
+            if (seriesChartData && seriesCurrentDivision != null)
+                renderSeriesChartForDivision(seriesCurrentDivision, {refreshCalc: false});
+        }
+    });
+    const clearBtn = document.getElementById('series-clear-handicaps-btn');
+    if (clearBtn) clearBtn.addEventListener('click', () => seriesPfCalcController.clearAll());
+    return seriesPfCalcController;
+}
+
+async function loadSeriesChart(seriesId) {
+    const section = document.getElementById('series-chart-section');
+    const label = document.getElementById('series-chart-label');
+    label.textContent = 'Loading series chart…';
+    section.style.display = '';
+
+    const data = await fetchJson('/api/series/chart?seriesId=' + encodeURIComponent(seriesId));
+    if (!data || !data.races || data.races.length === 0) {
+        label.textContent = 'No chart data available for this series.';
+        document.getElementById('series-division-select').innerHTML = '';
+        Plotly.purge('series-chart');
+        seriesPfCalc().setBoats([]);
+        return;
+    }
+
+    seriesChartData = data;
+    label.textContent = (data.seriesName || seriesId) + ' — ' + data.club;
+
+    // Collect unique division names across all races, preserving first-seen order
+    const divNameSet = new Set();
+    data.races.forEach(r => r.divisions.forEach(d => divNameSet.add(d.name || '')));
+    const divNames = [...divNameSet];
+
+    const sel = document.getElementById('series-division-select');
+    const opts = divNames.map(n => `<option value="${esc(n)}">${esc(n || '—')}</option>`);
+    if (divNames.length > 1) opts.push(`<option value="__all__">All</option>`);
+    sel.innerHTML = opts.join('');
+
+    renderSeriesChartForDivision(divNames[0] || '');
+    section.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function onSeriesDivisionChange() {
+    const divName = document.getElementById('series-division-select').value;
+    renderSeriesChartForDivision(divName);
+}
+
+// Build a unique-by-boatId list of {id, name, sailNumber, boatName, pf, rf} for the calc.
+// When divName is "__all__", aggregates boats from every division in the series.
+function buildSeriesCalcBoats(data, divName) {
+    const allDivisions = divName === '__all__';
+    const seen = new Map();
+    data.races.forEach(race => {
+        const divs = allDivisions ? race.divisions
+            : race.divisions.filter(d => (d.name || '') === divName);
+        divs.forEach(div => {
+            div.finishers.forEach(f => {
+                if (!f.boatId || f.pf == null || seen.has(f.boatId)) return;
+                seen.set(f.boatId, {
+                    id: f.boatId,
+                    name: f.sailNumber ? `${f.sailNumber} ${f.name || ''}`.trim() : (f.name || f.boatId),
+                    sailNumber: f.sailNumber || null,
+                    boatName: f.name || null,
+                    pf: f.pf,
+                    rf: f.rf != null ? f.rf : null,
+                    bestFit: null
+                });
+            });
+        });
+    });
+    return [...seen.values()];
+}
+
+// Finishers for a given race under the current division selection. When divName is
+// "__all__" combines finishers from every division.
+function getRaceFinishers(race, divName) {
+    if (divName === '__all__')
+        return (race.divisions || []).flatMap(d => d.finishers || []);
+    const div = (race.divisions || []).find(d => (d.name || '') === divName);
+    return div ? (div.finishers || []) : [];
+}
+
+function renderSeriesChartForDivision(divName, opts) {
+    const data = seriesChartData;
+    if (!data) return;
+    seriesCurrentDivision = divName;
+
+    if (!opts || opts.refreshCalc !== false) {
+        seriesPfCalc().setBoats(buildSeriesCalcBoats(data, divName));
+    }
+    const allocByBoat = seriesPfCalc().getEnteredValues();
+
+    // Colour palette for races
+    const raceColors = [
+        '#2255aa', '#c47900', '#2ca02c', '#d62728', '#9467bd',
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
+        '#ff7f0e', '#1f77b4', '#aec7e8', '#ffbb78', '#98df8a'
+    ];
+
+    const podiumSymbols = ['star', 'diamond', 'triangle-up'];
+    const podiumSizes = [14, 12, 11];
+    const podiumLabels = ['1st', '2nd', '3rd'];
+
+    // In "All" mode each (race, division) gets its own line so divisions don't join.
+    // Divisions of the same race share the race's hue, lightening with division index.
+    const allDivisions = divName === '__all__';
+    const seriesDivOrder = allDivisions ? (() => {
+        const seen = new Set();
+        const ordered = [];
+        data.races.forEach(r => (r.divisions || []).forEach(d => {
+            const n = d.name || '';
+            if (!seen.has(n)) {
+                seen.add(n);
+                ordered.push(n);
+            }
+        }));
+        return ordered;
+    })() : [];
+
+    const traces = [];
+    const allocatedLegendShownFor = new Set();
+    const podiumLegendShownFor = new Set();
+    data.races.forEach((race, raceIdx) => {
+        const baseColor = raceColors[raceIdx % raceColors.length];
+        const raceLabel = race.raceName || race.date || race.raceId;
+
+        const divsToPlot = allDivisions
+            ? (race.divisions || [])
+            : (race.divisions || []).filter(d => (d.name || '') === divName);
+
+        divsToPlot.forEach(div => {
+            const groupDivName = div.name || '';
+            const lighten = allDivisions
+                ? Math.min(0.5, seriesDivOrder.indexOf(groupDivName) * 0.18)
+                : 0;
+            const color = lightenColor(baseColor, lighten);
+            const groupKey = allDivisions ? `race-${raceIdx}-div-${groupDivName}` : `race-${raceIdx}`;
+            const traceName = allDivisions
+                ? `${raceLabel} — ${groupDivName || 'Results'}`
+                : raceLabel;
+
+            const finishers = (div.finishers || [])
+                .filter(f => f.pf != null && f.pfCorrected != null)
+                .slice()
+                .sort((a, b) => a.pf - b.pf);
+            if (finishers.length === 0) return;
+
+            const sorted = finishers.map((f, i) => ({i, t: f.pfCorrected}))
+                .sort((a, b) => a.t - b.t);
+
+            const xs = finishers.map(f => f.pf);
+            const ys = finishers.map(f => f.pfCorrected / 60);
+            const texts = finishers.map(f =>
+                `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
+                + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                + `<br>PF corrected: ${fmtTime(f.pfCorrected)}`
+            );
+            const boatCustom = finishers.map(f => ({boatId: f.boatId}));
+
+            traces.push({
+                x: xs, y: ys,
+                mode: 'lines+markers', type: 'scatter',
+                name: traceName,
+                legendgroup: groupKey,
+                line: {dash: 'solid', color: color, width: 1.5},
+                marker: {size: 5},
+                text: texts,
+                hoverinfo: 'text',
+                customdata: boatCustom
+            });
+
+            // Allocated-handicap corrected line for this (race, division)
+            const allocPts = finishers
+                .filter(f => allocByBoat.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
+                .map(f => ({
+                    f,
+                    handicap: allocByBoat.get(f.boatId),
+                    correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
+                }))
+                .sort((a, b) => a.f.pf - b.f.pf);
+            if (allocPts.length > 0) {
+                const allocLegendKey = allDivisions ? `allocated-${groupDivName}` : 'allocated';
+                traces.push({
+                    x: allocPts.map(p => p.f.pf),
+                    y: allocPts.map(p => p.correctedMin),
+                    mode: 'lines+markers', type: 'scatter',
+                    name: allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected',
+                    legendgroup: allocLegendKey,
+                    showlegend: !allocatedLegendShownFor.has(allocLegendKey),
+                    line: {dash: 'dash', color: color, width: 1.5},
+                    marker: {size: 5, symbol: 'square'},
+                    text: allocPts.map(p =>
+                        `${p.f.sailNumber ? p.f.sailNumber + ' ' : ''}${esc(p.f.name || '')}<br>${esc(raceLabel)}`
+                        + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                        + `<br>Allocated: ${p.handicap.toFixed(4)}`
+                        + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                    hoverinfo: 'text',
+                    customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+                });
+                allocatedLegendShownFor.add(allocLegendKey);
+            }
+
+            // Podium markers (1st/2nd/3rd fastest corrected times in this group)
+            for (let p = 0; p < Math.min(3, sorted.length); p++) {
+                const f = finishers[sorted[p].i];
+                const podiumKey = podiumLabels[p];
+                traces.push({
+                    x: [f.pf], y: [f.pfCorrected / 60],
+                    mode: 'markers', type: 'scatter',
+                    name: podiumKey,
+                    legendgroup: podiumKey,
+                    showlegend: !podiumLegendShownFor.has(podiumKey),
+                    marker: {
+                        symbol: podiumSymbols[p], size: podiumSizes[p],
+                        color: color,
+                        line: {color: '#fff', width: 1.5}
+                    },
+                    text: [`${podiumKey}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}`
+                    + `<br>${esc(raceLabel)}`
+                    + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                    + `<br>PF corrected: ${fmtTime(f.pfCorrected)}`],
+                    hoverinfo: 'text',
+                    customdata: [{boatId: f.boatId}]
+                });
+                podiumLegendShownFor.add(podiumKey);
+            }
+        });
+    });
+
+    if (traces.length === 0) {
+        Plotly.purge('series-chart');
+        return;
+    }
+
+    if (showSeriesOverallTrend) {
+        // One trend line per division. In "All" mode: one trend per division (combining
+        // its races across the series); in single-division mode: one trend.
+        const trendDivs = allDivisions ? seriesDivOrder : [divName];
+        trendDivs.forEach((dn, i) => {
+            const lighten = allDivisions ? Math.min(0.4, i * 0.18) : 0;
+            const trend = computeSeriesOverallTrend(data, dn);
+            if (trend) {
+                if (allDivisions) {
+                    trend.name = `Overall ${dn || 'Results'} — ${trend.name}`;
+                    trend.line.color = lightenColor('#333', lighten);
+                }
+                traces.push(trend);
+            }
+            const allocTrend = computeSeriesAllocatedTrend(data, dn, allocByBoat);
+            if (allocTrend) {
+                if (allDivisions) {
+                    allocTrend.name = `Allocated ${dn || 'Results'} — ${allocTrend.name}`;
+                    allocTrend.line.color = lightenColor('#a04020', lighten);
+                }
+                traces.push(allocTrend);
+            }
+        });
+    }
+
+    const layout = {
+        xaxis: {title: 'PF', rangemode: getDivChartXFromZero() ? 'tozero' : 'normal'},
+        yaxis: {
+            title: 'PF Corrected Time (min)', tickformat: '.1f',
+            rangemode: getDivChartYFromZero() ? 'tozero' : 'normal'
+        },
+        legend: {orientation: 'h', y: -0.25},
+        margin: {t: 30, b: 80, l: 60, r: 20},
+        hovermode: 'closest'
+    };
+
+    Plotly.react('series-chart', traces, layout, {responsive: true});
+
+    const seriesChartDiv = document.getElementById('series-chart');
+    seriesChartDiv.removeAllListeners && seriesChartDiv.removeAllListeners('plotly_click');
+    seriesChartDiv.on('plotly_click', (eventData) => {
+        if (!eventData.points || !eventData.points.length) return;
+        const pt = eventData.points[0];
+        if (!pt.customdata || !pt.customdata.boatId) return;
+        window.location.href = 'data.html?' +
+            new URLSearchParams({tab: 'boats', boatId: pt.customdata.boatId});
+    });
+}
+
 /**
  * Computes the series overall trend trace for the given division: the line with the
  * average OLS slope of each race's (PF, PF-corrected-minutes) points, anchored at the

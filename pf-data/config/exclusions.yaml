@@ -1,6 +1,11 @@
 # IMPORTANT: This file is managed by the server.
 # It is overwritten whenever exclusions are changed via the admin UI.
 # Only edit manually when the server is NOT running.
+#
+# This file holds boat, race, and series exclusions. Design-level flags
+# (excluded designs and ignored designs) live in design.yaml under the
+# `excluded:` and `ignored:` fields, which are the single source of truth
+# for long-lived design catalogue state.
 boats:
 - "5678-testyacht-tt"
 - "1433-1433"
