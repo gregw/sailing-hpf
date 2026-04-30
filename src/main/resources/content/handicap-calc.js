@@ -560,6 +560,25 @@ window.HandicapCalc = (function () {
             return m;
         }
 
+        // Merge a fetched/loaded row set into session storage so entries for boats not
+        // currently shown (e.g. other divisions) are remembered and applied later when the
+        // visible boat list changes. Existing entries with the same sailno or name are
+        // replaced by the incoming row.
+        function rememberFetchedRows(rows) {
+            if (!cfg.sessionKey) return;
+            const incoming = (rows || []).filter(r => r != null && r.handicap != null);
+            if (incoming.length === 0) return;
+            const existing = readSession();
+            const replaced = item => incoming.some(r =>
+                (r.sailno && r.sailno === item.sailno) ||
+                (!r.sailno && r.name && r.name === item.name));
+            const merged = existing.filter(e => !replaced(e)).concat(incoming);
+            try {
+                sessionStorage.setItem(cfg.sessionKey, JSON.stringify(merged));
+            } catch (e) { /* quota or disabled storage — ignore */
+            }
+        }
+
         // ---- Wire fetch / load / download buttons ----
 
         async function doFetch() {
@@ -587,6 +606,7 @@ window.HandicapCalc = (function () {
                 if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
                 const data = await resp.json();
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps');
+                rememberFetchedRows(data);
                 const matched = setHandicapsByMatch(data);
                 if (status) {
                     status.textContent = `Fetched ${data.length} handicaps, matched ${matched} boats`;
@@ -621,6 +641,7 @@ window.HandicapCalc = (function () {
                 const text = await file.text();
                 const data = JSON.parse(text);
                 if (!Array.isArray(data)) throw new Error('Expected array of handicaps in file');
+                rememberFetchedRows(data);
                 const matched = setHandicapsByMatch(data);
                 if (status) {
                     status.textContent = `Loaded ${data.length} handicaps, matched ${matched} boats`;

@@ -1653,7 +1653,8 @@ public class AdminApiServlet extends HttpServlet
      * GET /api/comparison/division — returns elapsed and corrected times for a single race division.
      * <p>
      * Required query params: {@code raceId} and {@code divisionName} (empty string matches
-     * legacy null-named divisions). For each finisher with a recorded elapsed time, emits the
+     * legacy null-named divisions; the special sentinel {@code __all__} aggregates finishers
+     * from every division of the race). For each finisher with a recorded elapsed time, emits the
      * elapsed seconds, applicable variant (spin/nonSpin), PF and RF values and weights, and
      * PF/RF corrected times. Finishers are sorted by PF value ascending (nulls last). Also
      * returns race metadata (date, series name) and the division's overall variant (spin, nonSpin,
@@ -1668,58 +1669,82 @@ public class AdminApiServlet extends HttpServlet
         Race race = store.races().get(raceId);
         if (race == null) { resp.sendError(404); return; }
 
+        // Special "__all__" sentinel: aggregate finishers across every division.
+        boolean allDivisions = "__all__".equals(divisionName);
         // Empty string is a sentinel for a null-named division (legacy imported data)
         boolean matchNull = divisionName.isEmpty();
-        var div = race.divisions() == null ? null
-            : race.divisions().stream()
-                .filter(d -> matchNull ? (d.name() == null || d.name().isBlank())
-                                       : divisionName.equals(d.name()))
-                .findFirst().orElse(null);
-        if (div == null) { resp.sendError(404); return; }
 
-        int totalFinishers = div.finishers() != null ? div.finishers().size() : 0;
+        List<Division> selectedDivisions;
+        if (allDivisions)
+        {
+            selectedDivisions = race.divisions() == null ? List.of() : race.divisions();
+        }
+        else
+        {
+            Division single = race.divisions() == null ? null
+                : race.divisions().stream()
+                .filter(d -> matchNull ? (d.name() == null || d.name().isBlank())
+                    : divisionName.equals(d.name()))
+                .findFirst().orElse(null);
+            if (single == null)
+            {
+                resp.sendError(404);
+                return;
+            }
+            selectedDivisions = List.of(single);
+        }
+
+        int totalFinishers = 0;
         List<Map<String, Object>> finishers = new ArrayList<>();
         Set<String> variantsUsed = new java.util.LinkedHashSet<>();
-        for (var f : div.finishers())
+        for (Division div : selectedDivisions)
         {
-            BoatDerived bd = cache.boatDerived().get(f.boatId());
-            if (bd == null || f.elapsedTime() == null) continue;
-
-            ReferenceFactors rf  = bd.referenceFactors();
-            BoatPf          pf = bd.pf();
-
-            // Use each finisher's own nonSpinnaker flag to pick the correct variant
-            String fVariant = f.nonSpinnaker() ? "nonSpin" : "spin";
-            variantsUsed.add(fVariant);
-
-            Factor pfFactor = pf == null ? null : switch (fVariant)
+            if (div.finishers() == null)
+                continue;
+            totalFinishers += div.finishers().size();
+            for (var f : div.finishers())
             {
-                case "nonSpin" -> pf.nonSpin();
-                default        -> pf.spin();
-            };
-            Factor rfFactor = rf == null ? null : switch (fVariant)
-            {
-                case "nonSpin" -> rf.nonSpin();
-                default        -> rf.spin();
-            };
+                BoatDerived bd = cache.boatDerived().get(f.boatId());
+                if (bd == null || f.elapsedTime() == null)
+                    continue;
 
-            double elapsedSec = f.elapsedTime().toSeconds();
-            Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
-            Double rfVal  = rfFactor  != null && !Double.isNaN(rfFactor.value())  ? rfFactor.value()  : null;
+                ReferenceFactors rf = bd.referenceFactors();
+                BoatPf pf = bd.pf();
 
-            Map<String, Object> fm = new LinkedHashMap<>();
-            fm.put("boatId",      f.boatId());
-            fm.put("name",        bd.boat().name());
-            fm.put("sailNumber",  bd.boat().sailNumber());
-            fm.put("elapsed",     elapsedSec);
-            fm.put("variant",     fVariant);
-            fm.put("pf",         pfVal);
-            fm.put("rf",          rfVal);
-            fm.put("pfWeight",   pfFactor != null ? pfFactor.weight() : null);
-            fm.put("rfWeight",    rfFactor  != null ? rfFactor.weight()  : null);
-            fm.put("pfCorrected", pfVal != null && pfVal > 0 ? elapsedSec * pfVal : null);
-            fm.put("rfCorrected",  rfVal  != null && rfVal  > 0 ? elapsedSec * rfVal  : null);
-            finishers.add(fm);
+                // Use each finisher's own nonSpinnaker flag to pick the correct variant
+                String fVariant = f.nonSpinnaker() ? "nonSpin" : "spin";
+                variantsUsed.add(fVariant);
+
+                Factor pfFactor = pf == null ? null : switch (fVariant)
+                {
+                    case "nonSpin" -> pf.nonSpin();
+                    default -> pf.spin();
+                };
+                Factor rfFactor = rf == null ? null : switch (fVariant)
+                {
+                    case "nonSpin" -> rf.nonSpin();
+                    default -> rf.spin();
+                };
+
+                double elapsedSec = f.elapsedTime().toSeconds();
+                Double pfVal = pfFactor != null && !Double.isNaN(pfFactor.value()) ? pfFactor.value() : null;
+                Double rfVal = rfFactor != null && !Double.isNaN(rfFactor.value()) ? rfFactor.value() : null;
+
+                Map<String, Object> fm = new LinkedHashMap<>();
+                fm.put("boatId", f.boatId());
+                fm.put("name", bd.boat().name());
+                fm.put("sailNumber", bd.boat().sailNumber());
+                fm.put("division", div.name());
+                fm.put("elapsed", elapsedSec);
+                fm.put("variant", fVariant);
+                fm.put("pf", pfVal);
+                fm.put("rf", rfVal);
+                fm.put("pfWeight", pfFactor != null ? pfFactor.weight() : null);
+                fm.put("rfWeight", rfFactor != null ? rfFactor.weight() : null);
+                fm.put("pfCorrected", pfVal != null && pfVal > 0 ? elapsedSec * pfVal : null);
+                fm.put("rfCorrected", rfVal != null && rfVal > 0 ? elapsedSec * rfVal : null);
+                finishers.add(fm);
+            }
         }
         String divisionVariant = variantsUsed.size() == 1 ? variantsUsed.iterator().next() : "mixed";
 

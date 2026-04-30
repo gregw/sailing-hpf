@@ -1622,6 +1622,8 @@ function setupRaceDivisionChart(raceId, raceJson) {
         seen.add(value);
         divisions.push({ value, label: value !== '' ? value : fallbackLabel });
     }
+    // Add an "All" option (sentinel "__all__") when there's more than one division.
+    if (divisions.length > 1) divisions.push({value: '__all__', label: 'All'});
     const select = document.getElementById('race-division-select');
     select.innerHTML = '';
     divisions.forEach(({ value, label }) => {
@@ -2191,7 +2193,9 @@ async function loadSeriesChart(seriesId) {
     const divNames = [...divNameSet];
 
     const sel = document.getElementById('series-division-select');
-    sel.innerHTML = divNames.map(n => `<option value="${esc(n)}">${esc(n || '—')}</option>`).join('');
+    const opts = divNames.map(n => `<option value="${esc(n)}">${esc(n || '—')}</option>`);
+    if (divNames.length > 1) opts.push(`<option value="__all__">All</option>`);
+    sel.innerHTML = opts.join('');
 
     renderSeriesChartForDivision(divNames[0] || '');
     section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2203,25 +2207,38 @@ function onSeriesDivisionChange() {
 }
 
 // Build a unique-by-boatId list of {id, name, sailNumber, boatName, pf, rf} for the calc.
+// When divName is "__all__", aggregates boats from every division in the series.
 function buildSeriesCalcBoats(data, divName) {
+    const allDivisions = divName === '__all__';
     const seen = new Map();
     data.races.forEach(race => {
-        const div = race.divisions.find(d => (d.name || '') === divName);
-        if (!div) return;
-        div.finishers.forEach(f => {
-            if (!f.boatId || f.pf == null || seen.has(f.boatId)) return;
-            seen.set(f.boatId, {
-                id: f.boatId,
-                name: f.sailNumber ? `${f.sailNumber} ${f.name || ''}`.trim() : (f.name || f.boatId),
-                sailNumber: f.sailNumber || null,
-                boatName: f.name || null,
-                pf: f.pf,
-                rf: f.rf != null ? f.rf : null,
-                bestFit: null
+        const divs = allDivisions ? race.divisions
+            : race.divisions.filter(d => (d.name || '') === divName);
+        divs.forEach(div => {
+            div.finishers.forEach(f => {
+                if (!f.boatId || f.pf == null || seen.has(f.boatId)) return;
+                seen.set(f.boatId, {
+                    id: f.boatId,
+                    name: f.sailNumber ? `${f.sailNumber} ${f.name || ''}`.trim() : (f.name || f.boatId),
+                    sailNumber: f.sailNumber || null,
+                    boatName: f.name || null,
+                    pf: f.pf,
+                    rf: f.rf != null ? f.rf : null,
+                    bestFit: null
+                });
             });
         });
     });
     return [...seen.values()];
+}
+
+// Finishers for a given race under the current division selection. When divName is
+// "__all__" combines finishers from every division.
+function getRaceFinishers(race, divName) {
+    if (divName === '__all__')
+        return (race.divisions || []).flatMap(d => d.finishers || []);
+    const div = (race.divisions || []).find(d => (d.name || '') === divName);
+    return div ? (div.finishers || []) : [];
 }
 
 function renderSeriesChartForDivision(divName, opts) {
@@ -2251,10 +2268,10 @@ function renderSeriesChartForDivision(divName, opts) {
         const color = raceColors[raceIdx % raceColors.length];
         const raceLabel = race.raceName || race.date || race.raceId;
 
-        const div = race.divisions.find(d => (d.name || '') === divName);
-        if (!div) return;
-
-        const finishers = div.finishers.filter(f => f.pf != null && f.pfCorrected != null);
+        const finishers = getRaceFinishers(race, divName)
+            .filter(f => f.pf != null && f.pfCorrected != null)
+            .slice()
+            .sort((a, b) => a.pf - b.pf);
         if (finishers.length === 0) return;
 
         // Find the indices of the 3 fastest PF-corrected times
@@ -2376,9 +2393,8 @@ function computeSeriesOverallTrend(data, divName) {
     const allX = [];
     const allY = [];
     data.races.forEach(race => {
-        const div = race.divisions.find(d => (d.name || '') === divName);
-        if (!div) return;
-        const finishers = div.finishers.filter(f => f.pf != null && f.pfCorrected != null);
+        const finishers = getRaceFinishers(race, divName)
+            .filter(f => f.pf != null && f.pfCorrected != null);
         if (finishers.length < 2) return;
         const xs = finishers.map(f => f.pf);
         const ys = finishers.map(f => f.pfCorrected / 60);
@@ -2417,9 +2433,7 @@ function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
     const allX = [];
     const allY = [];
     data.races.forEach(race => {
-        const div = race.divisions.find(d => (d.name || '') === divName);
-        if (!div) return;
-        const finishers = div.finishers.filter(f =>
+        const finishers = getRaceFinishers(race, divName).filter(f =>
             f.pf != null && f.elapsed != null && f.elapsed > 0 && allocByBoat.has(f.boatId));
         if (finishers.length < 2) return;
         const xs = finishers.map(f => f.pf);
