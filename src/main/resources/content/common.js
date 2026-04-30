@@ -56,7 +56,7 @@ function fmtTime(seconds) {
  */
 // Allocated-handicap podium: ranks `allocPts` (each with name, handicap, correctedMin)
 // by corrected time and pushes star/diamond/triangle markers in the allocated-line color.
-function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs) {
+function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs, color = '#a04020') {
     const PODIUM_SYMBOLS = ['star', 'diamond', 'triangle-up'];
     const PODIUM_SIZES = [14, 12, 11];
     const PODIUM_LABELS = ['1st', '2nd', '3rd'];
@@ -70,7 +70,7 @@ function addAllocPodiumTraces(traces, allocPts, allocXs, allocYs) {
             name: PODIUM_LABELS[pos], legendgroup: PODIUM_LABELS[pos], showlegend: false,
             marker: {
                 symbol: PODIUM_SYMBOLS[pos], size: PODIUM_SIZES[pos],
-                color: '#a04020', line: {color: '#fff', width: 1.5}
+                color, line: {color: '#fff', width: 1.5}
             },
             text: [`${PODIUM_LABELS[pos]}: ${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.correctedMin * 60)}`],
             hoverinfo: 'text',
@@ -105,6 +105,23 @@ function addPodiumTraces(traces, finishers, xs, pfCorr, color = '#2255aa') {
             customdata: [{boatId: f.boatId}]
         });
     }
+}
+
+/**
+ * Mix a hex colour towards white. amount is 0..1 (0 = unchanged, 1 = white).
+ * Used to derive shaded variants of a base palette colour for grouped series
+ * (e.g. divisions of the same race share a hue at descending saturations).
+ */
+function lightenColor(hex, amount) {
+    if (!hex || typeof hex !== 'string' || !hex.startsWith('#') || hex.length !== 7) return hex;
+    const t = Math.max(0, Math.min(1, amount));
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const nr = Math.round(r + (255 - r) * t);
+    const ng = Math.round(g + (255 - g) * t);
+    const nb = Math.round(b + (255 - b) * t);
+    return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
 }
 
 /** Reference std dev in log space at weight = 1.0.  See .claude/error_bars.md. */

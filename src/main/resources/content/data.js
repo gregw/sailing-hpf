@@ -1786,37 +1786,37 @@ async function loadRaceDivChart(raceId, divisionName) {
 
 function renderDivisionChart(data) {
     lastRaceDivData = data;
-    const finishers = data.finishers.filter(f => f.pf != null && f.elapsed > 0);
-    if (finishers.length === 0) return;
+    const allFinishers = (data.finishers || []).filter(f => f.pf != null && f.elapsed > 0);
+    if (allFinishers.length === 0) return;
 
-    // RF trace plots (rf, rfCorrected) — sorted by RF so the line is monotonic.
-    const rfFinishers = finishers
-        .map(f => ({f, rf: f.rf, rfCorrMin: f.rfCorrected != null ? f.rfCorrected / 60 : null}))
-        .filter(o => o.rf != null && o.rfCorrMin != null)
-        .sort((a, b) => a.rf - b.rf);
-
-    // Allocated-handicap data: pulled live from the handicap calculator inputs in this section.
+    // Allocated handicaps from the race-tab calculator (one calculator covers all
+    // race boats, so this map is global across divisions).
     const allocByBoat = new Map();
     document.querySelectorAll('#pf-calc .pf-calc-input').forEach(inp => {
         const v = parseFloat(inp.value);
         if (!isNaN(v)) allocByBoat.set(inp.dataset.boatId, v);
     });
-    const allocPts = finishers
-        .filter(f => allocByBoat.has(f.boatId))
-        .map(f => ({
-            f,
-            name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
-            handicap: allocByBoat.get(f.boatId),
-            correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
-        }))
-        .sort((a, b) => a.handicap - b.handicap);
 
-    // Rebuild the x-factor selector with options valid for this data.
+    // Group by division. Backend includes a "division" field on each finisher when
+    // called with __all__; for a single-division request all finishers share the
+    // same key and we end up with one group.
+    const groups = new Map();
+    allFinishers.forEach(f => {
+        const k = f.division || '';
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(f);
+    });
+    const groupEntries = [...groups.entries()];
+    const isMulti = groupEntries.length > 1;
+
+    // X-factor selector options reflect data across all groups.
+    const anyRf = allFinishers.some(f => f.rf != null && f.rfCorrected != null);
+    const anyAlloc = allFinishers.some(f => allocByBoat.has(f.boatId));
     const xSelect = document.getElementById('race-div-xfactor');
     if (xSelect) {
         const opts = ['---', 'PF',
-            ...(rfFinishers.length > 0 ? ['RF'] : []),
-            ...(allocPts.length > 0 ? ['Allocated'] : [])
+            ...(anyRf ? ['RF'] : []),
+            ...(anyAlloc ? ['Allocated'] : [])
         ];
         if (!opts.includes(raceDivXFactor)) raceDivXFactor = '---';
         if (xSelect.options.length !== opts.length ||
@@ -1872,202 +1872,259 @@ function renderDivisionChart(data) {
         };
     }
 
-    let traces, annotations, xAxisTitle;
+    // Build all traces + annotations for one division group. With "All" selected,
+    // a separate group per division keeps lines from joining across divisions and
+    // gives each its own trend line; lighten shifts the colour palette to a paler
+    // shade for later divisions so divisions of the same race share a hue.
+    function buildGroupTraces(groupFinishers, lighten, divLabel) {
+        const finishers = groupFinishers;
+        const elapsedColor = lightenColor('#555', lighten);
+        const pfColor = lightenColor('#2255aa', lighten);
+        const rfColor = lightenColor('#c47900', lighten);
+        const allocColor = lightenColor('#a04020', lighten);
+        const suffix = divLabel ? ` — ${divLabel}` : '';
 
-    if (raceDivXFactor === '---') {
-        // Natural mode: elapsed always at x=PF; corrected traces use their own factor.
-        const xs = finishers.map(f => f.pf);
-        const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
-        const elapsed = finishers.map(f => f.elapsed / 60);
-        const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+        const rfFinishers = finishers
+            .map(f => ({f, rf: f.rf, rfCorrMin: f.rfCorrected != null ? f.rfCorrected / 60 : null}))
+            .filter(o => o.rf != null && o.rfCorrMin != null)
+            .sort((a, b) => a.rf - b.rf);
+        const allocPts = finishers
+            .filter(f => allocByBoat.has(f.boatId))
+            .map(f => ({
+                f,
+                name: f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name,
+                handicap: allocByBoat.get(f.boatId),
+                correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
+            }))
+            .sort((a, b) => a.handicap - b.handicap);
 
-        const rfXs = rfFinishers.map(o => o.rf);
-        const rfCorr = rfFinishers.map(o => o.rfCorrMin);
-        const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
-        const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
+        const traces = [];
+        let annotations = [];
+        let xAxisTitle;
 
-        const boatCustom = finishers.map(f => ({boatId: f.boatId}));
+        if (raceDivXFactor === '---') {
+            // Natural mode: elapsed always at x=PF; corrected traces use their own factor.
+            const xs = finishers.map(f => f.pf);
+            const names = finishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+            const elapsed = finishers.map(f => f.elapsed / 60);
+            const pfCorr = finishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
 
-        traces = [
-            // Elapsed for all boats at x=pf
-            {
-                x: xs, y: elapsed,
-                mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
-                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                text: hoverTexts('Elapsed', elapsed, names),
-                hoverinfo: 'text', customdata: boatCustom
-            },
-            {
-                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
-                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
-                error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
-                text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
-            },
-            ...(showRaceRfLine && rfFinishers.length > 0 ? [
+            const rfXs = rfFinishers.map(o => o.rf);
+            const rfCorr = rfFinishers.map(o => o.rfCorrMin);
+            const rfNames = rfFinishers.map(o => o.f.sailNumber ? `${o.f.sailNumber} ${o.f.name}` : o.f.name);
+            const rfCustom = rfFinishers.map(o => ({boatId: o.f.boatId}));
+
+            const boatCustom = finishers.map(f => ({boatId: f.boatId}));
+
+            traces.push(
                 {
-                    x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
-                    line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
+                    x: xs, y: elapsed,
+                    mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
+                    legendgroup: 'elapsed' + suffix,
+                    line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
+                    text: hoverTexts('Elapsed', elapsed, names),
+                    hoverinfo: 'text', customdata: boatCustom
+                },
+                {
+                    x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
+                    legendgroup: 'pf' + suffix,
+                    line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
+                    error_y: yErrArrays(finishers, 'pf', 'rfWeight'),
+                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+                }
+            );
+            if (showRaceRfLine && rfFinishers.length > 0) {
+                traces.push({
+                    x: rfXs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected' + suffix,
+                    legendgroup: 'rf' + suffix,
+                    line: {dash: 'dot', color: rfColor, width: 1.5}, marker: {size: 7},
                     error_y: yErrArrays(rfFinishers.map(o => o.f), 'rf', 'rfWeight'),
                     text: hoverTexts('RF corrected', rfCorr, rfNames), hoverinfo: 'text', customdata: rfCustom
-                }
-            ] : [])
-        ];
-
-        addPodiumTraces(traces, finishers, xs, pfCorr);
-
-        if (allocPts.length > 0) {
-            const allocXs = allocPts.map(p => p.handicap);
-            const allocYs = allocPts.map(p => p.correctedMin);
-            traces.push({
-                x: allocXs, y: allocYs,
-                mode: 'lines+markers', type: 'scatter',
-                name: 'Allocated handicap corrected',
-                line: {dash: 'longdash', color: '#a04020', width: 2},
-                marker: {size: 8, symbol: 'square'},
-                text: allocPts.map(p =>
-                    `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
-                    + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
-                hoverinfo: 'text',
-                customdata: allocPts.map(p => ({boatId: p.f.boatId}))
-            });
-            addAllocPodiumTraces(traces, allocPts, allocXs, allocYs);
-        }
-
-        if (showRaceTrendLine) {
-            const elapsedTrend = buildTrendTrace(
-                finishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend', '#555');
-            if (elapsedTrend) traces.push(elapsedTrend);
-            const pfTrend = buildTrendTrace(
-                finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend', '#2255aa');
-            if (pfTrend) traces.push(pfTrend);
-            if (showRaceRfLine && rfFinishers.length > 0) {
-                const rfTrend = buildTrendTrace(
-                    rfFinishers.map((o, i) => ({x: rfXs[i], y: rfCorr[i]})),
-                    'RF corr trend', '#c47900');
-                if (rfTrend) traces.push(rfTrend);
+                });
             }
+
+            addPodiumTraces(traces, finishers, xs, pfCorr, pfColor);
+
             if (allocPts.length > 0) {
-                const allocTrend = buildTrendTrace(
-                    allocPts.map(p => ({x: p.handicap, y: p.correctedMin})),
-                    'Allocated corr trend', '#a04020');
-                if (allocTrend) traces.push(allocTrend);
+                const allocXs = allocPts.map(p => p.handicap);
+                const allocYs = allocPts.map(p => p.correctedMin);
+                traces.push({
+                    x: allocXs, y: allocYs,
+                    mode: 'lines+markers', type: 'scatter',
+                    name: 'Allocated handicap corrected' + suffix,
+                    legendgroup: 'alloc' + suffix,
+                    line: {dash: 'longdash', color: allocColor, width: 2},
+                    marker: {size: 8, symbol: 'square'},
+                    text: allocPts.map(p =>
+                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}`
+                        + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                    hoverinfo: 'text',
+                    customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+                });
+                addAllocPodiumTraces(traces, allocPts, allocXs, allocYs, allocColor);
             }
-        }
 
-        // Boat name labels at the top of each boat's tallest point.
-        annotations = finishers.map((f, i) => {
-            const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
-            return {
-                x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
-                xanchor: 'center', yanchor: 'bottom', yshift: 6,
-                showarrow: false, cliponaxis: false, font: {size: 11}
+            if (showRaceTrendLine) {
+                const elapsedTrend = buildTrendTrace(
+                    finishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend' + suffix, elapsedColor);
+                if (elapsedTrend) traces.push(elapsedTrend);
+                const pfTrend = buildTrendTrace(
+                    finishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend' + suffix, pfColor);
+                if (pfTrend) traces.push(pfTrend);
+                if (showRaceRfLine && rfFinishers.length > 0) {
+                    const rfTrend = buildTrendTrace(
+                        rfFinishers.map((o, i) => ({x: rfXs[i], y: rfCorr[i]})),
+                        'RF corr trend' + suffix, rfColor);
+                    if (rfTrend) traces.push(rfTrend);
+                }
+                if (allocPts.length > 0) {
+                    const allocTrend = buildTrendTrace(
+                        allocPts.map(p => ({x: p.handicap, y: p.correctedMin})),
+                        'Allocated corr trend' + suffix, allocColor);
+                    if (allocTrend) traces.push(allocTrend);
+                }
+            }
+
+            annotations = finishers.map((f, i) => {
+                const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+                return {
+                    x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                    xanchor: 'center', yanchor: 'bottom', yshift: 6,
+                    showarrow: false, cliponaxis: false, font: {size: 11}
+                };
+            });
+
+            xAxisTitle = showRaceRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF';
+
+        } else {
+            // Common-factor mode: all traces use the same x-axis factor, so all dots for
+            // a given boat form a vertical line.
+            const getX = f => {
+                if (raceDivXFactor === 'RF') return f.rf;
+                if (raceDivXFactor === 'Allocated') return allocByBoat.get(f.boatId);
+                return f.pf;
             };
-        });
+            const plotFinishers = finishers
+                .filter(f => getX(f) != null)
+                .sort((a, b) => getX(a) - getX(b));
+            if (plotFinishers.length === 0) {
+                xAxisTitle = raceDivXFactor === 'Allocated' ? 'Allocated Handicap' : raceDivXFactor;
+                return {traces, annotations, xAxisTitle};
+            }
 
-        xAxisTitle = showRaceRfLine && rfFinishers.length > 0 ? 'PF / RF' : 'PF';
+            const xs = plotFinishers.map(getX);
+            const names = plotFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
+            const elapsed = plotFinishers.map(f => f.elapsed / 60);
+            const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
+            const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
+            const allocCorr = plotFinishers.map(f => {
+                const h = allocByBoat.get(f.boatId);
+                return h != null ? f.elapsed * h / 60 : null;
+            });
+            const allocFiltered = plotFinishers
+                .map((f, i) => ({
+                    f, x: xs[i], y: allocCorr[i],
+                    name: names[i],
+                    handicap: allocByBoat.get(f.boatId),
+                    correctedMin: allocCorr[i]
+                }))
+                .filter(p => p.y != null);
+            const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
 
-    } else {
-        // Common-factor mode: all traces use the same x-axis factor, so all dots for
-        // a given boat form a vertical line.
-        const getX = f => {
-            if (raceDivXFactor === 'RF') return f.rf;
-            if (raceDivXFactor === 'Allocated') return allocByBoat.get(f.boatId);
-            return f.pf;
-        };
-        const plotFinishers = finishers
-            .filter(f => getX(f) != null)
-            .sort((a, b) => getX(a) - getX(b));
-        if (plotFinishers.length === 0) return;
-
-        const xs = plotFinishers.map(getX);
-        const names = plotFinishers.map(f => f.sailNumber ? `${f.sailNumber} ${f.name}` : f.name);
-        const elapsed = plotFinishers.map(f => f.elapsed / 60);
-        const pfCorr = plotFinishers.map(f => f.pfCorrected != null ? f.pfCorrected / 60 : null);
-        const rfCorr = plotFinishers.map(f => f.rfCorrected != null ? f.rfCorrected / 60 : null);
-        const allocCorr = plotFinishers.map(f => {
-            const h = allocByBoat.get(f.boatId);
-            return h != null ? f.elapsed * h / 60 : null;
-        });
-        // Drop gaps so the allocated line connects across boats without an entered handicap.
-        const allocFiltered = plotFinishers
-            .map((f, i) => ({
-                f, x: xs[i], y: allocCorr[i],
-                name: names[i],
-                handicap: allocByBoat.get(f.boatId),
-                correctedMin: allocCorr[i]
-            }))
-            .filter(p => p.y != null);
-        const boatCustom = plotFinishers.map(f => ({boatId: f.boatId}));
-
-        traces = [
-            {
-                x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed',
-                line: {dash: 'dash', color: '#555', width: 1.5}, marker: {size: 7},
-                text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'text', customdata: boatCustom
-            },
-            {
-                x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected',
-                line: {dash: 'solid', color: '#2255aa', width: 2}, marker: {size: 7},
-                error_y: yErrArrays(plotFinishers, 'pf', 'rfWeight'),
-                text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
-            },
-            ...(showRaceRfLine && rfCorr.some(v => v != null) ? [{
-                x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected',
-                line: {dash: 'dot', color: '#c47900', width: 1.5}, marker: {size: 7},
-                error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
-                text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
-            }] : []),
-            ...(allocFiltered.length > 0 ? [{
-                x: allocFiltered.map(p => p.x),
-                y: allocFiltered.map(p => p.y),
-                mode: 'lines+markers', type: 'scatter',
-                name: 'Allocated handicap corrected',
-                line: {dash: 'longdash', color: '#a04020', width: 2},
-                marker: {size: 8, symbol: 'square'},
-                text: allocFiltered.map(p =>
-                    `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
-                hoverinfo: 'text',
-                customdata: allocFiltered.map(p => ({boatId: p.f.boatId}))
-            }] : [])
-        ];
-
-        addPodiumTraces(traces, plotFinishers, xs, pfCorr);
-        if (allocFiltered.length > 0) {
-            addAllocPodiumTraces(traces, allocFiltered,
-                allocFiltered.map(p => p.x), allocFiltered.map(p => p.y));
-        }
-
-        if (showRaceTrendLine) {
-            const elapsedTrend = buildTrendTrace(
-                plotFinishers.map((f, i) => ({x: xs[i], y: elapsed[i]})), 'Elapsed trend', '#555');
-            if (elapsedTrend) traces.push(elapsedTrend);
-            const pfTrend = buildTrendTrace(
-                plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})), 'PF corr trend', '#2255aa');
-            if (pfTrend) traces.push(pfTrend);
+            traces.push(
+                {
+                    x: xs, y: elapsed, mode: 'lines+markers', type: 'scatter', name: 'Elapsed' + suffix,
+                    legendgroup: 'elapsed' + suffix,
+                    line: {dash: 'dash', color: elapsedColor, width: 1.5}, marker: {size: 7},
+                    text: hoverTexts('Elapsed', elapsed, names), hoverinfo: 'text', customdata: boatCustom
+                },
+                {
+                    x: xs, y: pfCorr, mode: 'lines+markers', type: 'scatter', name: 'PF corrected' + suffix,
+                    legendgroup: 'pf' + suffix,
+                    line: {dash: 'solid', color: pfColor, width: 2}, marker: {size: 7},
+                    error_y: yErrArrays(plotFinishers, 'pf', 'rfWeight'),
+                    text: hoverTexts('PF corrected', pfCorr, names), hoverinfo: 'text', customdata: boatCustom
+                }
+            );
             if (showRaceRfLine && rfCorr.some(v => v != null)) {
-                const rfTrend = buildTrendTrace(
-                    plotFinishers.map((f, i) => ({x: xs[i], y: rfCorr[i]})), 'RF corr trend', '#c47900');
-                if (rfTrend) traces.push(rfTrend);
+                traces.push({
+                    x: xs, y: rfCorr, mode: 'lines+markers', type: 'scatter', name: 'RF corrected' + suffix,
+                    legendgroup: 'rf' + suffix,
+                    line: {dash: 'dot', color: rfColor, width: 1.5}, marker: {size: 7},
+                    error_y: yErrArrays(plotFinishers, 'rf', 'rfWeight'),
+                    text: hoverTexts('RF corrected', rfCorr, names), hoverinfo: 'text', customdata: boatCustom
+                });
             }
-            if (allocCorr.some(v => v != null)) {
-                const allocTrend = buildTrendTrace(
-                    plotFinishers.map((f, i) => ({x: xs[i], y: allocCorr[i]})),
-                    'Allocated corr trend', '#a04020');
-                if (allocTrend) traces.push(allocTrend);
+            if (allocFiltered.length > 0) {
+                traces.push({
+                    x: allocFiltered.map(p => p.x),
+                    y: allocFiltered.map(p => p.y),
+                    mode: 'lines+markers', type: 'scatter',
+                    name: 'Allocated handicap corrected' + suffix,
+                    legendgroup: 'alloc' + suffix,
+                    line: {dash: 'longdash', color: allocColor, width: 2},
+                    marker: {size: 8, symbol: 'square'},
+                    text: allocFiltered.map(p =>
+                        `${esc(p.name)}<br>Allocated: ${p.handicap.toFixed(4)}<br>Corrected: ${fmtTime(p.y * 60)}`),
+                    hoverinfo: 'text',
+                    customdata: allocFiltered.map(p => ({boatId: p.f.boatId}))
+                });
             }
+
+            addPodiumTraces(traces, plotFinishers, xs, pfCorr, pfColor);
+            if (allocFiltered.length > 0) {
+                addAllocPodiumTraces(traces, allocFiltered,
+                    allocFiltered.map(p => p.x), allocFiltered.map(p => p.y), allocColor);
+            }
+
+            if (showRaceTrendLine) {
+                const elapsedTrend = buildTrendTrace(
+                    plotFinishers.map((f, i) => ({x: xs[i], y: elapsed[i]})),
+                    'Elapsed trend' + suffix, elapsedColor);
+                if (elapsedTrend) traces.push(elapsedTrend);
+                const pfTrend = buildTrendTrace(
+                    plotFinishers.map((f, i) => ({x: xs[i], y: pfCorr[i]})),
+                    'PF corr trend' + suffix, pfColor);
+                if (pfTrend) traces.push(pfTrend);
+                if (showRaceRfLine && rfCorr.some(v => v != null)) {
+                    const rfTrend = buildTrendTrace(
+                        plotFinishers.map((f, i) => ({x: xs[i], y: rfCorr[i]})),
+                        'RF corr trend' + suffix, rfColor);
+                    if (rfTrend) traces.push(rfTrend);
+                }
+                if (allocCorr.some(v => v != null)) {
+                    const allocTrend = buildTrendTrace(
+                        plotFinishers.map((f, i) => ({x: xs[i], y: allocCorr[i]})),
+                        'Allocated corr trend' + suffix, allocColor);
+                    if (allocTrend) traces.push(allocTrend);
+                }
+            }
+
+            annotations = plotFinishers.map((f, i) => {
+                const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
+                return {
+                    x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
+                    xanchor: 'center', yanchor: 'bottom', yshift: 6,
+                    showarrow: false, cliponaxis: false, font: {size: 11}
+                };
+            });
+
+            xAxisTitle = raceDivXFactor === 'Allocated' ? 'Allocated Handicap' : raceDivXFactor;
         }
-
-        annotations = plotFinishers.map((f, i) => {
-            const ys = [elapsed[i], pfCorr[i]].filter(v => v != null);
-            return {
-                x: xs[i], y: Math.max(...ys), text: f.name, textangle: -90,
-                xanchor: 'center', yanchor: 'bottom', yshift: 6,
-                showarrow: false, cliponaxis: false, font: {size: 11}
-            };
-        });
-
-        xAxisTitle = raceDivXFactor === 'Allocated' ? 'Allocated Handicap' : raceDivXFactor;
+        return {traces, annotations, xAxisTitle};
     }
+
+    let allTraces = [];
+    let allAnnotations = [];
+    let xAxisTitle = 'PF';
+    groupEntries.forEach(([divName, groupFinishers], divIdx) => {
+        const lighten = isMulti ? Math.min(0.5, divIdx * 0.18) : 0;
+        const divLabel = isMulti ? (divName || 'Results') : null;
+        const r = buildGroupTraces(groupFinishers, lighten, divLabel);
+        allTraces = allTraces.concat(r.traces);
+        allAnnotations = allAnnotations.concat(r.annotations);
+        xAxisTitle = r.xAxisTitle;
+    });
 
     const layout = {
         xaxis: {
@@ -2079,11 +2136,11 @@ function renderDivisionChart(data) {
         legend: { orientation: 'h', y: -0.18 },
         margin: { t: 120, b: 80, l: 60, r: 20 },
         hovermode: 'closest',
-        annotations
+        annotations: allAnnotations
     };
 
     document.getElementById('division-section-races').style.display = '';
-    Plotly.react('race-division-chart', traces, layout, { responsive: true });
+    Plotly.react('race-division-chart', allTraces, layout, {responsive: true});
 
     const raceDivDiv = document.getElementById('race-division-chart');
     raceDivDiv.removeAllListeners && raceDivDiv.removeAllListeners('plotly_click');
@@ -2272,89 +2329,130 @@ function renderSeriesChartForDivision(divName, opts) {
     const podiumSizes   = [14, 12, 11];
     const podiumLabels  = ['1st', '2nd', '3rd'];
 
+    // In "All" mode each (race, division) gets its own line so divisions don't join.
+    // Divisions of the same race share the race's hue, lightening with division index.
+    const allDivisions = divName === '__all__';
+    const seriesDivOrder = allDivisions ? (() => {
+        const seen = new Set();
+        const ordered = [];
+        data.races.forEach(r => (r.divisions || []).forEach(d => {
+            const n = d.name || '';
+            if (!seen.has(n)) {
+                seen.add(n);
+                ordered.push(n);
+            }
+        }));
+        return ordered;
+    })() : [];
+
     const traces = [];
-    let allocatedLegendShown = false;
+    const allocatedLegendShownFor = new Set();
+    const podiumLegendShownFor = new Set();
     data.races.forEach((race, raceIdx) => {
-        const color = raceColors[raceIdx % raceColors.length];
+        const baseColor = raceColors[raceIdx % raceColors.length];
         const raceLabel = race.raceName || race.date || race.raceId;
 
-        const finishers = getRaceFinishers(race, divName)
-            .filter(f => f.pf != null && f.pfCorrected != null)
-            .slice()
-            .sort((a, b) => a.pf - b.pf);
-        if (finishers.length === 0) return;
+        const divsToPlot = allDivisions
+            ? (race.divisions || [])
+            : (race.divisions || []).filter(d => (d.name || '') === divName);
 
-        // Find the indices of the 3 fastest PF-corrected times
-        const sorted = finishers.map((f, i) => ({ i, t: f.pfCorrected }))
-            .sort((a, b) => a.t - b.t);
+        divsToPlot.forEach(div => {
+            const groupDivName = div.name || '';
+            const lighten = allDivisions
+                ? Math.min(0.5, seriesDivOrder.indexOf(groupDivName) * 0.18)
+                : 0;
+            const color = lightenColor(baseColor, lighten);
+            const groupKey = allDivisions ? `race-${raceIdx}-div-${groupDivName}` : `race-${raceIdx}`;
+            const traceName = allDivisions
+                ? `${raceLabel} — ${groupDivName || 'Results'}`
+                : raceLabel;
 
-        const xs = finishers.map(f => f.pf);
-        const ys = finishers.map(f => f.pfCorrected / 60);
-        const texts = finishers.map(f =>
-            `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>PF corrected: ${fmtTime(f.pfCorrected)}`
-        );
-        const boatCustom = finishers.map(f => ({ boatId: f.boatId }));
+            const finishers = (div.finishers || [])
+                .filter(f => f.pf != null && f.pfCorrected != null)
+                .slice()
+                .sort((a, b) => a.pf - b.pf);
+            if (finishers.length === 0) return;
 
-        traces.push({
-            x: xs, y: ys,
-            mode: 'lines+markers', type: 'scatter',
-            name: raceLabel,
-            legendgroup: 'race-' + raceIdx,
-            line: { dash: 'solid', color: color, width: 1.5 },
-            marker: { size: 5 },
-            text: texts,
-            hoverinfo: 'text',
-            customdata: boatCustom
-        });
+            const sorted = finishers.map((f, i) => ({i, t: f.pfCorrected}))
+                .sort((a, b) => a.t - b.t);
 
-        // Allocated-handicap corrected line for this race (sorted by allocated handicap)
-        const allocPts = finishers
-            .filter(f => allocByBoat.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
-            .map(f => ({
-                f,
-                handicap: allocByBoat.get(f.boatId),
-                correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
-            }))
-            .sort((a, b) => a.f.pf - b.f.pf);
-        if (allocPts.length > 0) {
+            const xs = finishers.map(f => f.pf);
+            const ys = finishers.map(f => f.pfCorrected / 60);
+            const texts = finishers.map(f =>
+                `${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}`
+                + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                + `<br>PF corrected: ${fmtTime(f.pfCorrected)}`
+            );
+            const boatCustom = finishers.map(f => ({boatId: f.boatId}));
+
             traces.push({
-                x: allocPts.map(p => p.f.pf),
-                y: allocPts.map(p => p.correctedMin),
+                x: xs, y: ys,
                 mode: 'lines+markers', type: 'scatter',
-                name: 'Allocated corrected',
-                legendgroup: 'allocated',
-                showlegend: !allocatedLegendShown,
-                line: {dash: 'dash', color: color, width: 1.5},
-                marker: {size: 5, symbol: 'square'},
-                text: allocPts.map(p =>
-                    `${p.f.sailNumber ? p.f.sailNumber + ' ' : ''}${esc(p.f.name || '')}<br>${esc(raceLabel)}`
-                    + `<br>Allocated: ${p.handicap.toFixed(4)}`
-                    + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                name: traceName,
+                legendgroup: groupKey,
+                line: {dash: 'solid', color: color, width: 1.5},
+                marker: {size: 5},
+                text: texts,
                 hoverinfo: 'text',
-                customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+                customdata: boatCustom
             });
-            allocatedLegendShown = true;
-        }
 
-        // Add podium markers (1st/2nd/3rd fastest corrected times)
-        for (let p = 0; p < Math.min(3, sorted.length); p++) {
-            const f = finishers[sorted[p].i];
-            traces.push({
-                x: [f.pf], y: [f.pfCorrected / 60],
-                mode: 'markers', type: 'scatter',
-                name: podiumLabels[p],
-                legendgroup: podiumLabels[p],
-                showlegend: raceIdx === 0,
-                marker: {
-                    symbol: podiumSymbols[p], size: podiumSizes[p],
-                    color: color,
-                    line: { color: '#fff', width: 1.5 }
-                },
-                text: [`${podiumLabels[p]}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}<br>${esc(raceLabel)}<br>PF corrected: ${fmtTime(f.pfCorrected)}`],
-                hoverinfo: 'text',
-                customdata: [{ boatId: f.boatId }]
-            });
-        }
+            // Allocated-handicap corrected line for this (race, division)
+            const allocPts = finishers
+                .filter(f => allocByBoat.has(f.boatId) && f.elapsed != null && f.elapsed > 0)
+                .map(f => ({
+                    f,
+                    handicap: allocByBoat.get(f.boatId),
+                    correctedMin: f.elapsed * allocByBoat.get(f.boatId) / 60
+                }))
+                .sort((a, b) => a.f.pf - b.f.pf);
+            if (allocPts.length > 0) {
+                const allocLegendKey = allDivisions ? `allocated-${groupDivName}` : 'allocated';
+                traces.push({
+                    x: allocPts.map(p => p.f.pf),
+                    y: allocPts.map(p => p.correctedMin),
+                    mode: 'lines+markers', type: 'scatter',
+                    name: allDivisions ? `Allocated — ${groupDivName || 'Results'}` : 'Allocated corrected',
+                    legendgroup: allocLegendKey,
+                    showlegend: !allocatedLegendShownFor.has(allocLegendKey),
+                    line: {dash: 'dash', color: color, width: 1.5},
+                    marker: {size: 5, symbol: 'square'},
+                    text: allocPts.map(p =>
+                        `${p.f.sailNumber ? p.f.sailNumber + ' ' : ''}${esc(p.f.name || '')}<br>${esc(raceLabel)}`
+                        + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                        + `<br>Allocated: ${p.handicap.toFixed(4)}`
+                        + `<br>Corrected: ${fmtTime(p.correctedMin * 60)}`),
+                    hoverinfo: 'text',
+                    customdata: allocPts.map(p => ({boatId: p.f.boatId}))
+                });
+                allocatedLegendShownFor.add(allocLegendKey);
+            }
+
+            // Podium markers (1st/2nd/3rd fastest corrected times in this group)
+            for (let p = 0; p < Math.min(3, sorted.length); p++) {
+                const f = finishers[sorted[p].i];
+                const podiumKey = podiumLabels[p];
+                traces.push({
+                    x: [f.pf], y: [f.pfCorrected / 60],
+                    mode: 'markers', type: 'scatter',
+                    name: podiumKey,
+                    legendgroup: podiumKey,
+                    showlegend: !podiumLegendShownFor.has(podiumKey),
+                    marker: {
+                        symbol: podiumSymbols[p], size: podiumSizes[p],
+                        color: color,
+                        line: {color: '#fff', width: 1.5}
+                    },
+                    text: [`${podiumKey}: ${f.sailNumber ? f.sailNumber + ' ' : ''}${esc(f.name || '')}`
+                    + `<br>${esc(raceLabel)}`
+                    + (allDivisions ? `<br>Division: ${esc(groupDivName || 'Results')}` : '')
+                    + `<br>PF corrected: ${fmtTime(f.pfCorrected)}`],
+                    hoverinfo: 'text',
+                    customdata: [{boatId: f.boatId}]
+                });
+                podiumLegendShownFor.add(podiumKey);
+            }
+        });
     });
 
     if (traces.length === 0) {
@@ -2363,10 +2461,28 @@ function renderSeriesChartForDivision(divName, opts) {
     }
 
     if (showSeriesOverallTrend) {
-        const trend = computeSeriesOverallTrend(data, divName);
-        if (trend) traces.push(trend);
-        const allocTrend = computeSeriesAllocatedTrend(data, divName, allocByBoat);
-        if (allocTrend) traces.push(allocTrend);
+        // One trend line per division. In "All" mode: one trend per division (combining
+        // its races across the series); in single-division mode: one trend.
+        const trendDivs = allDivisions ? seriesDivOrder : [divName];
+        trendDivs.forEach((dn, i) => {
+            const lighten = allDivisions ? Math.min(0.4, i * 0.18) : 0;
+            const trend = computeSeriesOverallTrend(data, dn);
+            if (trend) {
+                if (allDivisions) {
+                    trend.name = `Overall ${dn || 'Results'} — ${trend.name}`;
+                    trend.line.color = lightenColor('#333', lighten);
+                }
+                traces.push(trend);
+            }
+            const allocTrend = computeSeriesAllocatedTrend(data, dn, allocByBoat);
+            if (allocTrend) {
+                if (allDivisions) {
+                    allocTrend.name = `Allocated ${dn || 'Results'} — ${allocTrend.name}`;
+                    allocTrend.line.color = lightenColor('#a04020', lighten);
+                }
+                traces.push(allocTrend);
+            }
+        });
     }
 
     const layout = {
