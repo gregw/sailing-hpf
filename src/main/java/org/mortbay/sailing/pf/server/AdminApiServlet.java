@@ -95,6 +95,8 @@ public class AdminApiServlet extends HttpServlet
             handleStats(resp);
         else if (path.matches("/boats/[^/]+/pf"))
             handleBoatPf(path.replaceAll("^/boats/|/pf$", ""), resp);
+        else if (path.matches("/boats/[^/]+/profile"))
+            handleBoatProfile(path.replaceAll("^/boats/|/profile$", ""), resp);
         else if (path.matches("/boats/[^/]+/reference"))
             handleBoatReference(path.replaceAll("^/boats/|/reference$", ""), resp);
         else if (path.matches("/boats/[^/]+/aliases"))
@@ -638,6 +640,29 @@ public class AdminApiServlet extends HttpServlet
         if (profile != null)
             result.put("profile", profileMap(profile));
 
+        writeJson(resp, result);
+    }
+
+    /**
+     * GET /api/boats/{id}/profile — returns just the fleet-relative performance profile
+     * (five 0..1 scores plus overall) for a boat, or {@code profile: null} if no profile has
+     * been computed yet. Lighter than {@code /pf} because it skips factors and residuals;
+     * intended for hover-popup consumers that only need the radar values. Returns 404 if the
+     * boat ID is unknown.
+     */
+    private void handleBoatProfile(String id, HttpServletResponse resp) throws IOException
+    {
+        Boat boat = store.boats().get(id);
+        if (boat == null)
+        {
+            resp.sendError(404);
+            return;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("boatId", id);
+        result.put("boatName", boat.name());
+        PerformanceProfile profile = cache.profilesByBoatId().get(id);
+        result.put("profile", profile != null ? profileMap(profile) : null);
         writeJson(resp, result);
     }
 

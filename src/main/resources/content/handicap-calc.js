@@ -95,6 +95,113 @@ window.HandicapCalc = (function () {
         return `Scaled from consensus — spread ${pct}% (very low confidence)`;
     }
 
+    // --- PP pentagon hover popup ---------------------------------------------------
+    // Cache: boatId → Promise<profile|null>. null means fetched but no profile available.
+    const profileCache = new Map();
+    let popupEl = null;
+    let popupShowTimer = null;
+    let popupHideTimer = null;
+    let popupBoatId = null;
+
+    function ensurePopup() {
+        if (popupEl) return popupEl;
+        popupEl = document.createElement('div');
+        popupEl.id = 'pf-pentagon-popup';
+        popupEl.style.cssText = [
+            'position:fixed', 'z-index:10000', 'display:none',
+            'background:#fff', 'border:1px solid #888', 'border-radius:4px',
+            'box-shadow:0 2px 8px rgba(0,0,0,0.18)', 'padding:4px',
+            'pointer-events:none', 'font-family:sans-serif'
+        ].join(';');
+        document.body.appendChild(popupEl);
+        return popupEl;
+    }
+
+    function fetchProfile(boatId) {
+        if (profileCache.has(boatId)) return profileCache.get(boatId);
+        const p = fetch(`/api/boats/${encodeURIComponent(boatId)}/profile`)
+            .then(r => r.ok ? r.json() : null)
+            .then(j => (j && j.profile) ? j.profile : null)
+            .catch(() => null);
+        profileCache.set(boatId, p);
+        return p;
+    }
+
+    function positionPopup(linkEl) {
+        const rect = linkEl.getBoundingClientRect();
+        const w = 200, h = 180;
+        let left = rect.right + 8;
+        let top = rect.top - 4;
+        if (left + w > window.innerWidth - 4) left = Math.max(4, rect.left - w - 8);
+        if (top + h > window.innerHeight - 4) top = Math.max(4, window.innerHeight - h - 4);
+        popupEl.style.left = left + 'px';
+        popupEl.style.top = top + 'px';
+        popupEl.style.width = w + 'px';
+        popupEl.style.height = h + 'px';
+    }
+
+    function renderMiniPentagon(container, profile, color) {
+        if (typeof Plotly === 'undefined') return;
+        const labels = ['Frequency', 'Consistency', 'Diversity', 'Chaotic', 'Stability'];
+        const keys = ['frequency', 'consistency', 'diversity', 'chaotic', 'stability'];
+        const values = keys.map(k => profile[k] ?? 0);
+        const theta = [...labels, labels[0]];
+        const r = [...values, values[0]];
+        const lineColor = color || 'rgba(31,119,180,0.85)';
+        const fillColor = lineColor.startsWith('rgba')
+            ? lineColor.replace(/[\d.]+\)$/, '0.18)')
+            : lineColor + '2e'; // hex 0x2e ≈ 18% alpha
+        const trace = {
+            type: 'scatterpolar', r, theta, fill: 'toself',
+            fillcolor: fillColor,
+            line: {color: lineColor, width: 1.5},
+            hoverinfo: 'skip'
+        };
+        const layout = {
+            polar: {
+                radialaxis: {visible: true, range: [0, 1], showticklabels: false, tickvals: [0.25, 0.5, 0.75, 1.0]},
+                angularaxis: {direction: 'clockwise', tickfont: {size: 9}}
+            },
+            showlegend: false,
+            width: 200, height: 180,
+            margin: {t: 14, b: 14, l: 28, r: 28},
+            paper_bgcolor: 'rgba(0,0,0,0)'
+        };
+        Plotly.newPlot(container, [trace], layout, {displayModeBar: false, staticPlot: true});
+    }
+
+    function showPentagonPopup(linkEl, boatId, color) {
+        clearTimeout(popupHideTimer);
+        clearTimeout(popupShowTimer);
+        popupBoatId = boatId;
+        popupShowTimer = setTimeout(async () => {
+            const profile = await fetchProfile(boatId);
+            if (popupBoatId !== boatId) return; // user moved on
+            if (!profile) return;
+            const el = ensurePopup();
+            el.innerHTML = '';
+            const overall = profile.overallScore != null ? profile.overallScore.toFixed(3) : '—';
+            const score = document.createElement('div');
+            score.style.cssText = 'position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:0.75rem;color:#555;';
+            score.textContent = `PP: ${overall}`;
+            const chart = document.createElement('div');
+            chart.style.cssText = 'width:200px;height:160px;';
+            el.appendChild(chart);
+            el.appendChild(score);
+            positionPopup(linkEl);
+            el.style.display = 'block';
+            renderMiniPentagon(chart, profile, color);
+        }, 250);
+    }
+
+    function hidePentagonPopup() {
+        clearTimeout(popupShowTimer);
+        popupBoatId = null;
+        popupHideTimer = setTimeout(() => {
+            if (popupEl) popupEl.style.display = 'none';
+        }, 80);
+    }
+
     function create(cfg) {
         const section = cfg.section;
         const table = cfg.table;
@@ -193,7 +300,9 @@ window.HandicapCalc = (function () {
                         link.href = `data.html?tab=boats&boatId=${encodeURIComponent(b.id)}`;
                         link.textContent = b.name;
                         link.style.cssText = 'color:inherit;text-decoration:none;';
-                        link.title = 'Click to view boat details';
+                        link.title = 'Click to view boat details — hover for performance profile';
+                        link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
+                        link.addEventListener('mouseleave', hidePentagonPopup);
                         tdName.appendChild(link);
                         tr.appendChild(tdName);
                     } else if (c.key === 'input') {
