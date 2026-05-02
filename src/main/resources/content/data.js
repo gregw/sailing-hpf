@@ -1792,15 +1792,38 @@ function onShowLegendChange(cb) {
     });
 }
 
+// Thickens a trend line when hovered and restores it on unhover. Trend traces opt in
+// by setting meta.trendLine = true with baseWidth + hoverWidth values.
+function attachTrendHoverHandlers(chartId) {
+    const div = document.getElementById(chartId);
+    if (!div || !div.on) return;
+    div.removeAllListeners && div.removeAllListeners('plotly_hover');
+    div.removeAllListeners && div.removeAllListeners('plotly_unhover');
+    div.on('plotly_hover', ev => {
+        const pt = ev.points && ev.points[0];
+        if (!pt) return;
+        const trace = div.data && div.data[pt.curveNumber];
+        if (!trace || !trace.meta || !trace.meta.trendLine) return;
+        Plotly.restyle(chartId, {'line.width': trace.meta.hoverWidth}, [pt.curveNumber]);
+    });
+    div.on('plotly_unhover', ev => {
+        const pt = ev.points && ev.points[0];
+        if (!pt) return;
+        const trace = div.data && div.data[pt.curveNumber];
+        if (!trace || !trace.meta || !trace.meta.trendLine) return;
+        Plotly.restyle(chartId, {'line.width': trace.meta.baseWidth}, [pt.curveNumber]);
+    });
+}
+
 // Returns layout fragments controlling the legend. When shown, the legend is overlaid
-// in the chart's top-right corner so toggling it does not change the plot area's height.
+// at the top-left of the plot area so toggling it does not change the plot area's height.
 function legendLayoutSettings() {
     if (showLegend) {
         return {
             showlegend: true,
             legend: {
-                x: 0.99, y: 0.99,
-                xanchor: 'right', yanchor: 'top',
+                x: 0.01, y: 0.99,
+                xanchor: 'left', yanchor: 'top',
                 bgcolor: 'rgba(255,255,255,0.85)',
                 bordercolor: '#ccc',
                 borderwidth: 1
@@ -1907,7 +1930,7 @@ function renderDivisionChart(data) {
             t != null ? `${esc(labels[i])}<br>${label}: ${fmtTime(t * 60)}` : '');
     }
 
-    function buildTrendTrace(plotPts, name, color) {
+    function buildTrendTrace(plotPts, name, color, opts) {
         const pts = plotPts.filter(p => p.x != null && p.y != null);
         if (pts.length < 2) return null;
         const n = pts.length;
@@ -1921,13 +1944,17 @@ function renderDivisionChart(data) {
         const intercept = (sy - slope * sx) / n;
         const xMin = Math.min(...pts.map(p => p.x));
         const xMax = Math.max(...pts.map(p => p.x));
+        const baseWidth = (opts && opts.baseWidth) ?? 2.5;
+        const hoverWidth = (opts && opts.hoverWidth) ?? 5;
         return {
             x: [xMin, xMax],
             y: [slope * xMin + intercept, slope * xMax + intercept],
             mode: 'lines', type: 'scatter', name,
-            line: {dash: 'dashdot', color, width: 1.5},
+            line: {dash: 'dashdot', color, width: baseWidth},
             showlegend: false,
-            hoverinfo: 'skip'
+            hoverinfo: 'name',
+            hoverlabel: {namelength: -1},
+            meta: {trendLine: true, baseWidth, hoverWidth}
         };
     }
 
@@ -2039,7 +2066,8 @@ function renderDivisionChart(data) {
                 if (allocPts.length > 0) {
                     const allocTrend = buildTrendTrace(
                         allocPts.map(p => ({x: p.handicap, y: p.correctedMin})),
-                        'Allocated corr trend' + suffix, allocColor);
+                        'Allocated corr trend' + suffix, allocColor,
+                        {baseWidth: 3.5, hoverWidth: 7});
                     if (allocTrend) traces.push(allocTrend);
                 }
             }
@@ -2154,7 +2182,8 @@ function renderDivisionChart(data) {
                 if (allocCorr.some(v => v != null)) {
                     const allocTrend = buildTrendTrace(
                         plotFinishers.map((f, i) => ({x: xs[i], y: allocCorr[i]})),
-                        'Allocated corr trend' + suffix, allocColor);
+                        'Allocated corr trend' + suffix, allocColor,
+                        {baseWidth: 3.5, hoverWidth: 7});
                     if (allocTrend) traces.push(allocTrend);
                 }
             }
@@ -2200,6 +2229,7 @@ function renderDivisionChart(data) {
 
     document.getElementById('division-section-races').style.display = '';
     Plotly.react('race-division-chart', allTraces, layout, {responsive: true});
+    attachTrendHoverHandlers('race-division-chart');
 
     const raceDivDiv = document.getElementById('race-division-chart');
     raceDivDiv.removeAllListeners && raceDivDiv.removeAllListeners('plotly_click');
@@ -2568,6 +2598,7 @@ function renderSeriesChartForDivision(divName, opts) {
     };
 
     Plotly.react('series-chart', traces, layout, {responsive: true});
+    attachTrendHoverHandlers('series-chart');
 
     const seriesChartDiv = document.getElementById('series-chart');
     seriesChartDiv.removeAllListeners && seriesChartDiv.removeAllListeners('plotly_click');
@@ -2616,7 +2647,9 @@ function computeSeriesOverallTrend(data, divName) {
         mode: 'lines', type: 'scatter',
         name: `Overall trend (slope ${avgSlope.toFixed(2)})`,
         line: { dash: 'dot', color: '#333', width: 3 },
-        hoverinfo: 'skip'
+        hoverinfo: 'name',
+        hoverlabel: {namelength: -1},
+        meta: {trendLine: true, baseWidth: 3, hoverWidth: 6}
     };
 }
 
@@ -2654,8 +2687,10 @@ function computeSeriesAllocatedTrend(data, divName, allocByBoat) {
         y: [avgSlope * (xMin - medX) + medY, avgSlope * (xMax - medX) + medY],
         mode: 'lines', type: 'scatter',
         name: `Allocated trend (slope ${avgSlope.toFixed(2)})`,
-        line: {dash: 'dashdot', color: '#a04020', width: 3},
-        hoverinfo: 'skip'
+        line: {dash: 'dashdot', color: '#a04020', width: 4},
+        hoverinfo: 'name',
+        hoverlabel: {namelength: -1},
+        meta: {trendLine: true, baseWidth: 4, hoverWidth: 8}
     };
 }
 

@@ -177,7 +177,11 @@ window.HandicapCalc = (function () {
         popupShowTimer = setTimeout(async () => {
             const profile = await fetchProfile(boatId);
             if (popupBoatId !== boatId) return; // user moved on
-            if (!profile) return;
+            if (!profile) {
+                linkEl.title = 'Click to view boat details — no performance profile available';
+                return;
+            }
+            linkEl.title = 'Click to view boat details — hover for performance profile';
             const el = ensurePopup();
             el.innerHTML = '';
             const overall = profile.overallScore != null ? profile.overallScore.toFixed(3) : '—';
@@ -301,6 +305,10 @@ window.HandicapCalc = (function () {
                         link.textContent = b.name;
                         link.style.cssText = 'color:inherit;text-decoration:none;';
                         link.title = 'Click to view boat details — hover for performance profile';
+                        const cached = profileCache.get(b.id);
+                        if (cached) cached.then(p => {
+                            if (p === null) link.title = 'Click to view boat details — no performance profile available';
+                        });
                         link.addEventListener('mouseenter', () => showPentagonPopup(link, b.id, color));
                         link.addEventListener('mouseleave', hidePentagonPopup);
                         tdName.appendChild(link);
